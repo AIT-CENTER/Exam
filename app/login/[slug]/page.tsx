@@ -468,7 +468,7 @@ export default function TeacherLogin() {
             </p>
             <p className="text-sm ml-9 text-gray-500">
               Developer By Alpha Institute Tech{" "}
-              <a target="_blank" className="text-gray-900 text-center" href="alphainstitutetech.com" rel="noreferrer">
+              <a target="_blank" className="text-gray-900 text-center" href="https://alphainstitutetech.com" rel="noreferrer">
                 (AIT Tech Center)
               </a>
             </p>

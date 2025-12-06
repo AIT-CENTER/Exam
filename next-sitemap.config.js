@@ -1,4 +1,4 @@
 module.exports = {
-  siteUrl: 'https://kumsamss.vercel.app',
+  siteUrl: 'https://exam.alphainstitutetech.com',
   generateRobotsTxt: true,
 };

@@ -1,29 +1,35 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // --- Kutaa duraan ture ---
+  reactStrictMode: true,               // Dev-mode error tracking ni fooyyeessa
+  trailingSlash: false,                // URL ogummaa & SEO
+  output: "standalone",                // Vercel performance guddina
+
   eslint: {
-    ignoreDuringBuilds: true,
-  },
-  typescript: {
-    ignoreBuildErrors: true,
-  },
-  images: {
-    unoptimized: true,
+    ignoreDuringBuilds: true,          // Build irratti eslint rakkoo hin uumu
   },
 
-  // --- KUTAA HAARAA KAN DABALAMU (FOR PDF FILES) ---
+  typescript: {
+    ignoreBuildErrors: true,           // Production irratti ts error dhaabsisa
+  },
+
+  images: {
+    unoptimized: true,                 // Image Optimization hin barbaachisu yoo ta’e
+  },
+
+  experimental: {
+    serverActions: false,              // Yoo server actions hin fayyadamne OFF gochuu
+  },
+
   webpack: (config) => {
-    // Seera haaraa faayilota .pdf akka 'asset/resource' tti qabamu dabali
+    // PDF files support
     config.module.rules.push({
       test: /\.pdf$/i,
-      type: 'asset/resource',
+      type: "asset/resource",
       generator: {
-        // Iddoo faayilichi itti kuufamu fi maqaa isaa
-        filename: 'static/chunks/[name].[hash][ext]',
+        filename: "static/chunks/[name].[hash][ext]",
       },
     });
 
-    // Konfigireeshinii fooyya'e deebisi
     return config;
   },
 };
