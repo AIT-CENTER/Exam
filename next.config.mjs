@@ -1,31 +1,35 @@
+import withPWAInit from "next-pwa";
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // --- Kutaa duraan ture ---
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
-  typescript: {
-    ignoreBuildErrors: true,
-  },
-  images: {
-    unoptimized: true,
-  },
+  eslint: { ignoreDuringBuilds: true },
+  typescript: { ignoreBuildErrors: true },
+  images: { unoptimized: true },
 
-  // --- KUTAA HAARAA KAN DABALAMU (FOR PDF FILES) ---
+  // PDF loader
   webpack: (config) => {
-    // Seera haaraa faayilota .pdf akka 'asset/resource' tti qabamu dabali
     config.module.rules.push({
       test: /\.pdf$/i,
-      type: 'asset/resource',
-      generator: {
-        // Iddoo faayilichi itti kuufamu fi maqaa isaa
-        filename: 'static/chunks/[name].[hash][ext]',
-      },
+      type: "asset/resource",
+      generator: { filename: "static/chunks/[name].[hash][ext]" },
     });
-
-    // Konfigireeshinii fooyya'e deebisi
     return config;
   },
 };
 
-export default nextConfig;
+// Initialize PWA with configuration
+const withPWA = withPWAInit({
+  dest: "public",
+  register: true,
+  skipWaiting: true,
+  disable: process.env.NODE_ENV === "development",
+  // Add these to fix the GenerateSW warnings
+  buildExcludes: [/chunks\/images\/.*$/], // Exclude dynamic images
+  exclude: [
+    /\.map$/, // Exclude source maps
+    /^manifest.*\.js$/, // Exclude manifest files
+  ],
+});
+
+// Export the wrapped config
+export default withPWA(nextConfig);
