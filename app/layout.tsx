@@ -40,8 +40,8 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <head>
         {/* PWA manifest */}
-        <link rel="manifest" href="/manifest-student.json" />
-        <meta name="theme-color" content="#1a73e8" />
+        {/* <link rel="manifest" href="/manifest-student.json" />
+        <meta name="theme-color" content="#1a73e8" /> */}
 
         <style>{`
           html {

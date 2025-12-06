@@ -1,7 +1,7 @@
 {
   "name": "Alpha",
   "version": "0.1.0",
-  "type": "module",  
+  "type": "module",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -13,7 +13,6 @@
   "dependencies": {
     "@emotion/is-prop-valid": "latest",
     "@hookform/resolvers": "^3.10.0",
-    "@jridgewell/sourcemap-codec": "^1.5.5",
     "@radix-ui/react-accordion": "latest",
     "@radix-ui/react-alert-dialog": "latest",
     "@radix-ui/react-aspect-ratio": "latest",
@@ -41,7 +40,6 @@
     "@radix-ui/react-toggle": "latest",
     "@radix-ui/react-toggle-group": "latest",
     "@radix-ui/react-tooltip": "latest",
-    "@rollup/plugin-terser": "^0.4.4",
     "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.86.2",
     "@tiptap/core": "latest",
@@ -88,7 +86,6 @@
     "motion": "^12.23.12",
     "next": "15.2.4",
     "next-auth": "^4.24.13",
-    "next-pwa": "^5.6.0",
     "next-sitemap": "^4.2.3",
     "next-themes": "latest",
     "react": "^19",
