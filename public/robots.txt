@@ -1,0 +1,9 @@
+# *
+User-agent: *
+Allow: /
+
+# Host
+Host: https://kumsamss.vercel.app
+
+# Sitemaps
+Sitemap: https://kumsamss.vercel.app/sitemap.xml

@@ -1,0 +1,494 @@
+"use client"
+
+import { useState, useMemo, useEffect } from "react"
+import { useRouter } from "next/navigation"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Badge } from "@/components/ui/badge"
+import { toast } from "sonner"
+import jsPDF from "jspdf"
+import * as XLSX from "xlsx"
+import { format } from "date-fns"
+
+import { Search, ChevronLeft, ChevronRight, Users, Download, FileSpreadsheet, FileIcon } from "lucide-react"
+import { getTeacherDataFromCookie } from "@/utils/teacherCookie"
+import { supabase } from "@/lib/supabaseClient"
+
+const STUDENTS_PER_PAGE = 10
+
+interface Student {
+  id: string
+  student_id: string
+  name: string
+  father_name: string
+  grandfather_name: string
+  section: string
+  gender: string
+  grade_id: number
+  stream?: string
+  grades?: {
+    grade_name: string
+  }
+}
+
+const isHigherGrade = (gradeName: string | undefined): boolean => {
+  if (!gradeName) return false
+  const gradeNum = Number.parseInt(gradeName.replace(/\D/g, ""))
+  return gradeNum >= 11
+}
+
+export default function StudentsPage() {
+  const router = useRouter()
+  const [students, setStudents] = useState<Student[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [searchQuery, setSearchQuery] = useState("")
+  const [sectionFilter, setSectionFilter] = useState("all")
+  const [currentPage, setCurrentPage] = useState(1)
+  const [teacherData, setTeacherData] = useState<any>(null)
+
+  useEffect(() => {
+    const loadStudentsData = async () => {
+      try {
+        const teacher = await getTeacherDataFromCookie()
+
+        if (!teacher) {
+          router.push("/teacher/login")
+          return
+        }
+
+        setTeacherData(teacher)
+
+        let query = supabase
+          .from("students")
+          .select(`
+            *,
+            grades!students_grade_id_fkey (
+              grade_name
+            )
+          `)
+          .order("name")
+
+        if (teacher.gradeId && teacher.sections && teacher.sections.length > 0) {
+          query = query.eq("grade_id", teacher.gradeId).in("section", teacher.sections)
+        }
+
+        const { data: studentsData, error } = await query
+
+        if (error) {
+          toast.error("Failed to load students data")
+          return
+        }
+
+        let filteredStudents = studentsData || []
+
+        // For grades below 11: filter students by teacher's stream (from cookie)
+        // For grades 11 and above: show all students (no stream filtering)
+        if (!isHigherGrade(teacher.gradeName) && teacher.stream) {
+          filteredStudents = filteredStudents.filter((student: Student) => student.stream === teacher.stream)
+        }
+
+        setStudents(filteredStudents)
+      } catch (error) {
+        toast.error("Failed to load students data")
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    loadStudentsData()
+  }, [router])
+
+  const stats = useMemo(() => {
+    const total = students.length
+    const maleCount = students.filter((s) => s.gender === "male").length
+    const femaleCount = students.filter((s) => s.gender === "female").length
+
+    return [
+      { title: "Total Students", value: total, icon: Users },
+      { title: "Male Students", value: maleCount, icon: Users },
+      { title: "Female Students", value: femaleCount, icon: Users },
+    ]
+  }, [students])
+
+  const filteredStudents = useMemo(() => {
+    return students.filter((s) => {
+      const matchesSearch =
+        s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        s.student_id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        `${s.name} ${s.father_name} ${s.grandfather_name}`.toLowerCase().includes(searchQuery.toLowerCase())
+
+      const matchesSection = sectionFilter === "all" || s.section === sectionFilter
+
+      return matchesSearch && matchesSection
+    })
+  }, [students, searchQuery, sectionFilter])
+
+  const teacherSections = useMemo(() => {
+    return teacherData?.sections || []
+  }, [teacherData])
+
+  const sectionOptions = useMemo(() => {
+    const sections = [...new Set(students.map((s) => s.section))]
+      .filter((section) => teacherSections.includes(section))
+      .sort()
+    return sections
+  }, [students, teacherSections])
+
+  const totalPages = Math.ceil(filteredStudents.length / STUDENTS_PER_PAGE)
+  const paginatedStudents = filteredStudents.slice(
+    (currentPage - 1) * STUDENTS_PER_PAGE,
+    currentPage * STUDENTS_PER_PAGE,
+  )
+
+  const exportToPDF = () => {
+    if (filteredStudents.length === 0) {
+      toast.error("No students to export")
+      return
+    }
+
+    try {
+      const doc = new jsPDF()
+      doc.setFontSize(16)
+      doc.text("Students List", 14, 20)
+      doc.setFontSize(12)
+      doc.text(`Generated: ${format(new Date(), "PPP")}`, 14, 30)
+      doc.text(`Total Records: ${filteredStudents.length}`, 14, 38)
+      doc.text(`Grade: ${teacherData?.gradeName || "N/A"}`, 14, 46)
+      doc.text(`Sections: ${teacherSections.join(", ")}`, 14, 54)
+      if (teacherData?.stream && !isHigherGrade(teacherData?.gradeName)) {
+        doc.text(`Stream: ${teacherData.stream}`, 14, 62)
+      }
+
+      let y = teacherData?.stream && !isHigherGrade(teacherData?.gradeName) ? 72 : 65
+      const header = ["#", "Student ID", "Name", "Father's Name", "Grandfather's Name", "Section", "Gender"]
+      doc.setFillColor(79, 70, 229)
+      doc.rect(14, y, 190, 8, "F")
+      doc.setTextColor(255, 255, 255)
+      doc.setFontSize(10)
+      header.forEach((h, i) => doc.text(h, 14 + i * 23, y + 5))
+      y += 8
+
+      filteredStudents.forEach((s, i) => {
+        const row = [(i + 1).toString(), s.student_id, s.name, s.father_name, s.grandfather_name, s.section, s.gender]
+        if (i % 2 === 0) doc.setFillColor(248, 250, 252)
+        else doc.setFillColor(255, 255, 255)
+        doc.rect(14, y, 190, 6, "F")
+        doc.setTextColor(0, 0, 0)
+        row.forEach((cell, j) => doc.text(cell, 14 + j * 23, y + 4))
+        y += 6
+        if (y > 280) {
+          doc.addPage()
+          y = 20
+        }
+      })
+
+      doc.save("students_list.pdf")
+      toast.success("Exported to PDF successfully")
+    } catch (error) {
+      toast.error("Failed to export to PDF")
+    }
+  }
+
+  const exportToExcel = () => {
+    if (filteredStudents.length === 0) {
+      toast.error("No students to export")
+      return
+    }
+
+    try {
+      const data = filteredStudents.map((s, index) => {
+        return {
+          "#": index + 1,
+          "Student ID": s.student_id,
+          Name: s.name,
+          "Father's Name": s.father_name,
+          "Grandfather's Name": s.grandfather_name,
+          Section: s.section,
+          Gender: s.gender,
+          Grade: s.grades?.grade_name || "N/A",
+        }
+      })
+
+      const ws = XLSX.utils.json_to_sheet(data)
+      const wb = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(wb, ws, "Students")
+      XLSX.writeFile(wb, `students_${format(new Date(), "yyyy-MM-dd")}.xlsx`)
+      toast.success("Exported to Excel successfully")
+    } catch (error) {
+      toast.error("Failed to export to Excel")
+    }
+  }
+
+  const exportToWord = () => {
+    if (filteredStudents.length === 0) {
+      toast.error("No students to export")
+      return
+    }
+
+    try {
+      const tableHeader =
+        '<table border="1" style="border-collapse: collapse; width:100%;"><tr style="background-color: #4F46E5; color: white;"><th>#</th><th>Student ID</th><th>Name</th><th>Father\'s Name</th><th>Grandfather\'s Name</th><th>Section</th><th>Gender</th><th>Grade</th></tr>'
+      const tableBody = filteredStudents
+        .map((s, i) => {
+          return `<tr style="${i % 2 === 0 ? "background-color: #F8FAFC;" : ""}">
+          <td>${i + 1}</td>
+          <td>${s.student_id}</td>
+          <td>${s.name}</td>
+          <td>${s.father_name}</td>
+          <td>${s.grandfather_name}</td>
+          <td>${s.section}</td>
+          <td>${s.gender}</td>
+          <td>${s.grades?.grade_name || "N/A"}</td>
+        </tr>`
+        })
+        .join("")
+
+      const tableFooter = "</table>"
+      const streamInfo =
+        teacherData?.stream && !isHigherGrade(teacherData?.gradeName) ? `<p>Stream: ${teacherData.stream}</p>` : ""
+      const content = `<html><body>
+        <h1>Students List</h1>
+        <p>Generated: ${format(new Date(), "PPP")}</p>
+        <p>Total: ${filteredStudents.length}</p>
+        <p>Grade: ${teacherData?.gradeName || "N/A"}</p>
+        <p>Sections: ${teacherSections.join(", ")}</p>
+        ${streamInfo}
+        ${tableHeader}${tableBody}${tableFooter}
+      </body></html>`
+      const blob = new Blob([content], { type: "application/msword" })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = `students_${format(new Date(), "yyyy-MM-dd")}.doc`
+      a.click()
+      URL.revokeObjectURL(url)
+      toast.success("Exported to Word successfully")
+    } catch (error) {
+      toast.error("Failed to export to Word")
+    }
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex-1 space-y-8 p-8 bg-gray-50 min-h-screen">
+        <div className="space-y-2">
+          <div className="h-8 w-64 bg-gray-200 rounded animate-pulse" />
+          <div className="h-4 w-96 bg-gray-200 rounded animate-pulse" />
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {[...Array(3)].map((_, i) => (
+            <Card key={i}>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <div className="h-4 w-32 bg-gray-200 rounded animate-pulse" />
+                <div className="h-5 w-5 bg-gray-200 rounded animate-pulse" />
+              </CardHeader>
+              <CardContent>
+                <div className="h-8 w-20 bg-gray-200 rounded animate-pulse" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+
+        <div className="flex flex-col sm:flex-row gap-4 items-center">
+          <div className="h-10 w-80 bg-gray-200 rounded animate-pulse" />
+          <div className="h-10 w-40 bg-gray-200 rounded animate-pulse" />
+          <div className="h-10 w-32 bg-gray-200 rounded animate-pulse" />
+        </div>
+
+        <Card>
+          <div className="p-6 space-y-4">
+            {[...Array(5)].map((_, i) => (
+              <div key={i} className="flex items-center space-x-4">
+                <div className="h-4 flex-1 bg-gray-200 rounded animate-pulse" />
+                <div className="h-4 flex-1 bg-gray-200 rounded animate-pulse" />
+                <div className="h-4 flex-1 bg-gray-200 rounded animate-pulse" />
+                <div className="h-4 flex-1 bg-gray-200 rounded animate-pulse" />
+                <div className="h-4 w-20 bg-gray-200 rounded animate-pulse" />
+                <div className="h-4 w-16 bg-gray-200 rounded animate-pulse" />
+              </div>
+            ))}
+          </div>
+        </Card>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex-1 space-y-8 p-8 bg-gray-50 min-h-screen">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight text-gray-900">Assigned Students</h1>
+          <p className="text-muted-foreground mt-1">
+            {teacherData?.gradeName && teacherSections.length > 0 ? (
+              <>
+                Students in {teacherData.gradeName} - Your Sections: {teacherSections.join(", ")}
+                {teacherData.stream && !isHigherGrade(teacherData.gradeName) && (
+                  <Badge variant="outline" className="ml-2 text-emerald-600 border-emerald-200">
+                    {teacherData.stream} Stream
+                  </Badge>
+                )}
+                {isHigherGrade(teacherData.gradeName) && (
+                  <Badge variant="outline" className="ml-2 text-blue-600 border-blue-200">
+                    All Streams
+                  </Badge>
+                )}
+              </>
+            ) : (
+              "List of assigned students with detailed information"
+            )}
+          </p>
+        </div>
+      </div>
+
+      {/* Stats */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {stats.map((stat, index) => (
+          <Card key={index}>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">{stat.title}</CardTitle>
+              <stat.icon className="h-5 w-5 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{stat.value}</div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {/* Filters */}
+      <div className="space-y-4">
+        <div className="flex flex-col sm:flex-row gap-4 items-center">
+          <div className="relative flex-1 max-w-md">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search by student ID, name, or full name..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-10"
+            />
+          </div>
+
+          <Select value={sectionFilter} onValueChange={setSectionFilter}>
+            <SelectTrigger className="w-40">
+              <SelectValue placeholder="All Sections" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Sections</SelectItem>
+              {sectionOptions.map((section) => (
+                <SelectItem key={section} value={section}>
+                  Section {section}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" className="gap-2 bg-transparent">
+                <Download className="h-4 w-4" />
+                Export
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent>
+              <DropdownMenuItem onSelect={exportToPDF}>
+                <FileIcon className="mr-2 h-4 w-4" /> PDF
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={exportToExcel}>
+                <FileSpreadsheet className="mr-2 h-4 w-4" /> Excel
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={exportToWord}>
+                <FileIcon className="mr-2 h-4 w-4" /> Word
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+
+        {/* Table */}
+        <Card>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>#</TableHead>
+                <TableHead>Student ID</TableHead>
+                <TableHead>Full Name</TableHead>
+                <TableHead>Father's Name</TableHead>
+                <TableHead>Grandfather's Name</TableHead>
+                <TableHead>Section</TableHead>
+                <TableHead>Gender</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {paginatedStudents.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
+                    {students.length === 0
+                      ? teacherData?.gradeId
+                        ? "No students found in your assigned sections."
+                        : "You are not assigned to any classes yet."
+                      : "No students match your search criteria."}
+                  </TableCell>
+                </TableRow>
+              ) : (
+                paginatedStudents.map((student, index) => (
+                  <TableRow key={student.id}>
+                    <TableCell className="font-medium">{(currentPage - 1) * STUDENTS_PER_PAGE + index + 1}</TableCell>
+                    <TableCell className="font-medium">{student.student_id}</TableCell>
+                    <TableCell className="font-medium">
+                      {student.name} {student.father_name} {student.grandfather_name}
+                    </TableCell>
+                    <TableCell>{student.father_name}</TableCell>
+                    <TableCell>{student.grandfather_name}</TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className="text-indigo-600 border-indigo-200">
+                        {student.section}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={student.gender === "male" ? "default" : "secondary"}>{student.gender}</Badge>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </Card>
+
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-muted-foreground">
+              Showing {(currentPage - 1) * STUDENTS_PER_PAGE + 1} to{" "}
+              {Math.min(currentPage * STUDENTS_PER_PAGE, filteredStudents.length)} of {filteredStudents.length} students
+            </p>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
+                disabled={currentPage === 1}
+              >
+                <ChevronLeft className="h-4 w-4" />
+                Previous
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage((p) => Math.min(p + 1, totalPages))}
+                disabled={currentPage === totalPages}
+              >
+                Next
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}

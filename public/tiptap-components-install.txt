@@ -1,0 +1,158 @@
+You are an expert frontend engineer working with Next.js, TypeScript, Tailwind CSS, and Tiptap. I need you to install every UI Component, Node Component, Primitive, and Utility Component listed in the Tiptap UI Components Components Overview docs.
+
+Requirements
+Install all components using the Tiptap CLI add command—for example:
+
+sql
+Copy
+Edit
+npx @tiptap/cli@latest add blockquote-button
+npx @tiptap/cli@latest add code-block-button
+Follow this pattern for every component listed in the documentation.
+
+Components to include (per the official overview):
+
+UI Components:
+
+ai-ask-button
+
+ai-menu
+
+blockquote-button
+
+code-block-button
+
+color-highlight-button
+
+color-highlight-popover
+
+color-text-button
+
+color-text-popover
+
+copy-to-clipboard-button
+
+delete-node-button
+
+drag-context-menu
+
+duplicate-button
+
+emoji-dropdown-menu
+
+emoji-menu
+
+emoji-trigger-button
+
+heading-button
+
+heading-dropdown-menu
+
+image-upload-button
+
+improve-dropdown
+
+link-popover
+
+list-button
+
+list-dropdown-menu
+
+mark-button
+
+mention-dropdown-menu
+
+mention-trigger-button
+
+move-node-button
+
+reset-all-formatting-button
+
+slash-trigger-button
+
+slash-dropdown-menu
+
+text-align-button
+
+text-button
+
+turn-into-dropdown
+
+undo-redo-button
+
+Utility Components:
+
+floating-element
+
+suggestion-menu
+
+Node Components:
+
+blockquote-node
+
+code-block-node
+
+heading-node
+
+horizontal-rule-node
+
+image-node
+
+image-upload-node
+
+list-node
+
+paragraph-node
+
+Primitives:
+
+avatar
+
+badge
+
+button
+
+card
+
+combobox
+
+dropdown-menu
+
+input
+
+label
+
+menu
+
+popover
+
+separator
+
+spacer
+
+textarea-autosize
+
+toolbar
+
+tooltip
+
+Verify installation:
+
+Ensure each npx @tiptap/cli add <component-name> runs without error.
+
+Confirm the files are generated, typically under components/tiptap-ui/<component-name> and corresponding node/primitives folders.
+
+Output:
+
+Provide a list of all CLI install commands used.
+
+For 5 randomly selected components (choose any), show sample import statements for use in a Next.js component, e.g.:
+
+tsx
+Copy
+Edit
+import { BlockquoteButton } from '@/components/tiptap-ui/blockquote-button'
+import { Button } from '@/components/tiptap-ui-primitive/button'
+Optional but appreciated:
+
+Note which components are open-source/free and which require a paid plan (like ai-menu, ai-ask-button, improve-dropdown) per Tiptap documentation.
