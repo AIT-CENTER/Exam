@@ -17,7 +17,8 @@ const nextConfig = {
   },
 
   experimental: {
-    serverActions: false,              // Yoo server actions hin fayyadamne OFF gochuu
+    serverActions: false,   
+    runtime: "nodejs",           // Yoo server actions hin fayyadamne OFF gochuu
   },
 
   webpack: (config) => {
