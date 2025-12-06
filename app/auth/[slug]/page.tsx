@@ -13,7 +13,7 @@ import { Loader2, Lock, User, Mail, LogIn, Shield, Home } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabaseClient";
 
-const VALID_SLUG = process.env.NEXT_PUBLIC_ADMIN_LOGIN_SLUG || "kmss";
+const VALID_SLUG = process.env.NEXT_PUBLIC_ADMIN_LOGIN_SLUG || "alpha";
 
 
 // Validation schema
