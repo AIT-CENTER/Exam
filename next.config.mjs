@@ -1,5 +1,3 @@
-import withPWAInit from "next-pwa";
-
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   eslint: { ignoreDuringBuilds: true },
@@ -17,19 +15,5 @@ const nextConfig = {
   },
 };
 
-// Initialize PWA with configuration
-const withPWA = withPWAInit({
-  dest: "public",
-  register: true,
-  skipWaiting: true,
-  disable: process.env.NODE_ENV === "development",
-  // Add these to fix the GenerateSW warnings
-  buildExcludes: [/chunks\/images\/.*$/], // Exclude dynamic images
-  exclude: [
-    /\.map$/, // Exclude source maps
-    /^manifest.*\.js$/, // Exclude manifest files
-  ],
-});
-
-// Export the wrapped config
-export default withPWA(nextConfig);
+// Export clean config
+export default nextConfig;
