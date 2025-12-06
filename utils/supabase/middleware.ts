@@ -2,7 +2,7 @@
 // Updated with proper imports and types for cookie handling.
 // This refreshes the session and sets cookies for server/browser.
 
-import { createBrowserClient } from '@supabase/ssr'
+import { createServerClient } from '@supabase/ssr'
 import { NextRequest, NextResponse } from 'next/server'
 import type { CookieOptions } from '@supabase/ssr'
 
@@ -13,7 +13,7 @@ export async function updateSession(request: NextRequest) {
     },
   })
 
-  const supabase = createBrowserClient(
+  const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {

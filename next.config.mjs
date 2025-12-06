@@ -1,28 +1,38 @@
+// next.config.mjs
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  reactStrictMode: true,               // Dev-mode error tracking ni fooyyeessa
-  trailingSlash: false,                // URL ogummaa & SEO
-  output: "standalone",                // Vercel performance guddina
-
+  reactStrictMode: true,
+  trailingSlash: false,
+  output: "standalone",
+  
+  // Performance optimizations
+  compiler: {
+    removeConsole: process.env.NODE_ENV === 'production',
+  },
+  
+  // Disable during build
   eslint: {
-    ignoreDuringBuilds: true,          // Build irratti eslint rakkoo hin uumu
+    ignoreDuringBuilds: true,
   },
-
+  
   typescript: {
-    ignoreBuildErrors: true,           // Production irratti ts error dhaabsisa
+    ignoreBuildErrors: true,
   },
-
+  
+  // Image handling
   images: {
-    unoptimized: true,                 // Image Optimization hin barbaachisu yoo ta’e
+    unoptimized: true,
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: '**',
+      },
+    ],
   },
-
-  experimental: {
-    serverActions: false,   
-    runtime: "nodejs",           // Yoo server actions hin fayyadamne OFF gochuu
-  },
-
-  webpack: (config) => {
-    // PDF files support
+  
+  // Webpack config
+  webpack: (config, { isServer, dev }) => {
+    // PDF support
     config.module.rules.push({
       test: /\.pdf$/i,
       type: "asset/resource",
@@ -30,9 +40,69 @@ const nextConfig = {
         filename: "static/chunks/[name].[hash][ext]",
       },
     });
-
+    
+    // Fix for Supabase Edge warnings
+    if (!isServer) {
+      config.resolve.fallback = {
+        ...config.resolve.fallback,
+        fs: false,
+        net: false,
+        tls: false,
+        crypto: false,
+        stream: false,
+        path: false,
+        os: false,
+        child_process: false,
+      };
+    }
+    
+    // Reduce bundle size
+    if (!dev && !isServer) {
+      config.optimization.splitChunks = {
+        chunks: 'all',
+        maxSize: 200000,
+        minSize: 10000,
+      };
+    }
+    
     return config;
+  },
+  
+  // Headers for security
+  async headers() {
+    return [
+      {
+        source: '/(.*)',
+        headers: [
+          {
+            key: 'X-DNS-Prefetch-Control',
+            value: 'on'
+          },
+          {
+            key: 'Strict-Transport-Security',
+            value: 'max-age=31536000; includeSubDomains'
+          },
+          {
+            key: 'X-Content-Type-Options',
+            value: 'nosniff'
+          },
+          {
+            key: 'X-Frame-Options',
+            value: 'DENY'
+          },
+          {
+            key: 'X-XSS-Protection',
+            value: '1; mode=block'
+          },
+          {
+            key: 'Referrer-Policy',
+            value: 'strict-origin-when-cross-origin'
+          },
+        ],
+      },
+    ];
   },
 };
 
+// ⭐ IMPORTANT: For .mjs files, use export default
 export default nextConfig;
