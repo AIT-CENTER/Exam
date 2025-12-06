@@ -1,59 +1,75 @@
 // middleware.ts
-import { type NextRequest, NextResponse } from "next/server"
-import { updateSession } from "@/utils/supabase/middleware"
+import { NextRequest, NextResponse } from "next/server"
+import { createServerClient } from "@supabase/ssr"
+import { cookies } from "next/headers"
 
-// Teacher routes that need protection
 const protectedTeacherRoutes = [
-  '/teacher',
-  '/teacher/students', 
-  '/teacher/result',
-  '/teacher/exams',
-  '/teacher/individual',
-  '/teacher/exams/[slug]',
-  '/teacher/security',    // Add this line - kun exams list page dha
+  "/teacher",
+  "/teacher/students",
+  "/teacher/result",
+  "/teacher/exams",
+  "/teacher/individual",
+  "/teacher/exams/[slug]",
+  "/teacher/security",
 ]
+
+// Edge-safe Supabase session updater
+async function updateSession(request: NextRequest) {
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get(name: string) {
+          return request.cookies.get(name)?.value
+        },
+        set(name: string, value: string, options) {
+          request.cookies.set({ name, value, ...options })
+        },
+        remove(name: string) {
+          request.cookies.set({ name, value: "" })
+        },
+      },
+    }
+  )
+
+  // Optional: refresh user session
+  await supabase.auth.getUser()
+  return NextResponse.next()
+}
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
-  // Check if the current path is a protected teacher route
-  const isProtectedTeacherRoute = protectedTeacherRoutes.some(route => 
-    pathname === route || pathname.startsWith(route + '/')
+  const isProtectedTeacherRoute = protectedTeacherRoutes.some(
+    (route) => pathname === route || pathname.startsWith(route + "/")
   )
 
   if (isProtectedTeacherRoute) {
-    // Check for teacher data in cookie
-    const teacherCookie = request.cookies.get('teacherData')
-    
+    const teacherCookie = request.cookies.get("teacherData")
+
     if (!teacherCookie) {
-      // Redirect to teacher login if no teacher data found
-      const loginUrl = new URL('/login/tech', request.url)
-      return NextResponse.redirect(loginUrl)
+      return NextResponse.redirect(new URL("/login/tech", request.url))
     }
 
     try {
-      // Verify the cookie data is valid
       const teacherData = JSON.parse(decodeURIComponent(teacherCookie.value))
-      
-      // Check if cookie is expired
+
       if (teacherData.expires && new Date(teacherData.expires) < new Date()) {
-        // Clear expired cookie and redirect to login
-        const response = NextResponse.redirect(new URL('/', request.url))
-        response.cookies.delete('teacherData')
+        const response = NextResponse.redirect(new URL("/", request.url))
+        response.cookies.delete("teacherData")
         return response
       }
 
-      // Teacher is authenticated, continue with request
       return await updateSession(request)
-    } catch (error) {
-      // Invalid cookie data, redirect to login
-      const response = NextResponse.redirect(new URL('login/tech', request.url))
-      response.cookies.delete('teacherData')
+    } catch (err) {
+      const response = NextResponse.redirect(new URL("/login/tech", request.url))
+      response.cookies.delete("teacherData")
       return response
     }
   }
 
-  // For non-teacher routes, continue with normal session update
+  // For non-protected routes, just update session
   return await updateSession(request)
 }
 
