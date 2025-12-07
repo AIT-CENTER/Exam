@@ -1,10 +1,12 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  eslint: { ignoreDuringBuilds: true },
   typescript: { ignoreBuildErrors: true },
   images: { unoptimized: true },
 
-  // PDF loader
+  // ESLint remove (not supported)
+  eslint: undefined,
+
+  // PDF loader (needs webpack)
   webpack: (config) => {
     config.module.rules.push({
       test: /\.pdf$/i,
@@ -15,5 +17,4 @@ const nextConfig = {
   },
 };
 
-// Export clean config
 export default nextConfig;
