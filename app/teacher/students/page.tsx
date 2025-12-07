@@ -35,10 +35,30 @@ interface Student {
   }
 }
 
-const isHigherGrade = (gradeName: string | undefined): boolean => {
-  if (!gradeName) return false
+const getGradeLevel = (gradeName: string | undefined): number => {
+  if (!gradeName) return 0
   const gradeNum = Number.parseInt(gradeName.replace(/\D/g, ""))
-  return gradeNum >= 11
+  return gradeNum
+}
+
+const isHigherGrade = (gradeName: string | undefined): boolean => {
+  const gradeLevel = getGradeLevel(gradeName)
+  return gradeLevel >= 11
+}
+
+const getDepartmentStream = (department: string | undefined): string => {
+  if (!department) return "Common"
+  
+  if (department.includes('Science') || 
+      department.includes('Engineering') ||
+      department.includes('Technology')) {
+    return 'Natural'
+  } else if (department.includes('Social') || 
+             department.includes('Business') ||
+             department.includes('Arts')) {
+    return 'Social'
+  }
+  return 'Common'
 }
 
 export default function StudentsPage() {
@@ -87,10 +107,36 @@ export default function StudentsPage() {
 
         let filteredStudents = studentsData || []
 
-        // For grades below 11: filter students by teacher's stream (from cookie)
-        // For grades 11 and above: show all students (no stream filtering)
-        if (!isHigherGrade(teacher.gradeName) && teacher.stream) {
-          filteredStudents = filteredStudents.filter((student: Student) => student.stream === teacher.stream)
+        // Filter students based on grade level and teacher department
+        const gradeLevel = getGradeLevel(teacher.gradeName)
+        
+        if (gradeLevel >= 11) {
+          // Grades 11-12: Department-based filtering
+          if (teacher.department) {
+            const teacherStream = getDepartmentStream(teacher.department)
+            
+            if (teacherStream === 'Natural') {
+              filteredStudents = filteredStudents.filter((student: Student) => 
+                student.stream === 'Natural' || !student.stream
+              )
+            } else if (teacherStream === 'Social') {
+              filteredStudents = filteredStudents.filter((student: Student) => 
+                student.stream === 'Social' || !student.stream
+              )
+            }
+            // If Common, show all students
+          }
+        } else {
+          // Grades 9-10: Stream-based filtering
+          if (teacher.department) {
+            const teacherStream = getDepartmentStream(teacher.department)
+            
+            if (teacherStream) {
+              filteredStudents = filteredStudents.filter((student: Student) => 
+                student.stream === teacherStream
+              )
+            }
+          }
         }
 
         setStudents(filteredStudents)
@@ -177,11 +223,17 @@ export default function StudentsPage() {
       doc.text(`Total Records: ${filteredStudents.length}`, 14, 38)
       doc.text(`Grade: ${teacherData?.gradeName || "N/A"}`, 14, 46)
       doc.text(`Sections: ${teacherSections.join(", ")}`, 14, 54)
-      if (teacherData?.stream && !isHigherGrade(teacherData?.gradeName)) {
-        doc.text(`Stream: ${teacherData.stream}`, 14, 62)
+      
+      const gradeLevel = getGradeLevel(teacherData?.gradeName)
+      if (gradeLevel >= 11 && teacherData?.department) {
+        doc.text(`Department: ${teacherData.department}`, 14, 62)
+      } else if (teacherData?.department) {
+        // For lower grades, show stream based on department
+        const stream = getDepartmentStream(teacherData.department)
+        doc.text(`Stream: ${stream}`, 14, 62)
       }
 
-      let y = teacherData?.stream && !isHigherGrade(teacherData?.gradeName) ? 72 : 65
+      let y = (gradeLevel >= 11 && teacherData?.department) ? 70 : 62
       const header = ["#", "Student ID", "Full Name", "Section", "Stream", "Gender"]
       doc.setFillColor(79, 70, 229)
       doc.rect(14, y, 190, 8, "F")
@@ -217,6 +269,7 @@ export default function StudentsPage() {
       doc.save("students_list.pdf")
       toast.success("Exported to PDF successfully")
     } catch (error) {
+      console.error("PDF export error:", error)
       toast.error("Failed to export to PDF")
     }
   }
@@ -246,6 +299,7 @@ export default function StudentsPage() {
       XLSX.writeFile(wb, `students_${format(new Date(), "yyyy-MM-dd")}.xlsx`)
       toast.success("Exported to Excel successfully")
     } catch (error) {
+      console.error("Excel export error:", error)
       toast.error("Failed to export to Excel")
     }
   }
@@ -257,6 +311,7 @@ export default function StudentsPage() {
     }
 
     try {
+      const gradeLevel = getGradeLevel(teacherData?.gradeName)
       const tableHeader =
         '<table border="1" style="border-collapse: collapse; width:100%;"><tr style="background-color: #4F46E5; color: white;"><th>#</th><th>Student ID</th><th>Full Name</th><th>Section</th><th>Stream</th><th>Gender</th><th>Grade</th></tr>'
       const tableBody = filteredStudents
@@ -275,15 +330,15 @@ export default function StudentsPage() {
         .join("")
 
       const tableFooter = "</table>"
-      const streamInfo =
-        teacherData?.stream && !isHigherGrade(teacherData?.gradeName) ? `<p>Stream: ${teacherData.stream}</p>` : ""
+      const departmentInfo = teacherData?.department ? 
+        `<p>${gradeLevel >= 11 ? 'Department' : 'Stream'}: ${teacherData.department} (${getDepartmentStream(teacherData.department)})</p>` : ""
       const content = `<html><body>
         <h1>Students List</h1>
         <p>Generated: ${format(new Date(), "PPP")}</p>
         <p>Total: ${filteredStudents.length}</p>
         <p>Grade: ${teacherData?.gradeName || "N/A"}</p>
         <p>Sections: ${teacherSections.join(", ")}</p>
-        ${streamInfo}
+        ${departmentInfo}
         ${tableHeader}${tableBody}${tableFooter}
       </body></html>`
       const blob = new Blob([content], { type: "application/msword" })
@@ -295,6 +350,7 @@ export default function StudentsPage() {
       URL.revokeObjectURL(url)
       toast.success("Exported to Word successfully")
     } catch (error) {
+      console.error("Word export error:", error)
       toast.error("Failed to export to Word")
     }
   }
@@ -347,6 +403,9 @@ export default function StudentsPage() {
     )
   }
 
+  const gradeLevel = getGradeLevel(teacherData?.gradeName)
+  const teacherStream = getDepartmentStream(teacherData?.department)
+
   return (
     <div className="flex-1 space-y-8 p-8 bg-gray-50 min-h-screen">
       {/* Header */}
@@ -357,15 +416,14 @@ export default function StudentsPage() {
             {teacherData?.gradeName && teacherSections.length > 0 ? (
               <>
                 Students in {teacherData.gradeName} - Your Sections: {teacherSections.join(", ")}
-                {teacherData.stream && !isHigherGrade(teacherData.gradeName) && (
-                  <Badge variant="outline" className="ml-2 text-emerald-600 border-emerald-200">
-                    {teacherData.stream} Stream
-                  </Badge>
-                )}
-                {isHigherGrade(teacherData.gradeName) && (
-                  <Badge variant="outline" className="ml-2 text-blue-600 border-blue-200">
-                    All Streams
-                  </Badge>
+                {teacherData?.department && (
+                  <>
+                    <Badge variant="outline" className="ml-2">
+                      {gradeLevel >= 11 
+                        ? `${teacherData.department} Department` 
+                        : `${teacherStream} Stream`}
+                    </Badge>
+                  </>
                 )}
               </>
             ) : (

@@ -530,6 +530,12 @@ export default function TeacherManagementPage() {
     return items.find((item) => item.id === id)?.name || id
   }
 
+  // Truncate long text with ellipsis
+  const truncateText = (text: string, maxLength: number = 25) => {
+    if (text.length <= maxLength) return text
+    return text.substring(0, maxLength) + '...'
+  }
+
   if (loading) {
     return (
       <div className="flex-1 space-y-8 p-8 bg-gray-50 min-h-screen">
@@ -628,7 +634,6 @@ export default function TeacherManagementPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>User ID</TableHead>
                 <TableHead>Username</TableHead>
                 <TableHead>Full Name</TableHead>
                 <TableHead>Email</TableHead>
@@ -649,10 +654,10 @@ export default function TeacherManagementPage() {
               ) : (
                 paginatedUsers.map((user) => (
                   <TableRow key={user.id}>
-                    <TableCell className="font-medium">{user.user_id}</TableCell>
-                    <TableCell>{user.username}</TableCell>
-                    <TableCell>{user.fullName}</TableCell>
-                    <TableCell>{user.email}</TableCell>
+
+                    <TableCell title={user.username}>{truncateText(user.username)}</TableCell>
+                    <TableCell title={user.fullName}>{truncateText(user.fullName)}</TableCell>
+                    <TableCell title={user.email}>{truncateText(user.email)}</TableCell>
                     <TableCell>{user.phone}</TableCell>
                     <TableCell>
                       {user.stream ? (
@@ -662,8 +667,8 @@ export default function TeacherManagementPage() {
                       )}
                     </TableCell>
                     <TableCell>
-                      <Badge variant="outline">
-                        {getAssignmentNames(user.assignedSubject, subjects) || "Unassigned"}
+                      <Badge variant="outline" title={getAssignmentNames(user.assignedSubject, subjects) || "Unassigned"}>
+                        {truncateText(getAssignmentNames(user.assignedSubject, subjects) || "Unassigned", 15)}
                       </Badge>
                     </TableCell>
                     <TableCell>{safeFormatDate(user.created_at, "MMM dd, yyyy")}</TableCell>

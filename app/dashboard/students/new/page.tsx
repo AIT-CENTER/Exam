@@ -48,6 +48,12 @@ interface Section {
   grade_id: number
 }
 
+interface Subject {
+  id: number
+  subject_name: string
+  stream: string | null
+}
+
 interface BulkStudent {
   id: string
   name: string
@@ -120,6 +126,8 @@ export default function NewStudentPage() {
   // Shared State
   const [grades, setGrades] = useState<Grade[]>([])
   const [sections, setSections] = useState<Section[]>([])
+  const [subjects, setSubjects] = useState<Subject[]>([])
+  const [gradeSubjects, setGradeSubjects] = useState<Record<number, number[]>>({}) // grade_id -> subject_ids
   const [gradesLoading, setGradesLoading] = useState(true)
 
   const streamOptions = ["Natural", "Social"]
@@ -153,6 +161,8 @@ export default function NewStudentPage() {
     setStudentId(generateStudentIdWithConfig(idConfig))
     fetchGrades()
     fetchSections()
+    fetchSubjects()
+    fetchGradeSubjects()
   }, [])
 
   useEffect(() => {
@@ -176,9 +186,8 @@ export default function NewStudentPage() {
   const fetchSections = async () => {
     try {
       const { data, error } = await supabase
-        .from("sections")
-        .select("id, section_name, grade_id")
-        .eq("is_active", true)
+        .from("grade_sections")
+        .select("id, grade_id, section_name")
         .order("section_name", { ascending: true })
 
       if (error) throw error
@@ -188,9 +197,70 @@ export default function NewStudentPage() {
     }
   }
 
+  const fetchSubjects = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("subjects")
+        .select("id, subject_name, stream")
+        .order("subject_name", { ascending: true })
+
+      if (error) throw error
+      setSubjects(data || [])
+    } catch (error) {
+      console.error("Error fetching subjects:", error)
+    }
+  }
+
+  const fetchGradeSubjects = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("grade_subjects")
+        .select("grade_id, subject_id")
+
+      if (error) {
+        console.warn("grade_subjects table may not exist yet")
+        return
+      }
+
+      const gradeSubjectsMap: Record<number, number[]> = {}
+      data?.forEach((item) => {
+        if (!gradeSubjectsMap[item.grade_id]) {
+          gradeSubjectsMap[item.grade_id] = []
+        }
+        gradeSubjectsMap[item.grade_id].push(item.subject_id)
+      })
+
+      setGradeSubjects(gradeSubjectsMap)
+    } catch (error) {
+      console.error("Error fetching grade subjects:", error)
+    }
+  }
+
   const getSectionsForGrade = (gradeId: string) => {
     if (!gradeId) return []
     return sections.filter((s) => s.grade_id === Number.parseInt(gradeId))
+  }
+
+  const getSubjectsForGradeAndStream = (gradeId: string, stream: string) => {
+    if (!gradeId) return []
+    
+    const gradeIdNum = Number.parseInt(gradeId)
+    const assignedSubjectIds = gradeSubjects[gradeIdNum] || []
+    
+    if (assignedSubjectIds.length === 0) {
+      // If no assigned subjects, show all subjects for the stream
+      return subjects.filter((s) => 
+        s.stream === stream || 
+        s.stream === "Common" || 
+        !s.stream
+      )
+    }
+    
+    // Filter subjects by grade assignment and stream
+    return subjects.filter((s) => 
+      assignedSubjectIds.includes(s.id) && 
+      (s.stream === stream || s.stream === "Common" || !s.stream)
+    )
   }
 
   const handleSaveIdConfig = () => {
@@ -1094,32 +1164,37 @@ export default function NewStudentPage() {
                     )}
                   </div>
 
-                  {/* Section */}
+                  {/* Section - Only show assigned sections for the selected grade */}
                   <div>
                     <Label>Section *</Label>
                     <Select value={formData.section} onValueChange={handleSectionChange} disabled={!formData.grade_id}>
                       <SelectTrigger
                         className={`mt-1.5 ${isFieldError("section") ? "border-destructive ring-1 ring-destructive" : ""}`}
                       >
-                        <SelectValue placeholder="Select section" />
+                        <SelectValue placeholder={getSectionsForGrade(formData.grade_id).length > 0 ? "Select section" : "No sections assigned to this grade"} />
                       </SelectTrigger>
                       <SelectContent>
-                        {getSectionsForGrade(formData.grade_id).length > 0
-                          ? getSectionsForGrade(formData.grade_id).map((section) => (
-                              <SelectItem key={section.id} value={section.section_name}>
-                                Section {section.section_name}
-                              </SelectItem>
-                            ))
-                          : ["A", "B", "C", "D", "E"].map((s) => (
-                              <SelectItem key={s} value={s}>
-                                Section {s}
-                              </SelectItem>
-                            ))}
+                        {getSectionsForGrade(formData.grade_id).length > 0 ? (
+                          getSectionsForGrade(formData.grade_id).map((section) => (
+                            <SelectItem key={section.id} value={section.section_name}>
+                              Section {section.section_name}
+                            </SelectItem>
+                          ))
+                        ) : (
+                          <div className="text-center py-2 text-sm text-muted-foreground">
+                            No sections assigned to this grade
+                          </div>
+                        )}
                       </SelectContent>
                     </Select>
                     {errors.section && (
                       <p className="text-destructive text-xs mt-1 flex items-center gap-1">
                         <AlertCircle className="h-3 w-3" /> {errors.section}
+                      </p>
+                    )}
+                    {formData.grade_id && getSectionsForGrade(formData.grade_id).length === 0 && (
+                      <p className="text-xs text-amber-600 mt-1">
+                        Please assign sections to this grade in Grade Management
                       </p>
                     )}
                   </div>
@@ -1171,7 +1246,7 @@ export default function NewStudentPage() {
                 </div>
 
                 <div className="flex justify-end">
-                  <Button type="submit" disabled={loading} className="gap-2">
+                  <Button type="submit" disabled={loading || !formData.grade_id || getSectionsForGrade(formData.grade_id).length === 0} className="gap-2">
                     {loading ? (
                       <>
                         <RefreshCw className="h-4 w-4 animate-spin" />
@@ -1264,22 +1339,27 @@ export default function NewStudentPage() {
                   <Label>Section *</Label>
                   <Select value={bulkSection} onValueChange={setBulkSection} disabled={!bulkGradeId}>
                     <SelectTrigger className="mt-1.5">
-                      <SelectValue placeholder="Select section" />
+                      <SelectValue placeholder={getSectionsForGrade(bulkGradeId).length > 0 ? "Select section" : "No sections assigned"} />
                     </SelectTrigger>
                     <SelectContent>
-                      {getSectionsForGrade(bulkGradeId).length > 0
-                        ? getSectionsForGrade(bulkGradeId).map((section) => (
-                            <SelectItem key={section.id} value={section.section_name}>
-                              Section {section.section_name}
-                            </SelectItem>
-                          ))
-                        : ["A", "B", "C", "D", "E"].map((s) => (
-                            <SelectItem key={s} value={s}>
-                              Section {s}
-                            </SelectItem>
-                          ))}
+                      {getSectionsForGrade(bulkGradeId).length > 0 ? (
+                        getSectionsForGrade(bulkGradeId).map((section) => (
+                          <SelectItem key={section.id} value={section.section_name}>
+                            Section {section.section_name}
+                          </SelectItem>
+                        ))
+                      ) : (
+                        <div className="text-center py-2 text-sm text-muted-foreground">
+                          No sections assigned to this grade
+                        </div>
+                      )}
                     </SelectContent>
                   </Select>
+                  {bulkGradeId && getSectionsForGrade(bulkGradeId).length === 0 && (
+                    <p className="text-xs text-amber-600 mt-1">
+                      Please assign sections to this grade in Grade Management
+                    </p>
+                  )}
                 </div>
                 {isBulkGrade11or12 && (
                   <div>
@@ -1416,7 +1496,7 @@ export default function NewStudentPage() {
               {/* Submit */}
               <div className="flex items-center justify-between">
                 <p className="text-sm text-muted-foreground">{bulkStudents.length} student(s) ready to register</p>
-                <Button onClick={handleBulkSubmit} disabled={bulkLoading} className="gap-2">
+                <Button onClick={handleBulkSubmit} disabled={bulkLoading || !bulkGradeId || getSectionsForGrade(bulkGradeId).length === 0} className="gap-2">
                   {bulkLoading ? (
                     <>
                       <RefreshCw className="h-4 w-4 animate-spin" />

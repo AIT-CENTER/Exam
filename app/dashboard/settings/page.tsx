@@ -21,6 +21,14 @@ import {
 import { Progress } from "@/components/ui/progress"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
+import {
   Settings,
   Save,
   RotateCw,
@@ -36,7 +44,7 @@ import {
   Download,
   HardDrive,
   FileJson,
-  Table,
+  TableIcon,
   Users,
   BookOpen,
   ClipboardList,
@@ -46,6 +54,21 @@ import {
   Shield,
   UserX,
   ShieldAlert,
+  Info,
+  Book,
+  User,
+  FileText,
+  Hash,
+  Image,
+  Grid,
+  BarChart,
+  CheckSquare,
+  GraduationCap,
+  Layers,
+  Select,
+  CheckCircle,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react"
 import { supabase } from "@/lib/supabaseClient"
 import { format } from "date-fns"
@@ -59,6 +82,15 @@ interface Admin {
   phone_number?: string | null
 }
 
+interface TableInfo {
+  name: string
+  count: number
+  icon: any
+  description: string
+  color: string
+  selected?: boolean
+}
+
 export default function SettingsPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -67,9 +99,6 @@ export default function SettingsPage() {
   const [currentPassword, setCurrentPassword] = useState("")
   const [newPassword, setNewPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
-  const [currentEmail, setCurrentEmail] = useState<string | null>(null)
-  const [currentAdminData, setCurrentAdminData] = useState<Admin | null>(null)
 
   // Admins Management
   const [admins, setAdmins] = useState<Admin[]>([])
@@ -83,11 +112,27 @@ export default function SettingsPage() {
   const [adminToDelete, setAdminToDelete] = useState<Admin | null>(null)
   const [deleteAdminLoading, setDeleteAdminLoading] = useState(false)
   const [confirmDeleteText, setConfirmDeleteText] = useState("")
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
 
   // Exam Sessions
   const [showDeleteSessionsDialog, setShowDeleteSessionsDialog] = useState(false)
   const [deletingSessionsLoading, setDeletingSessionsLoading] = useState(false)
   const [sessionStats, setSessionStats] = useState({ total: 0, inProgress: 0, submitted: 0 })
+
+  // Table Management
+  const [tables, setTables] = useState<TableInfo[]>([])
+  const [tableStats, setTableStats] = useState<Record<string, number>>({})
+  const [showDeleteTableDialog, setShowDeleteTableDialog] = useState(false)
+  const [tableToDelete, setTableToDelete] = useState<TableInfo | null>(null)
+  const [deletingTableLoading, setDeletingTableLoading] = useState(false)
+  const [confirmDeleteTableText, setConfirmDeleteTableText] = useState("")
+  
+  // Multiple Tables Selection
+  const [selectedTables, setSelectedTables] = useState<string[]>([])
+  const [showDeleteMultipleDialog, setShowDeleteMultipleDialog] = useState(false)
+  const [deletingMultipleLoading, setDeletingMultipleLoading] = useState(false)
+  const [selectAllTables, setSelectAllTables] = useState(false)
+  const [showTablesList, setShowTablesList] = useState(true)
 
   // Backup
   const [backupLoading, setBackupLoading] = useState(false)
@@ -104,22 +149,24 @@ export default function SettingsPage() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [isDragOver, setIsDragOver] = useState(false)
 
-  const backupTables = [
-    "admin",
-    "assign_exams",
-    "exam_sessions",
-    "exams",
-    "grade_subjects",
-    "grades",
-    "images",
-    "questions",
-    "results",
-    "settings",
-    "student_answers",
-    "students",
-    "subjects",
-    "teacher",
+  const systemTables: TableInfo[] = [
+    { name: "students", icon: User, description: "Student records and information", color: "bg-blue-100 text-blue-700" },
+    { name: "teacher", icon: Users, description: "Teacher accounts and details", color: "bg-purple-100 text-purple-700" },
+    { name: "grades", icon: GraduationCap, description: "Grade levels and classes", color: "bg-green-100 text-green-700" },
+    { name: "subjects", icon: Book, description: "Subjects taught in school", color: "bg-yellow-100 text-yellow-700" },
+    { name: "exams", icon: FileText, description: "Exams and test papers", color: "bg-orange-100 text-orange-700" },
+    { name: "questions", icon: CheckSquare, description: "Exam questions and answers", color: "bg-red-100 text-red-700" },
+    { name: "exam_sessions", icon: Layers, description: "Active exam sessions", color: "bg-indigo-100 text-indigo-700" },
+    { name: "student_answers", icon: CheckSquare, description: "Student exam answers", color: "bg-pink-100 text-pink-700" },
+    { name: "assign_exams", icon: ClipboardList, description: "Assigned exams to students", color: "bg-teal-100 text-teal-700" },
+    { name: "results", icon: BarChart, description: "Exam results and grades", color: "bg-cyan-100 text-cyan-700" },
+    { name: "grade_sections", icon: Grid, description: "Grade sections and divisions", color: "bg-lime-100 text-lime-700" },
+    { name: "grade_subjects", icon: BookOpen, description: "Subjects per grade", color: "bg-amber-100 text-amber-700" },
+    { name: "images", icon: Image, description: "Uploaded images and files", color: "bg-rose-100 text-rose-700" },
+    { name: "settings", icon: Settings, description: "System settings and config", color: "bg-gray-100 text-gray-700" },
   ]
+
+  const backupTables = systemTables.map(t => t.name)
 
   // Drag & Drop handlers
   const handleDragOver = (e: React.DragEvent) => {
@@ -490,6 +537,7 @@ export default function SettingsPage() {
       // Refresh data
       fetchAdmins()
       fetchSessionStats()
+      fetchTableStats()
     } catch (err) {
       console.error("Error importing backup:", err)
       toast.error("Failed to import backup")
@@ -498,30 +546,58 @@ export default function SettingsPage() {
     }
   }
 
+  const fetchTableStats = async () => {
+    try {
+      const stats: Record<string, number> = {}
+      const tableList = systemTables.map(t => t.name)
+      
+      for (const tableName of tableList) {
+        const { count, error } = await supabase
+          .from(tableName)
+          .select('*', { count: 'exact', head: true })
+        
+        if (error) {
+          console.error(`Error fetching count for ${tableName}:`, error)
+          stats[tableName] = 0
+        } else {
+          stats[tableName] = count || 0
+        }
+      }
+      
+      setTableStats(stats)
+      
+      // Update tables with counts and selection state
+      const updatedTables = systemTables.map(table => ({
+        ...table,
+        count: stats[table.name] || 0,
+        selected: selectedTables.includes(table.name)
+      }))
+      setTables(updatedTables)
+    } catch (err) {
+      console.error("Error fetching table stats:", err)
+    }
+  }
+
   useEffect(() => {
     const fetchCurrentUser = async () => {
       const { data } = await supabase.auth.getUser()
       setCurrentUserId(data.user?.id || null)
-      setCurrentEmail(data.user?.email || null)
-      
-      // Fetch current admin data
-      if (data.user?.id) {
-        const { data: adminData } = await supabase
-          .from("admin")
-          .select("*")
-          .eq("id", data.user.id)
-          .single();
-        
-        if (adminData) {
-          setCurrentAdminData(adminData);
-        }
-      }
     }
     fetchCurrentUser()
     fetchAdmins()
     fetchSessionStats()
+    fetchTableStats()
     setLoading(false)
   }, [])
+
+  // Update tables when selectedTables changes
+  useEffect(() => {
+    const updatedTables = tables.map(table => ({
+      ...table,
+      selected: selectedTables.includes(table.name)
+    }))
+    setTables(updatedTables)
+  }, [selectedTables])
 
   const fetchAdmins = async () => {
     try {
@@ -557,6 +633,187 @@ export default function SettingsPage() {
     }
   }
 
+  // Handle single table selection
+  const handleTableSelect = (tableName: string) => {
+    if (selectedTables.includes(tableName)) {
+      setSelectedTables(selectedTables.filter(name => name !== tableName))
+    } else {
+      setSelectedTables([...selectedTables, tableName])
+    }
+  }
+
+  // Handle select all/none
+  const handleSelectAll = () => {
+    if (selectAllTables) {
+      setSelectedTables([])
+      setSelectAllTables(false)
+    } else {
+      const allTableNames = tables.map(t => t.name)
+      setSelectedTables(allTableNames)
+      setSelectAllTables(true)
+    }
+  }
+
+  // Handle delete multiple tables
+  const handleDeleteMultipleTables = async () => {
+    if (selectedTables.length === 0) {
+      toast.error("Please select at least one table to delete")
+      return
+    }
+
+    setDeletingMultipleLoading(true)
+
+    try {
+      const totalRecordsToDelete = selectedTables.reduce((total, tableName) => {
+        return total + (tableStats[tableName] || 0)
+      }, 0)
+
+      let successCount = 0
+      let errorCount = 0
+
+      for (const tableName of selectedTables) {
+        try {
+          if (tableName === "admin") {
+            // For admin table, delete all except current user
+            const { error } = await supabase
+              .from("admin")
+              .delete()
+              .neq("id", currentUserId)
+            
+            if (error) {
+              console.error(`Error deleting admin data:`, error)
+              errorCount++
+            } else {
+              successCount++
+            }
+          } else {
+            // For other tables, delete all data
+            const { error } = await supabase
+              .from(tableName)
+              .delete()
+              .not('id', 'is', null)
+            
+            if (error) {
+              console.error(`Error deleting ${tableName} data:`, error)
+              errorCount++
+            } else {
+              successCount++
+            }
+          }
+        } catch (err) {
+          console.error(`Error processing ${tableName}:`, err)
+          errorCount++
+        }
+      }
+
+      // Refresh data
+      fetchTableStats()
+      if (selectedTables.includes("exam_sessions") || selectedTables.includes("student_answers")) {
+        fetchSessionStats()
+      }
+      if (selectedTables.includes("admin")) {
+        fetchAdmins()
+      }
+
+      // Clear selection
+      setSelectedTables([])
+      setSelectAllTables(false)
+
+      // Show results
+      if (errorCount === 0) {
+        toast.success(`Successfully deleted ${successCount} table${successCount > 1 ? 's' : ''} with ${totalRecordsToDelete} records`)
+      } else if (successCount > 0) {
+        toast.warning(`Partially completed: ${successCount} successful, ${errorCount} failed`)
+      } else {
+        toast.error(`Failed to delete any tables`)
+      }
+
+      setShowDeleteMultipleDialog(false)
+    } catch (err) {
+      console.error("Error deleting multiple tables:", err)
+      toast.error("Failed to delete tables: " + (err as Error).message)
+    } finally {
+      setDeletingMultipleLoading(false)
+    }
+  }
+
+  const handleDeleteTable = async () => {
+    if (!tableToDelete) return;
+
+    // Check confirmation text
+    if (confirmDeleteTableText !== `DELETE-${tableToDelete.name.toUpperCase()}`) {
+      toast.error(`Please type 'DELETE-${tableToDelete.name.toUpperCase()}' to confirm`);
+      return;
+    }
+
+    setDeletingTableLoading(true);
+
+    try {
+      console.log(`Deleting all data from ${tableToDelete.name}...`);
+      
+      if (tableToDelete.name === "admin") {
+        // Check if trying to delete all admins
+        if (admins.length <= 1) {
+          toast.error("Cannot delete admin table - at least one admin must remain");
+          setDeletingTableLoading(false);
+          return;
+        }
+        
+        // For admin table, delete all except current user
+        const { error } = await supabase
+          .from("admin")
+          .delete()
+          .neq("id", currentUserId);
+        
+        if (error) {
+          toast.error("Failed to delete admin data: " + error.message);
+          return;
+        }
+        
+        toast.success(`Admin data deleted successfully! Current admin preserved.`);
+      } else {
+        // For other tables, delete all data
+        const { error } = await supabase
+          .from(tableToDelete.name)
+          .delete()
+          .not('id', 'is', null);
+        
+        if (error) {
+          toast.error(`Failed to delete ${tableToDelete.name} data: ` + error.message);
+          return;
+        }
+        
+        toast.success(`All data from ${tableToDelete.name} deleted successfully!`);
+      }
+      
+      // Refresh data
+      fetchTableStats();
+      if (tableToDelete.name === "exam_sessions" || tableToDelete.name === "student_answers") {
+        fetchSessionStats();
+      }
+      if (tableToDelete.name === "admin") {
+        fetchAdmins();
+      }
+      
+      // Close dialog and reset
+      setShowDeleteTableDialog(false);
+      setTableToDelete(null);
+      setConfirmDeleteTableText("");
+      
+    } catch (err) {
+      console.error("Error deleting table data:", err);
+      toast.error("Failed to delete table data: " + (err as Error).message);
+    } finally {
+      setDeletingTableLoading(false);
+    }
+  }
+
+  const handleDeleteTableClick = (table: TableInfo) => {
+    setTableToDelete(table);
+    setShowDeleteTableDialog(true);
+    setConfirmDeleteTableText("");
+  }
+
   const handleChangePassword = async () => {
     if (!currentPassword || !newPassword || !confirmPassword) {
       toast.error("All fields are required")
@@ -570,22 +827,8 @@ export default function SettingsPage() {
       toast.error("New password must be at least 6 characters long")
       return
     }
-    if (!currentEmail) {
-      toast.error("Current user email not found")
-      return
-    }
 
     try {
-      const { error: signInError } = await supabase.auth.signInWithPassword({
-        email: currentEmail,
-        password: currentPassword,
-      })
-
-      if (signInError) {
-        toast.error("Incorrect current password")
-        return
-      }
-
       const { error } = await supabase.auth.updateUser({
         password: newPassword,
       })
@@ -653,144 +896,132 @@ export default function SettingsPage() {
   }
 
   const handleDeleteAdminClick = (admin: Admin) => {
-    setAdminToDelete(admin)
-    setDeleteAdminConfirmOpen(true)
-    setConfirmDeleteText("") // Reset confirmation text
+    setAdminToDelete(admin);
+    setDeleteAdminConfirmOpen(true);
+    setConfirmDeleteText("");
   }
 
   const handleConfirmDeleteAdmin = async () => {
-    if (!adminToDelete) return
+    if (!adminToDelete) return;
 
     // Check confirmation text
     if (confirmDeleteText !== "DELETE") {
-      toast.error("Please type 'DELETE' to confirm deletion")
-      return
+      toast.error("Please type 'DELETE' to confirm deletion");
+      return;
     }
 
     // Check if it's the last admin
     if (admins.length <= 1) {
-      toast.error("Cannot delete the last admin")
-      setDeleteAdminConfirmOpen(false)
-      setAdminToDelete(null)
-      return
+      toast.error("Cannot delete the last admin");
+      setDeleteAdminConfirmOpen(false);
+      setAdminToDelete(null);
+      return;
     }
 
     // Check if trying to delete own account
     if (adminToDelete.id === currentUserId) {
-      toast.error("Cannot delete your own account")
-      setDeleteAdminConfirmOpen(false)
-      setAdminToDelete(null)
-      return
+      toast.error("Cannot delete your own account");
+      setDeleteAdminConfirmOpen(false);
+      setAdminToDelete(null);
+      return;
     }
 
-    setDeleteAdminLoading(true)
+    setDeleteAdminLoading(true);
 
     try {
-      // First try to use the database function
-      const { data: functionData, error: functionError } = await supabase
-        .rpc('delete_admin_with_auth', { admin_id_to_delete: adminToDelete.id })
+      // Simple direct deletion from admin table
+      const { error } = await supabase
+        .from("admin")
+        .delete()
+        .eq("id", adminToDelete.id);
 
-      if (functionError) {
-        console.log("Function not available, using manual deletion");
-        
-        // Manual deletion approach
-        // 1. Delete from admin table
-        const { error: adminError } = await supabase
-          .from("admin")
-          .delete()
-          .eq("id", adminToDelete.id)
-
-        if (adminError) {
-          toast.error("Failed to delete admin: " + adminError.message)
-          return
-        }
-
-        // 2. Delete from auth using admin API (requires proper setup)
-        // This is handled by Supabase trigger or separate admin API call
-        toast.warning("Admin deleted from database. Auth user may still exist.")
-      } else {
-        // Function was successful
-        const result = functionData as { success: boolean; message: string };
-        if (result.success) {
-          toast.success(result.message)
-        } else {
-          toast.error(result.message)
-          return
-        }
+      if (error) {
+        toast.error("Failed to delete admin: " + error.message);
+        return;
       }
 
+      toast.success(`Admin "${adminToDelete.full_name}" deleted successfully!`);
+      
       // Refresh admin list
-      fetchAdmins()
+      fetchAdmins();
       
       // Close dialog and reset
-      setDeleteAdminConfirmOpen(false)
-      setAdminToDelete(null)
-      setConfirmDeleteText("")
+      setDeleteAdminConfirmOpen(false);
+      setAdminToDelete(null);
+      setConfirmDeleteText("");
       
     } catch (err) {
-      console.error("Error deleting admin:", err)
-      toast.error("Failed to delete admin")
+      console.error("Error deleting admin:", err);
+      toast.error("Failed to delete admin");
     } finally {
-      setDeleteAdminLoading(false)
+      setDeleteAdminLoading(false);
     }
   }
 
   const handleDeleteAllSessions = async () => {
-    setDeletingSessionsLoading(true)
+    setDeletingSessionsLoading(true);
     try {
-      // First try to use the function
-      const { data, error } = await supabase.rpc('delete_all_sessions')
-
-      if (error) {
-        console.log('Function not found, using manual deletion');
-        
-        // Manual deletion
-        const { error: answersError } = await supabase
-          .from('student_answers')
-          .delete()
-          .neq('id', 0);
-        
-        if (answersError) {
-          toast.error("Failed to delete student answers: " + answersError.message)
-          return
-        }
-        
-        const { error: sessionsError } = await supabase
-          .from('exam_sessions')
-          .delete()
-          .neq('id', 0);
-        
-        if (sessionsError) {
-          toast.error("Failed to delete exam sessions: " + sessionsError.message)
-          return
-        }
-        
-        toast.success("All exam session data deleted successfully!");
-      } else {
-        // Function was successful
-        const stats = data as { deleted_sessions: number; deleted_answers: number };
-        toast.success(`Deleted ${stats.deleted_sessions} sessions and ${stats.deleted_answers} student answers successfully!`);
+      console.log("Deleting all exam session data...");
+      
+      // ပထမဆုံး student_answers table ကို ဖျက်မယ်
+      console.log("Deleting student_answers...");
+      const { error: answersError } = await supabase
+        .from('student_answers')
+        .delete()
+        .not('id', 'is', null); // UUID အတွက် အသင့်တော်ဆုံးနည်းလမ်း
+      
+      if (answersError) {
+        console.error("Error deleting student_answers:", answersError);
+        toast.error("Failed to delete student answers: " + answersError.message);
+        setDeletingSessionsLoading(false);
+        return;
       }
       
-      setShowDeleteSessionsDialog(false)
-      fetchSessionStats()
+      console.log("Student answers deleted successfully");
+      
+      // ပြီးရင် exam_sessions table ကို ဖျက်မယ်
+      console.log("Deleting exam_sessions...");
+      const { error: sessionsError } = await supabase
+        .from('exam_sessions')
+        .delete()
+        .not('id', 'is', null); // UUID အတွက် အသင့်တော်ဆုံးနည်းလမ်း
+      
+      if (sessionsError) {
+        console.error("Error deleting exam_sessions:", sessionsError);
+        toast.error("Failed to delete exam sessions: " + sessionsError.message);
+        setDeletingSessionsLoading(false);
+        return;
+      }
+      
+      console.log("Exam sessions deleted successfully");
+      
+      toast.success("All exam session data deleted successfully!");
+      setShowDeleteSessionsDialog(false);
+      fetchSessionStats();
+      fetchTableStats();
     } catch (err) {
-      console.error("Error deleting sessions:", err)
-      toast.error("Failed to delete exam sessions")
+      console.error("Error deleting sessions:", err);
+      toast.error("Failed to delete exam sessions: " + (err as Error).message);
     } finally {
-      setDeletingSessionsLoading(false)
+      setDeletingSessionsLoading(false);
     }
   }
 
   // Check if current user has permission to delete
   const canDeleteAdmin = (admin: Admin) => {
     // Cannot delete yourself
-    if (admin.id === currentUserId) return false
+    if (admin.id === currentUserId) return false;
     
-    // Check if current user is super admin or has delete permissions
-    // Add your permission logic here
-    return true
-  }
+    // Cannot delete if only one admin remains
+    if (admins.length <= 1) return false;
+    
+    return true;
+  };
+
+  // Calculate total selected records
+  const totalSelectedRecords = selectedTables.reduce((total, tableName) => {
+    return total + (tableStats[tableName] || 0)
+  }, 0)
 
   if (loading) {
     return (
@@ -833,10 +1064,12 @@ export default function SettingsPage() {
             </p>
           </div>
         </div>
-        {currentAdminData && (
+        {currentUserId && (
           <div className="flex items-center gap-2 px-4 py-2 bg-white rounded-lg border border-gray-200">
             <Shield className="h-4 w-4 text-indigo-600" />
-            <span className="text-sm font-medium">{currentAdminData.username}</span>
+            <span className="text-sm font-medium">
+              {admins.find(a => a.id === currentUserId)?.username || "Admin"}
+            </span>
             <Badge variant="outline" className="ml-2">
               Admin
             </Badge>
@@ -903,6 +1136,185 @@ export default function SettingsPage() {
                   Delete All Session Data
                 </Button>
               </div>
+            </CardContent>
+          </Card>
+
+          {/* Database Tables Card */}
+          <Card>
+            <CardHeader>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <TableIcon className="h-5 w-5 text-indigo-600" />
+                    Database Tables
+                  </CardTitle>
+                  <CardDescription>Select and manage multiple tables at once</CardDescription>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowTablesList(!showTablesList)}
+                    className="gap-2"
+                  >
+                    {showTablesList ? (
+                      <>
+                        <ChevronUp className="h-4 w-4" />
+                        Hide List
+                      </>
+                    ) : (
+                      <>
+                        <ChevronDown className="h-4 w-4" />
+                        Show List
+                      </>
+                    )}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleSelectAll}
+                    className="gap-2"
+                  >
+                    {selectAllTables ? (
+                      <>
+                        <X className="h-4 w-4" />
+                        Deselect All
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle className="h-4 w-4" />
+                        Select All
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {/* Selection Summary */}
+              <div className="mb-6 p-4 bg-indigo-50 rounded-lg border border-indigo-200">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div>
+                    <h3 className="font-medium text-indigo-900">Selection Summary</h3>
+                    <div className="flex flex-wrap items-center gap-4 mt-2">
+                      <div className="flex items-center gap-2">
+                        <div className="h-3 w-3 rounded-full bg-indigo-600"></div>
+                        <span className="text-sm text-indigo-700">
+                          {selectedTables.length} table{selectedTables.length !== 1 ? 's' : ''} selected
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="h-3 w-3 rounded-full bg-green-600"></div>
+                        <span className="text-sm text-green-700">
+                          {totalSelectedRecords.toLocaleString()} total records
+                        </span>
+                      </div>
+                    </div>
+                    {selectedTables.length > 0 && (
+                      <div className="mt-3">
+                        <p className="text-xs text-indigo-600 mb-1">Selected tables:</p>
+                        <div className="flex flex-wrap gap-1">
+                          {selectedTables.map(tableName => (
+                            <Badge key={tableName} variant="outline" className="bg-white">
+                              {tableName}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex flex-col sm:items-end gap-2">
+                    <Button
+                      variant="destructive"
+                      onClick={() => {
+                        if (selectedTables.length === 0) {
+                          toast.error("Please select at least one table")
+                        } else {
+                          setShowDeleteMultipleDialog(true)
+                        }
+                      }}
+                      disabled={selectedTables.length === 0}
+                      className="gap-2 whitespace-nowrap"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      Delete Selected ({selectedTables.length})
+                    </Button>
+                    <p className="text-xs text-gray-500 text-center sm:text-right">
+                      {selectedTables.length === 0 ? "Select tables to enable deletion" : "Will delete all data from selected tables"}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Tables List */}
+              {showTablesList && (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {tables.map((table) => (
+                      <div
+                        key={table.name}
+                        className={`p-4 rounded-lg border ${table.selected ? 'ring-2 ring-indigo-500 ring-offset-2 border-indigo-300 bg-indigo-50' : 'border-gray-200 bg-white hover:bg-gray-50'} transition-all cursor-pointer`}
+                        onClick={() => handleTableSelect(table.name)}
+                      >
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-3">
+                            <div className={`p-2 rounded-lg ${table.color}`}>
+                              <table.icon className="h-5 w-5" />
+                            </div>
+                            <div className="flex-1">
+                              <h3 className="font-semibold text-gray-900">{table.name}</h3>
+                              <p className="text-xs text-gray-500 truncate">{table.description}</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <div className={`h-4 w-4 rounded-full border-2 ${table.selected ? 'bg-indigo-600 border-indigo-600' : 'border-gray-300'}`}>
+                              {table.selected && <Check className="h-3 w-3 text-white" />}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-between mt-4">
+                          <Badge variant="outline" className={table.count === 0 ? "text-gray-500" : "text-gray-700"}>
+                            {table.count.toLocaleString()} records
+                          </Badge>
+                          <div className="flex items-center gap-2">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteTableClick(table);
+                              }}
+                              disabled={table.count === 0}
+                              className="h-7 px-2 text-red-600 hover:text-red-700 hover:bg-red-50"
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </Button>
+                            <Badge variant="outline" className="text-xs">
+                              {table.name === "admin" ? "Protected" : "System"}
+                            </Badge>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  
+                  <div className="mt-6 p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                    <div className="flex gap-3">
+                      <AlertTriangle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                      <div className="text-sm text-amber-800">
+                        <p className="font-semibold">Important Notes:</p>
+                        <ul className="list-disc list-inside mt-2 space-y-1">
+                          <li>Click on any table to select/deselect it</li>
+                          <li>Deleting data from tables is permanent and cannot be undone</li>
+                          <li>Admin table deletion will preserve your current account</li>
+                          <li>Some tables may have foreign key constraints</li>
+                          <li>Always backup before deleting large amounts of data</li>
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -1070,7 +1482,10 @@ export default function SettingsPage() {
                           )}
                         </div>
                         <p className="text-sm text-gray-500">{admin.username}</p>
-                        <p className="text-sm text-gray-500">{admin.email}</p>
+                        <p className="text-sm text-gray-500 truncate">{admin.email}</p>
+                        {admin.phone_number && (
+                          <p className="text-xs text-gray-400 mt-1">{admin.phone_number}</p>
+                        )}
                       </div>
                       {canDeleteAdmin(admin) ? (
                         <Button
@@ -1078,11 +1493,19 @@ export default function SettingsPage() {
                           variant="ghost"
                           className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50"
                           onClick={() => handleDeleteAdminClick(admin)}
+                          title="Delete admin"
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
                       ) : (
-                        <div className="h-8 w-8 flex items-center justify-center text-gray-400">
+                        <div 
+                          className="h-8 w-8 flex items-center justify-center text-gray-400"
+                          title={
+                            admin.id === currentUserId 
+                              ? "Cannot delete your own account" 
+                              : "Cannot delete the last admin"
+                          }
+                        >
                           <ShieldAlert className="h-4 w-4" />
                         </div>
                       )}
@@ -1104,31 +1527,34 @@ export default function SettingsPage() {
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="username">Username</Label>
+              <Label htmlFor="username">Username *</Label>
               <Input
                 id="username"
                 value={newAdminUsername}
                 onChange={(e) => setNewAdminUsername(e.target.value)}
                 placeholder="Enter username"
+                required
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="full_name">Full Name</Label>
+              <Label htmlFor="full_name">Full Name *</Label>
               <Input
                 id="full_name"
                 value={newAdminFullName}
                 onChange={(e) => setNewAdminFullName(e.target.value)}
                 placeholder="Enter full name"
+                required
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="email">Email *</Label>
               <Input
                 id="email"
                 type="email"
                 value={newAdminEmail}
                 onChange={(e) => setNewAdminEmail(e.target.value)}
                 placeholder="Enter email"
+                required
               />
             </div>
             <div className="space-y-2">
@@ -1141,21 +1567,23 @@ export default function SettingsPage() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
+              <Label htmlFor="password">Password *</Label>
               <Input
                 id="password"
                 type="password"
                 value={newAdminPassword}
                 onChange={(e) => setNewAdminPassword(e.target.value)}
                 placeholder="Enter password"
+                required
               />
+              <p className="text-xs text-gray-500">Password must be at least 6 characters</p>
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowAddAdmin(false)}>
               Cancel
             </Button>
-            <Button onClick={handleAddAdmin}>
+            <Button onClick={handleAddAdmin} disabled={!newAdminUsername || !newAdminFullName || !newAdminEmail || !newAdminPassword}>
               Add Admin
             </Button>
           </DialogFooter>
@@ -1164,69 +1592,66 @@ export default function SettingsPage() {
 
       {/* Delete Admin Confirmation */}
       <Dialog open={deleteAdminConfirmOpen} onOpenChange={setDeleteAdminConfirmOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-red-600">
               <AlertTriangle className="h-5 w-5" />
               Delete Admin
             </DialogTitle>
             <DialogDescription>
-              Are you sure you want to delete admin "{adminToDelete?.full_name}"? This action is permanent and cannot be undone.
+              Are you sure you want to delete admin "{adminToDelete?.full_name}"?
             </DialogDescription>
           </DialogHeader>
+          
           <div className="py-4 space-y-4">
-            {/* Warning Box */}
-            <div className="p-4 bg-red-50 border border-red-200 rounded-lg space-y-2">
-              <p className="text-sm font-semibold text-red-800">Warning: This action will:</p>
-              <ul className="text-sm text-red-800 list-disc list-inside ml-2">
-                <li>Remove admin from the system</li>
-                <li>Delete admin account from authentication</li>
-                <li>Revoke all access immediately</li>
-                <li>Cannot be undone</li>
-              </ul>
-            </div>
-            
-            {/* Confirmation Input */}
-            <div className="space-y-2">
-              <Label htmlFor="confirm-delete" className="text-sm font-medium">
-                Type <span className="font-bold text-red-600">DELETE</span> to confirm
-              </Label>
-              <Input
-                id="confirm-delete"
-                value={confirmDeleteText}
-                onChange={(e) => setConfirmDeleteText(e.target.value)}
-                placeholder="Type DELETE to confirm"
-                className="border-red-200 focus:border-red-500"
-              />
-              <p className="text-xs text-gray-500">
-                This is required to prevent accidental deletion
-              </p>
-            </div>
             
             {/* Admin Info */}
             {adminToDelete && (
               <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
-                <p className="text-sm font-medium text-gray-900">Admin to be deleted:</p>
-                <div className="mt-2 grid grid-cols-2 gap-2 text-sm">
+                <p className="text-sm font-medium text-gray-900 mb-2">Admin Details:</p>
+                <div className="grid grid-cols-2 gap-2 text-sm">
                   <div>
                     <p className="text-gray-500">Name:</p>
                     <p className="font-medium">{adminToDelete.full_name}</p>
                   </div>
                   <div>
+                    <p className="text-gray-500">Username:</p>
+                    <p className="font-medium">{adminToDelete.username}</p>
+                  </div>
+                  <div className="col-span-2">
                     <p className="text-gray-500">Email:</p>
                     <p className="font-medium">{adminToDelete.email}</p>
                   </div>
                 </div>
               </div>
             )}
+            
+            {/* Confirmation Input */}
+            <div className="space-y-2">
+              <Label htmlFor="confirm-delete" className="text-sm font-medium">
+                Type <span className="font-bold text-red-600">DELETE</span> to confirm:
+              </Label>
+              <Input
+                id="confirm-delete"
+                value={confirmDeleteText}
+                onChange={(e) => setConfirmDeleteText(e.target.value.toUpperCase())}
+                placeholder="Type DELETE"
+                className="border-red-200 focus:border-red-500 uppercase"
+                autoComplete="off"
+              />
+              <p className="text-xs text-gray-500">
+                This extra step prevents accidental deletions
+              </p>
+            </div>
           </div>
+          
           <DialogFooter>
             <Button 
               variant="outline" 
               onClick={() => {
-                setDeleteAdminConfirmOpen(false)
-                setAdminToDelete(null)
-                setConfirmDeleteText("")
+                setDeleteAdminConfirmOpen(false);
+                setAdminToDelete(null);
+                setConfirmDeleteText("");
               }}
               disabled={deleteAdminLoading}
             >
@@ -1235,8 +1660,11 @@ export default function SettingsPage() {
             <Button 
               variant="destructive" 
               onClick={handleConfirmDeleteAdmin} 
-              disabled={deleteAdminLoading || confirmDeleteText !== "DELETE"}
-              className="gap-2"
+              disabled={
+                deleteAdminLoading || 
+                confirmDeleteText !== "DELETE"
+              }
+              className="gap-2 min-w-[140px]"
             >
               {deleteAdminLoading ? (
                 <>
@@ -1245,8 +1673,249 @@ export default function SettingsPage() {
                 </>
               ) : (
                 <>
-                  <UserX className="h-4 w-4" />
-                  Delete Admin Permanently
+                  <Trash2 className="h-4 w-4" />
+                  Delete Admin
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Table Dialog */}
+      <Dialog open={showDeleteTableDialog} onOpenChange={setShowDeleteTableDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <AlertTriangle className="h-5 w-5" />
+              Delete Table Data
+            </DialogTitle>
+            <DialogDescription>
+              Delete all data from "{tableToDelete?.name}" table
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="py-4 space-y-4">
+            
+            {/* Table Info */}
+            {tableToDelete && (
+              <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className={`p-2 rounded-lg ${tableToDelete.color}`}>
+                    <tableToDelete.icon className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-gray-900 mb-1">{tableToDelete.name}</p>
+                    <p className="text-xs text-gray-500">{tableToDelete.description}</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div>
+                    <p className="text-gray-500">Records:</p>
+                    <p className="font-medium">{tableToDelete.count.toLocaleString()}</p>
+                  </div>
+                  <div>
+                    <p className="text-gray-500">Status:</p>
+                    <p className="font-medium">
+                      {tableToDelete.name === "admin" ? "Protected" : "System Table"}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+            
+            {/* Special note for admin table */}
+            {tableToDelete?.name === "admin" && (
+              <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <div className="flex items-start gap-2">
+                  <Info className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
+                  <div className="text-sm text-blue-800">
+                    <p className="font-semibold">Note:</p>
+                    <p>Your current admin account will be preserved. Only other admin accounts will be deleted.</p>
+                  </div>
+                </div>
+              </div>
+            )}
+            
+            {/* Warning */}
+            <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+              <div className="flex items-start gap-2">
+                <AlertTriangle className="h-4 w-4 text-red-600 mt-0.5 flex-shrink-0" />
+                <div className="text-sm text-red-800">
+                  <p className="font-semibold">Warning:</p>
+                  <p>This action is permanent and cannot be undone. All data in this table will be deleted.</p>
+                </div>
+              </div>
+            </div>
+            
+            {/* Confirmation Input */}
+            <div className="space-y-2">
+              <Label htmlFor="confirm-delete-table" className="text-sm font-medium">
+                Type <span className="font-bold text-red-600">DELETE-{tableToDelete?.name.toUpperCase()}</span> to confirm:
+              </Label>
+              <Input
+                id="confirm-delete-table"
+                value={confirmDeleteTableText}
+                onChange={(e) => setConfirmDeleteTableText(e.target.value.toUpperCase())}
+                placeholder={`Type DELETE-${tableToDelete?.name.toUpperCase()}`}
+                className="border-red-200 focus:border-red-500 uppercase"
+                autoComplete="off"
+              />
+              <p className="text-xs text-gray-500">
+                This extra step prevents accidental deletions
+              </p>
+            </div>
+          </div>
+          
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setShowDeleteTableDialog(false);
+                setTableToDelete(null);
+                setConfirmDeleteTableText("");
+              }}
+              disabled={deletingTableLoading}
+            >
+              Cancel
+            </Button>
+            <Button 
+              variant="destructive" 
+              onClick={handleDeleteTable} 
+              disabled={
+                deletingTableLoading || 
+                confirmDeleteTableText !== `DELETE-${tableToDelete?.name.toUpperCase()}`
+              }
+              className="gap-2 min-w-[140px]"
+            >
+              {deletingTableLoading ? (
+                <>
+                  <RotateCw className="h-4 w-4 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="h-4 w-4" />
+                  Delete All Data
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Multiple Tables Dialog */}
+      <Dialog open={showDeleteMultipleDialog} onOpenChange={setShowDeleteMultipleDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <AlertTriangle className="h-5 w-5" />
+              Delete Multiple Tables Data
+            </DialogTitle>
+            <DialogDescription>
+              Delete all data from {selectedTables.length} selected table{selectedTables.length !== 1 ? 's' : ''}
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="py-4 space-y-4">
+            
+            {/* Selection Info */}
+            <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
+              <p className="text-sm font-medium text-gray-900 mb-2">Selected Tables:</p>
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <div>
+                  <p className="text-gray-500">Tables:</p>
+                  <p className="font-medium">{selectedTables.length}</p>
+                </div>
+                <div>
+                  <p className="text-gray-500">Total Records:</p>
+                  <p className="font-medium">{totalSelectedRecords.toLocaleString()}</p>
+                </div>
+              </div>
+              <div className="mt-2">
+                <p className="text-xs text-gray-500 mb-1">Tables list:</p>
+                <div className="flex flex-wrap gap-1 max-h-20 overflow-y-auto p-1">
+                  {selectedTables.map(tableName => (
+                    <Badge key={tableName} variant="outline" className="bg-white text-xs">
+                      {tableName}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            </div>
+            
+            {/* Special note if admin table is selected */}
+            {selectedTables.includes("admin") && (
+              <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <div className="flex items-start gap-2">
+                  <Info className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
+                  <div className="text-sm text-blue-800">
+                    <p className="font-semibold">Note:</p>
+                    <p>Your current admin account will be preserved. Only other admin accounts will be deleted.</p>
+                  </div>
+                </div>
+              </div>
+            )}
+            
+            {/* Warning */}
+            <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+              <div className="flex items-start gap-2">
+                <AlertTriangle className="h-4 w-4 text-red-600 mt-0.5 flex-shrink-0" />
+                <div className="text-sm text-red-800">
+                  <p className="font-semibold">Warning:</p>
+                  <p>This action is permanent and cannot be undone. All data in selected tables will be deleted.</p>
+                </div>
+              </div>
+            </div>
+            
+            {/* Confirmation Input */}
+            <div className="space-y-2">
+              <Label htmlFor="confirm-delete-multiple" className="text-sm font-medium">
+                Type <span className="font-bold text-red-600">DELETE-ALL</span> to confirm:
+              </Label>
+              <Input
+                id="confirm-delete-multiple"
+                value={confirmDeleteTableText}
+                onChange={(e) => setConfirmDeleteTableText(e.target.value.toUpperCase())}
+                placeholder="Type DELETE-ALL"
+                className="border-red-200 focus:border-red-500 uppercase"
+                autoComplete="off"
+              />
+              <p className="text-xs text-gray-500">
+                This extra step prevents accidental mass deletions
+              </p>
+            </div>
+          </div>
+          
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setShowDeleteMultipleDialog(false);
+                setConfirmDeleteTableText("");
+              }}
+              disabled={deletingMultipleLoading}
+            >
+              Cancel
+            </Button>
+            <Button 
+              variant="destructive" 
+              onClick={handleDeleteMultipleTables} 
+              disabled={
+                deletingMultipleLoading || 
+                confirmDeleteTableText !== "DELETE-ALL"
+              }
+              className="gap-2 min-w-[140px]"
+            >
+              {deletingMultipleLoading ? (
+                <>
+                  <RotateCw className="h-4 w-4 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="h-4 w-4" />
+                  Delete {selectedTables.length} Table{selectedTables.length !== 1 ? 's' : ''}
                 </>
               )}
             </Button>
@@ -1378,7 +2047,7 @@ export default function SettingsPage() {
 
       {/* Import Backup Dialog */}
       <Dialog open={showImportDialog} onOpenChange={setShowImportDialog}>
-        <DialogContent>
+        <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Upload className="h-5 w-5 text-emerald-600" />
@@ -1534,24 +2203,6 @@ export default function SettingsPage() {
                 </p>
               </div>
             )}
-
-            {/* Warning */}
-            <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
-              <div className="flex gap-3">
-                <AlertTriangle className="h-5 w-5 text-amber-600 flex-shrink-0" />
-                <div className="space-y-2">
-                  <p className="text-sm font-medium text-amber-900">Important Notice</p>
-                  <p className="text-sm text-amber-800">
-                    Importing will update existing records with matching IDs. This action cannot be undone.
-                  </p>
-                  <ul className="text-sm text-amber-800 list-disc list-inside space-y-1">
-                    <li>Backup your current data before proceeding</li>
-                    <li>Import may take several minutes for large files</li>
-                    <li>Some records may fail if data format is incorrect</li>
-                  </ul>
-                </div>
-              </div>
-            </div>
           </div>
           <DialogFooter>
             <Button

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -52,6 +52,11 @@ import {
   Edit,
   Trash2,
   AlertCircle,
+  User,
+  BookOpen,
+  GraduationCap,
+  UserCircle,
+  Users as UsersIcon,
 } from "lucide-react";
 
 const STUDENTS_PER_PAGE = 10;
@@ -63,6 +68,7 @@ export default function StudentsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [gradeFilter, setGradeFilter] = useState("all");
   const [sectionFilter, setSectionFilter] = useState("all");
+  const [availableSections, setAvailableSections] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
@@ -79,8 +85,8 @@ export default function StudentsPage() {
   const [editErrors, setEditErrors] = useState({});
   const [editSubmitAttempted, setEditSubmitAttempted] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [gradeStats, setGradeStats] = useState<any>({});
 
-  const sectionOptions = ["A", "B", "C", "D"];
   const streamOptions = ["Natural", "Social"];
 
   // Fetch students and grades from database
@@ -93,6 +99,12 @@ export default function StudentsPage() {
     };
     loadData();
   }, []);
+
+  // Update available sections and stats when grade filter changes
+  useEffect(() => {
+    updateAvailableSections();
+    updateGradeStats();
+  }, [gradeFilter, students, grades]);
 
   const fetchStudents = async () => {
     try {
@@ -144,19 +156,176 @@ export default function StudentsPage() {
     return gradeName.replace("Grade ", "");
   };
 
-  const stats = useMemo(() => {
-    const total = students.length;
-    const grade9 = students.filter(s => getGradeName(s.grade_id) === "Grade 9").length;
-    const grade10 = students.filter(s => getGradeName(s.grade_id) === "Grade 10").length;
-    const grade1112 = students.filter(s => ["Grade 11", "Grade 12"].includes(getGradeName(s.grade_id))).length;
+  const updateAvailableSections = () => {
+    if (gradeFilter === "all") {
+      // Get all unique sections from all students
+      const allSections = [...new Set(students.map(s => s.section))].sort();
+      setAvailableSections(allSections);
+    } else {
+      // Get grade ID from grade filter
+      const selectedGrade = grades.find(g => {
+        return g.grade_name === gradeFilter;
+      });
 
+      if (selectedGrade) {
+        // Get sections for the selected grade
+        const gradeSections = [...new Set(
+          students
+            .filter(s => s.grade_id === selectedGrade.id)
+            .map(s => s.section)
+        )].sort();
+        setAvailableSections(gradeSections);
+      } else {
+        setAvailableSections([]);
+      }
+    }
+  };
+
+  const updateGradeStats = () => {
+    if (gradeFilter === "all") {
+      // Calculate stats for all grades
+      const allGradeStats: any = {};
+      grades.forEach(grade => {
+        const gradeStudents = students.filter(s => s.grade_id === grade.id);
+        const males = gradeStudents.filter(s => s.gender === "Male" || s.gender === "male").length;
+        const females = gradeStudents.filter(s => s.gender === "Female" || s.gender === "female").length;
+        const others = gradeStudents.filter(s => s.gender === "Other" || s.gender === "other").length;
+        
+        allGradeStats[grade.id] = {
+          total: gradeStudents.length,
+          males,
+          females,
+          others,
+          gradeName: grade.grade_name
+        };
+      });
+      setGradeStats(allGradeStats);
+    } else {
+      // Calculate stats for selected grade
+      const selectedGrade = grades.find(g => g.grade_name === gradeFilter);
+      if (selectedGrade) {
+        const gradeStudents = students.filter(s => s.grade_id === selectedGrade.id);
+        const males = gradeStudents.filter(s => s.gender === "Male" || s.gender === "male").length;
+        const females = gradeStudents.filter(s => s.gender === "Female" || s.gender === "female").length;
+        const others = gradeStudents.filter(s => s.gender === "Other" || s.gender === "other").length;
+        
+        setGradeStats({
+          [selectedGrade.id]: {
+            total: gradeStudents.length,
+            males,
+            females,
+            others,
+            gradeName: selectedGrade.grade_name
+          }
+        });
+      }
+    }
+  };
+
+  // Calculate stats based on current filter
+  const stats = useMemo(() => {
+    // Filter students based on current search, grade and section filters
+    let filtered = students.filter(s => {
+      const studentGrade = getGradeName(s.grade_id);
+      
+      const matchesSearch = s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        s.student_id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        `${s.name} ${s.father_name} ${s.grandfather_name}`.toLowerCase().includes(searchQuery.toLowerCase());
+      
+      const matchesGrade = gradeFilter === "all" || studentGrade === gradeFilter;
+      
+      const matchesSection = sectionFilter === "all" || s.section === sectionFilter;
+      
+      return matchesSearch && matchesGrade && matchesSection;
+    });
+
+    const total = filtered.length;
+    const males = filtered.filter(s => s.gender === "Male" || s.gender === "male").length;
+    const females = filtered.filter(s => s.gender === "Female" || s.gender === "female").length;
+    const others = filtered.filter(s => s.gender === "Other" || s.gender === "other").length;
+
+    // Get grade name for display
+    let gradeDisplay = "All Grades";
+    if (gradeFilter !== "all") {
+      gradeDisplay = gradeFilter;
+    }
+
+    // Get section for display
+    let sectionDisplay = "All Sections";
+    if (sectionFilter !== "all") {
+      sectionDisplay = `Section ${sectionFilter}`;
+    }
+
+    // If viewing a specific grade, show detailed grade stats
+    if (gradeFilter !== "all") {
+      const selectedGrade = grades.find(g => g.grade_name === gradeFilter);
+      if (selectedGrade && gradeStats[selectedGrade.id]) {
+        const stats = gradeStats[selectedGrade.id];
+        return [
+          { 
+            title: "Total Students", 
+            value: stats.total, 
+            icon: UsersIcon,
+            description: `${gradeDisplay} • ${sectionDisplay}`,
+            color: "text-blue-600"
+          },
+          { 
+            title: "Male Students", 
+            value: stats.males, 
+            icon: UserCircle,
+            description: `${stats.males} Male Students`,
+            color: "text-blue-500"
+          },
+          { 
+            title: "Female Students", 
+            value: stats.females, 
+            icon: UserCircle,
+            description: `${stats.females} Female Students`,
+            color: "text-pink-500"
+          },
+          { 
+            title: "Other Gender", 
+            value: stats.others, 
+            icon: User,
+            description: `${stats.others} Other Students`,
+            color: "text-purple-500"
+          },
+        ];
+      }
+    }
+
+    // Default stats for all grades
     return [
-      { title: "Total Students", value: total, icon: Users },
-      { title: "Grade 9", value: grade9, icon: Users },
-      { title: "Grade 10", value: grade10, icon: Users },
-      { title: "Grade 11-12", value: grade1112, icon: Users },
+      { 
+        title: "Total Students", 
+        value: total, 
+        icon: UsersIcon,
+        description: `${gradeDisplay} • ${sectionDisplay}`,
+        color: "text-blue-600"
+      },
+      { 
+        title: "Male Students", 
+        value: males, 
+        icon: UserCircle,
+        description: `${males} Male Students`,
+        color: "text-blue-500"
+      },
+      { 
+        title: "Female Students", 
+        value: females, 
+        icon: UserCircle,
+        description: `${females} Female Students`,
+        color: "text-pink-500"
+      },
+      { 
+        title: "Other Gender", 
+        value: others, 
+        icon: User,
+        description: `${others} Other Students`,
+        color: "text-purple-500"
+      },
     ];
-  }, [students, grades]);
+  }, [students, searchQuery, gradeFilter, sectionFilter, grades, gradeStats]);
 
   const filteredStudents = useMemo(() => {
     return students.filter(s => {
@@ -166,11 +335,7 @@ export default function StudentsPage() {
         s.student_id.toLowerCase().includes(searchQuery.toLowerCase()) ||
         `${s.name} ${s.father_name} ${s.grandfather_name}`.toLowerCase().includes(searchQuery.toLowerCase());
       
-      const matchesGrade = gradeFilter === "all" || 
-        (gradeFilter === "9" && studentGrade === "Grade 9") ||
-        (gradeFilter === "10" && studentGrade === "Grade 10") ||
-        (gradeFilter === "11" && studentGrade === "Grade 11") ||
-        (gradeFilter === "12" && studentGrade === "Grade 12");
+      const matchesGrade = gradeFilter === "all" || studentGrade === gradeFilter;
       
       const matchesSection = sectionFilter === "all" || s.section === sectionFilter;
       
@@ -547,20 +712,60 @@ export default function StudentsPage() {
         </Button>
       </div>
 
-      {/* Stats */}
+      {/* Stats - Updated to show total, males, females and others based on current filter */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {stats.map((stat, index) => (
-          <Card key={index}>
+          <Card key={index} className="hover:shadow-md transition-shadow duration-200">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">{stat.title}</CardTitle>
-              <stat.icon className="h-5 w-5 text-muted-foreground" />
+              <CardTitle className="text-sm font-medium text-gray-700">{stat.title}</CardTitle>
+              <stat.icon className={`h-5 w-5 ${stat.color}`} />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{stat.value}</div>
+              <div className={`text-2xl font-bold ${stat.color}`}>{stat.value}</div>
+              <p className="text-xs text-muted-foreground mt-1">{stat.description}</p>
             </CardContent>
           </Card>
         ))}
       </div>
+
+      {/* Grade Information Card */}
+      {gradeFilter !== "all" && (
+        <Card className="border-l-4 border-l-blue-500">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <GraduationCap className="h-5 w-5 text-blue-600" />
+              Grade Information: {gradeFilter}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {grades.filter(g => g.grade_name === gradeFilter).map(grade => {
+                const stats = gradeStats[grade.id] || { total: 0, males: 0, females: 0, others: 0 };
+                return (
+                  <React.Fragment key={grade.id}>
+                    <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                      <div className="text-lg font-bold text-blue-700">{stats.total}</div>
+                      <div className="text-sm text-blue-600">Total Students</div>
+                    </div>
+                    <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                      <div className="text-lg font-bold text-blue-500">{stats.males}</div>
+                      <div className="text-sm text-blue-600">Male Students</div>
+                    </div>
+                    <div className="p-4 bg-pink-50 rounded-lg border border-pink-200">
+                      <div className="text-lg font-bold text-pink-500">{stats.females}</div>
+                      <div className="text-sm text-pink-600">Female Students</div>
+                    </div>
+                    <div className="p-4 bg-purple-50 rounded-lg border border-purple-200">
+                      <div className="text-lg font-bold text-purple-500">{stats.others}</div>
+                      <div className="text-sm text-purple-600">Other Gender</div>
+                    </div>
+                  </React.Fragment>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Filters */}
       <div className="space-y-4">
@@ -570,34 +775,61 @@ export default function StudentsPage() {
             <Input
               placeholder="Search by student ID, name, or full name..."
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setCurrentPage(1); // Reset to first page on search
+              }}
               className="pl-10"
             />
           </div>
 
-          <Select value={gradeFilter} onValueChange={setGradeFilter}>
-            <SelectTrigger className="w-40">
-              <SelectValue placeholder="All Grades" />
+          <Select 
+            value={gradeFilter} 
+            onValueChange={(value) => {
+              setGradeFilter(value);
+              setSectionFilter("all"); // Reset section filter when grade changes
+              setCurrentPage(1); // Reset to first page on filter change
+            }}
+          >
+            <SelectTrigger className="w-48">
+              <SelectValue placeholder="Select Grade" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Grades</SelectItem>
-              <SelectItem value="9">Grade 9</SelectItem>
-              <SelectItem value="10">Grade 10</SelectItem>
-              <SelectItem value="11">Grade 11</SelectItem>
-              <SelectItem value="12">Grade 12</SelectItem>
+              {grades.map((grade) => (
+                <SelectItem key={grade.id} value={grade.grade_name}>
+                  {grade.grade_name}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
 
-          <Select value={sectionFilter} onValueChange={setSectionFilter}>
-            <SelectTrigger className="w-40">
-              <SelectValue placeholder="All Sections" />
+          <Select 
+            value={sectionFilter} 
+            onValueChange={(value) => {
+              setSectionFilter(value);
+              setCurrentPage(1); // Reset to first page on filter change
+            }}
+            disabled={gradeFilter === "all" ? false : availableSections.length === 0}
+          >
+            <SelectTrigger className="w-48">
+              <SelectValue placeholder={
+                gradeFilter === "all" 
+                  ? "All Sections" 
+                  : availableSections.length === 0 
+                    ? "No sections available" 
+                    : "Select section"
+              } />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All Sections</SelectItem>
-              <SelectItem value="A">Section A</SelectItem>
-              <SelectItem value="B">Section B</SelectItem>
-              <SelectItem value="C">Section C</SelectItem>
-              <SelectItem value="D">Section D</SelectItem>
+              <SelectItem value="all">
+                {gradeFilter === "all" ? "All Sections" : `All Sections (${availableSections.length})`}
+              </SelectItem>
+              {availableSections.map((section) => (
+                <SelectItem key={section} value={section}>
+                  Section {section}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
 
@@ -614,6 +846,15 @@ export default function StudentsPage() {
               <DropdownMenuItem onSelect={(e) => { e.preventDefault(); exportToWord(); }}><FileIcon className="mr-2 h-4 w-4" /> Word</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+        </div>
+
+        {/* Information about current filters */}
+        <div className="text-sm text-muted-foreground">
+          {gradeFilter === "all" && sectionFilter === "all" && "Showing all students from all grades and sections"}
+          {gradeFilter !== "all" && sectionFilter === "all" && `Showing students from ${gradeFilter} (${availableSections.length} sections available)`}
+          {gradeFilter !== "all" && sectionFilter !== "all" && `Showing students from ${gradeFilter}, Section ${sectionFilter}`}
+          {gradeFilter === "all" && sectionFilter !== "all" && `Showing students from Section ${sectionFilter} across all grades`}
+          {searchQuery && ` • Searching for: "${searchQuery}"`}
         </div>
 
         {/* Table */}
@@ -634,7 +875,7 @@ export default function StudentsPage() {
               {paginatedStudents.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
-                    No students found
+                    No students found matching your filters
                   </TableCell>
                 </TableRow>
               ) : (
@@ -650,7 +891,14 @@ export default function StudentsPage() {
                       </Badge>
                     </TableCell>
                     <TableCell>{student.section}</TableCell>
-                    <TableCell>{student.gender}</TableCell>
+                    <TableCell>
+                      <Badge variant={
+                        student.gender === "Male" || student.gender === "male" ? "default" :
+                        student.gender === "Female" || student.gender === "female" ? "secondary" : "outline"
+                      }>
+                        {student.gender}
+                      </Badge>
+                    </TableCell>
                     <TableCell className="text-right">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
@@ -793,6 +1041,7 @@ export default function StudentsPage() {
                   <SelectContent>
                     <SelectItem value="Male">Male</SelectItem>
                     <SelectItem value="Female">Female</SelectItem>
+                    <SelectItem value="Other">Other</SelectItem>
                   </SelectContent>
                 </Select>
                 {editErrors.gender && (
@@ -828,7 +1077,7 @@ export default function StudentsPage() {
                     <SelectValue placeholder="Select section" />
                   </SelectTrigger>
                   <SelectContent>
-                    {sectionOptions.map((section) => (
+                    {availableSections.map((section) => (
                       <SelectItem key={section} value={section}>
                         {section}
                       </SelectItem>
