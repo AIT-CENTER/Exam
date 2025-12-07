@@ -124,7 +124,7 @@ const EditorToolbar = ({ editor }: { editor: any }) => {
   );
 };
 
-// Image Upload Modal with real Supabase upload
+// Image Upload Modal with real Supabase upload - FIXED
 const ImageUploadModal = ({ isOpen, onClose, onUpload, title }: { 
   isOpen: boolean; 
   onClose: () => void; 
@@ -135,6 +135,34 @@ const ImageUploadModal = ({ isOpen, onClose, onUpload, title }: {
   const [url, setUrl] = useState("");
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const bucketName = process.env.NEXT_PUBLIC_SUPABASE_IMAGE_BUCKET || "exam_images";
+
+  const showBucketCreationToast = useCallback(() => {
+    toast.error(
+      <div className="space-y-3 max-w-md">
+        <p className="font-bold text-red-700">📁 Storage Bucket Missing</p>
+        <p className="text-sm">The required storage bucket <code className="bg-gray-200 px-2 py-1 rounded font-mono">{bucketName}</code> does not exist.</p>
+        <div className="bg-yellow-50 p-3 rounded border border-yellow-200">
+          <p className="font-medium text-sm mb-2">🔧 How to fix:</p>
+          <ol className="list-decimal ml-4 text-sm space-y-1">
+            <li>Login to <a href="https://supabase.com/dashboard" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline font-medium">Supabase Dashboard</a></li>
+            <li>Select your project</li>
+            <li>Click <strong>Storage</strong> in left menu</li>
+            <li>Click <strong>Create New Bucket</strong> button</li>
+            <li>Bucket Name: <code className="bg-gray-100 px-1 font-mono">{bucketName}</code></li>
+            <li>Set to <strong>Public</strong> access</li>
+            <li>Click <strong>Create Bucket</strong></li>
+            <li>Refresh this page after creation</li>
+          </ol>
+          <p className="text-xs mt-3 text-gray-600">💡 Bucket name can be changed in .env.local as NEXT_PUBLIC_SUPABASE_IMAGE_BUCKET</p>
+        </div>
+      </div>,
+      { 
+        duration: 20000,
+        dismissible: true
+      }
+    );
+  }, [bucketName]);
 
   const handleDrag = (e: React.DragEvent) => {
     e.preventDefault();
@@ -155,7 +183,7 @@ const ImageUploadModal = ({ isOpen, onClose, onUpload, title }: {
       if (selectedFile.type.startsWith("image/")) {
         uploadFile(selectedFile);
       } else {
-        toast.error("Please drop an image file.");
+        toast.error("❌ Please drop an image file (PNG, JPG, GIF, etc.)");
       }
     }
   };
@@ -165,61 +193,94 @@ const ImageUploadModal = ({ isOpen, onClose, onUpload, title }: {
     if (selectedFile && selectedFile.type.startsWith("image/")) {
       uploadFile(selectedFile);
     } else {
-      toast.error("Please select an image file.");
+      toast.error("❌ Please select an image file");
+    }
+  };
+
+  const checkBucketExists = async (): Promise<boolean> => {
+    try {
+      // Simple check - try to list files (empty result is okay)
+      const { data, error } = await supabase.storage.from(bucketName).list();
+      
+      if (error) {
+        if (error.message?.includes('not found') || error.statusCode === '404' || error.code === '404') {
+          return false;
+        }
+        console.error("Bucket check error:", error);
+        return false;
+      }
+      return true; // Bucket exists if we can list
+    } catch (err) {
+      console.error("Bucket check exception:", err);
+      return false;
     }
   };
 
   const uploadFile = async (selectedFile: File) => {
     setUploading(true);
     try {
-      const fileName = `exam-images/${Date.now()}_${selectedFile.name.replace(/\s+/g, '_')}`;
+      // Check if bucket exists
+      const bucketExists = await checkBucketExists();
+      if (!bucketExists) {
+        showBucketCreationToast();
+        return;
+      }
+
+      // Create unique filename
+      const fileExt = selectedFile.name.split('.').pop();
+      const fileName = `${Date.now()}_${Math.random().toString(36).substring(2, 15)}.${fileExt}`;
+      const filePath = `exam-images/${fileName}`;
       
-      // Try to upload directly
+      // Upload file to Supabase Storage
       const { data, error } = await supabase.storage
-        .from("images")
-        .upload(fileName, selectedFile, {
+        .from(bucketName)
+        .upload(filePath, selectedFile, {
           cacheControl: '3600',
           upsert: false
         });
 
       if (error) {
-        if (error.message.includes('not found') || error.message.includes('row-level security')) {
+        console.error("Upload error:", error);
+        
+        // Handle specific errors
+        if (error.message?.includes('row-level security') || error.message?.includes('policy')) {
           toast.error(
-            <div className="text-left">
-              <p className="font-semibold mb-2">Storage Setup Required:</p>
-              <p className="mb-3">Please create 'images' bucket in Supabase Dashboard:</p>
-              <ol className="list-decimal ml-4 space-y-1 text-sm">
-                <li>Go to Supabase Dashboard</li>
-                <li>Select your project</li>
-                <li>Click <strong>Storage</strong> in left sidebar</li>
-                <li>Click <strong>Create a new bucket</strong></li>
-                <li>Name: <code className="bg-gray-100 px-1 rounded">images</code></li>
-                <li>Set to <strong>Public</strong></li>
-                <li>Click <strong>Create bucket</strong></li>
-              </ol>
-              <p className="mt-3 text-sm">Or use URL upload option below.</p>
+            <div className="text-left max-w-md">
+              <p className="font-semibold mb-2">🔐 Storage Policy Issue</p>
+              <p className="mb-3">Bucket exists but upload permissions are missing.</p>
+              <div className="text-sm space-y-2">
+                <p><strong>To fix in Supabase Dashboard:</strong></p>
+                <ol className="list-decimal ml-4 space-y-1">
+                  <li>Go to <strong>Storage</strong> → <strong>Policies</strong></li>
+                  <li>Click <strong>Create Policy</strong> for {bucketName}</li>
+                  <li>Select <strong>Enable INSERT for all users</strong></li>
+                  <li>Save policy and try again</li>
+                </ol>
+              </div>
             </div>,
-            { duration: 10000 }
+            { duration: 15000 }
           );
-          return;
+        } else if (error.message?.includes('File size exceeds')) {
+          toast.error("❌ File size exceeds limit (max 5MB)");
+        } else {
+          toast.error(`Upload failed: ${error.message || 'Unknown error'}`);
         }
-        toast.error("Failed to upload image: " + error.message);
         return;
       }
 
       // Get public URL
       const { data: publicData } = supabase.storage
-        .from("images")
-        .getPublicUrl(fileName);
+        .from(bucketName)
+        .getPublicUrl(filePath);
 
       const imageUrl = publicData.publicUrl;
       
       onUpload(imageUrl);
-      toast.success("Image uploaded successfully!");
+      toast.success("✅ Image uploaded successfully!");
       onClose();
     } catch (err) {
-      console.error("Upload error:", err);
-      toast.error("Failed to upload image. Please try again.");
+      console.error("Upload exception:", err);
+      toast.error("❌ Failed to upload image. Please try again or use URL upload.");
     } finally {
       setUploading(false);
     }
@@ -227,9 +288,18 @@ const ImageUploadModal = ({ isOpen, onClose, onUpload, title }: {
 
   const handleUrlUpload = () => {
     if (url.trim()) {
-      onUpload(url);
-      setUrl("");
-      onClose();
+      // Validate URL
+      try {
+        new URL(url);
+        onUpload(url);
+        setUrl("");
+        onClose();
+        toast.success("✅ Image URL added!");
+      } catch {
+        toast.error("❌ Please enter a valid URL");
+      }
+    } else {
+      toast.error("❌ Please enter an image URL");
     }
   };
 
@@ -237,9 +307,12 @@ const ImageUploadModal = ({ isOpen, onClose, onUpload, title }: {
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
+          <DialogTitle className="flex items-center gap-2">
+            <ImageIcon className="h-5 w-5" />
+            {title}
+          </DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
           <div
@@ -252,22 +325,30 @@ const ImageUploadModal = ({ isOpen, onClose, onUpload, title }: {
             onDrop={handleDrop}
           >
             {uploading ? (
-              <div className="flex flex-col items-center gap-2">
-                <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                <p className="text-sm text-muted-foreground">Uploading...</p>
+              <div className="flex flex-col items-center gap-3">
+                <Loader2 className="h-10 w-10 animate-spin text-primary" />
+                <div className="space-y-1">
+                  <p className="text-sm font-medium">Uploading...</p>
+                  <p className="text-xs text-muted-foreground">Please wait</p>
+                </div>
               </div>
             ) : (
               <>
-                <Upload className="mx-auto h-10 w-10 text-muted-foreground mb-3" />
-                <p className="text-sm text-muted-foreground mb-3">
+                <Upload className="mx-auto h-12 w-12 text-muted-foreground mb-3" />
+                <p className="text-sm text-muted-foreground mb-2">
                   Drag & drop an image here
+                </p>
+                <p className="text-xs text-muted-foreground mb-4">
+                  Supports: JPG, PNG, GIF, WebP (Max 5MB)
                 </p>
                 <Button 
                   type="button"
                   variant="outline" 
                   onClick={() => fileInputRef.current?.click()}
+                  className="gap-2"
                 >
-                  Or choose from computer
+                  <Upload className="h-4 w-4" />
+                  Choose from computer
                 </Button>
               </>
             )}
@@ -284,18 +365,37 @@ const ImageUploadModal = ({ isOpen, onClose, onUpload, title }: {
               <span className="w-full border-t" />
             </div>
             <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-background px-2 text-muted-foreground">Or</span>
+              <span className="bg-background px-3 text-muted-foreground font-medium">Or</span>
             </div>
           </div>
-          <div className="flex gap-2">
-            <Input
-              placeholder="Paste image URL"
-              value={url}
-              onChange={(e) => setUrl(e.target.value)}
-            />
-            <Button onClick={handleUrlUpload} disabled={!url.trim()}>
-              Add
-            </Button>
+          <div className="space-y-2">
+            <Label htmlFor="image-url">Enter image URL</Label>
+            <div className="flex gap-2">
+              <Input
+                id="image-url"
+                placeholder="https://example.com/image.jpg"
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
+                className="flex-1"
+              />
+              <Button 
+                onClick={handleUrlUpload} 
+                disabled={!url.trim()}
+                className="gap-2"
+              >
+                <ImageIcon className="h-4 w-4" />
+                Add URL
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Enter a direct image URL (must end with .jpg, .png, .gif, etc.)
+            </p>
+          </div>
+          <div className="pt-4 border-t">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <div className="h-2 w-2 rounded-full bg-primary/50"></div>
+              <p>Storage Bucket: <code className="bg-muted px-1.5 py-0.5 rounded text-xs">{bucketName}</code></p>
+            </div>
           </div>
         </div>
       </DialogContent>
@@ -362,8 +462,10 @@ export default function CreateExamPage() {
   const [teacherGradeName, setTeacherGradeName] = useState("");
   const [teacherSubjectName, setTeacherSubjectName] = useState("");
   const [showResults, setShowResults] = useState(true);
+  const [savingExam, setSavingExam] = useState(false);
+  const [optionPreview, setOptionPreview] = useState<string[]>([]);
 
-  // TipTap editor for passage with rich text support - FIXED SSR ISSUE
+  // TipTap editor for passage with rich text support
   const passageEditor = useEditor({
     extensions: [
       StarterKit,
@@ -382,7 +484,6 @@ export default function CreateExamPage() {
         passage: text
       }));
     },
-    // FIX: Add this line to fix SSR hydration error
     immediatelyRender: false,
   });
 
@@ -392,6 +493,12 @@ export default function CreateExamPage() {
       passageEditor.commands.setContent(newQuestion.passageHtml || '');
     }
   }, [editingIndex, passageEditor, newQuestion.passageHtml]);
+
+  // Update option preview when options change
+  useEffect(() => {
+    const previews = newQuestion.options.map(opt => opt.text);
+    setOptionPreview(previews);
+  }, [newQuestion.options]);
 
   const questionTypes = [
     { value: "mcq", label: "Multiple Choice" },
@@ -406,7 +513,7 @@ export default function CreateExamPage() {
         const teacher = await getTeacherDataFromCookie();
         
         if (!teacher || !teacher.teacherId) {
-          toast.error("Please login as teacher");
+          toast.error("❌ Please login as a teacher");
           router.push("/teacher/login");
           return;
         }
@@ -423,20 +530,18 @@ export default function CreateExamPage() {
           setTeacherSubjectName(teacher.subjectName || "Not assigned");
         }
 
-        const { data: gradesData } = await supabase
-          .from("grades")
-          .select("id, grade_name");
+        // Fetch grades and subjects
+        const [gradesResult, subjectsResult] = await Promise.all([
+          supabase.from("grades").select("id, grade_name"),
+          supabase.from("subjects").select("id, subject_name")
+        ]);
 
-        const { data: subjectsData } = await supabase
-          .from("subjects")
-          .select("id, subject_name");
-
-        setGrades(gradesData || []);
-        setSubjects(subjectsData || []);
+        setGrades(gradesResult.data || []);
+        setSubjects(subjectsResult.data || []);
 
       } catch (error) {
         console.error("Error fetching teacher data:", error);
-        toast.error("Failed to load teacher data. Please login again.");
+        toast.error("❌ Failed to load teacher data. Please login again.");
         router.push("/teacher/login");
       } finally {
         setLoading(false);
@@ -460,9 +565,11 @@ export default function CreateExamPage() {
         break;
       case "mcq":
       case "passage":
-        updatedOptions = newQuestion.options.length < 4 
-          ? Array(4).fill(null).map(() => ({ text: "", image: null })) 
-          : newQuestion.options;
+        if (newQuestion.options.length < 4) {
+          updatedOptions = Array(4).fill(null).map(() => ({ text: "", image: null }));
+        } else {
+          updatedOptions = newQuestion.options;
+        }
         break;
       default:
         updatedOptions = newQuestion.options;
@@ -506,7 +613,7 @@ export default function CreateExamPage() {
       setNewQuestion({ ...newQuestion, options: newOptions });
     }
     setImageHover(null);
-    toast.success("Image removed!");
+    toast.success("🗑️ Image removed!");
   };
 
   const handleOptionChange = (index: number, value: string) => {
@@ -542,17 +649,21 @@ export default function CreateExamPage() {
   };
 
   const addOrUpdateQuestion = () => {
-    if (!isAddQuestionValid()) return;
+    if (!isAddQuestionValid()) {
+      toast.error("❌ Please fill all required fields");
+      return;
+    }
+    
     if (editingIndex === -1) {
       const newQ: Question = { ...newQuestion, id: Date.now() };
       setQuestions([...questions, newQ]);
-      toast.success("Question added successfully!");
+      toast.success("✅ Question added successfully!");
     } else {
       const updated = [...questions];
       updated[editingIndex] = { ...newQuestion, id: updated[editingIndex].id };
       setQuestions(updated);
       setEditingIndex(-1);
-      toast.success("Question updated successfully!");
+      toast.success("✅ Question updated successfully!");
     }
     resetNewQuestion();
   };
@@ -569,6 +680,7 @@ export default function CreateExamPage() {
       correctAnswer: 0,
     });
     passageEditor?.commands.setContent('');
+    setOptionPreview([]);
   };
 
   const editQuestion = (index: number) => {
@@ -577,12 +689,12 @@ export default function CreateExamPage() {
     passageEditor?.commands.setContent(q.passageHtml || '');
     setEditingIndex(index);
     setIsSidebarOpen(false);
-    toast.info("Editing question...");
+    toast.info("📝 Editing question...");
   };
 
   const deleteQuestion = (index: number) => {
     setQuestions(questions.filter((_, i) => i !== index));
-    toast.error("Question deleted!");
+    toast.error("🗑️ Question deleted!");
   };
 
   const isStep1Valid = () => {
@@ -596,10 +708,14 @@ export default function CreateExamPage() {
   const handleNext = () => {
     if (currentStep === 1 && isStep1Valid()) {
       setCurrentStep(2);
-      toast.success("Information saved! Moving to questions.");
+      toast.success("✅ Information saved! Moving to questions.");
     } else if (currentStep === 2 && isStep2Valid()) {
       setCurrentStep(3);
-      toast.success("Questions saved! Moving to settings.");
+      toast.success("✅ Questions saved! Moving to settings.");
+    } else if (currentStep === 1 && !isStep1Valid()) {
+      toast.error("❌ Please fill all required fields");
+    } else if (currentStep === 2 && !isStep2Valid()) {
+      toast.error("❌ Please add at least one question");
     }
   };
 
@@ -611,16 +727,16 @@ export default function CreateExamPage() {
 
   const handleSubmit = async () => {
     if (!teacherData) {
-      toast.error("Teacher data not loaded. Please refresh the page.");
+      toast.error("❌ Teacher data not loaded. Please refresh the page.");
       return;
     }
 
     if (questions.length === 0) {
-      toast.error("Please add at least one question.");
+      toast.error("❌ Please add at least one question.");
       return;
     }
 
-    setLoading(true);
+    setSavingExam(true);
 
     try {
       const total_marks = questions.reduce((sum, q) => sum + q.points, 0);
@@ -651,12 +767,13 @@ export default function CreateExamPage() {
         .single();
 
       if (examError) {
-        toast.error("Failed to create exam: " + examError.message);
+        console.error("Exam creation error:", examError);
+        toast.error("❌ Failed to create exam: " + examError.message);
         return;
       }
 
       // Insert questions
-      for (const q of questions) {
+      const questionPromises = questions.map(async (q) => {
         let question_type;
         if (q.type === "mcq" || q.type === "passage") {
           question_type = "multiple_choice";
@@ -681,7 +798,7 @@ export default function CreateExamPage() {
           };
         }
 
-        const { error: questionError } = await supabase.from("questions").insert({
+        return supabase.from("questions").insert({
           exam_id: exam.id,
           question_text,
           question_type,
@@ -690,39 +807,57 @@ export default function CreateExamPage() {
           correct_option_id: q.correctAnswer,
           image_url: q.questionImage || null,
         });
+      });
 
-        if (questionError) {
-          console.error("Error inserting question:", questionError);
-          toast.error("Failed to add some questions. Please check the data.");
-        }
+      // Execute all question inserts
+      const questionResults = await Promise.allSettled(questionPromises);
+      
+      // Check for any errors
+      const errors = questionResults.filter(
+        (result): result is PromiseRejectedResult => result.status === 'rejected'
+      );
+      
+      if (errors.length > 0) {
+        console.error("Some questions failed to save:", errors);
+        toast.warning(`⚠️ ${errors.length} questions had issues, but exam was created.`);
+      } else {
+        toast.success("✅ Exam created successfully!");
       }
 
-      toast.success("Exam created successfully!");
-      router.push("/teacher/exams");
+      // Redirect to exams list
+      setTimeout(() => {
+        router.push("/teacher/exams");
+      }, 1500);
 
     } catch (error) {
       console.error("Error creating exam:", error);
-      toast.error("Failed to create exam. Please try again.");
+      toast.error("❌ Failed to create exam. Please try again.");
     } finally {
-      setLoading(false);
+      setSavingExam(false);
     }
   };
 
   const StepIndicator = () => (
     <div className="flex justify-between items-center mb-6">
       <div className={`flex items-center ${currentStep >= 1 ? 'text-primary' : 'text-muted-foreground'}`}>
-        <div className={`w-8 h-8 rounded-full flex items-center justify-center ${currentStep === 1 ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}>1</div>
-        <span className="ml-2 hidden sm:inline">Information</span>
+        <div className={`w-8 h-8 rounded-full flex items-center justify-center ${currentStep === 1 ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}>
+          1
+        </div>
+        <span className="ml-2 hidden sm:inline font-medium">Information</span>
       </div>
       <ChevronRight className="h-4 w-4 text-muted-foreground" />
       <div className={`flex items-center ${currentStep >= 2 ? 'text-primary' : 'text-muted-foreground'}`}>
-        <div className={`w-8 h-8 rounded-full flex items-center justify-center ${currentStep === 2 ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}>2</div>
-        <span className="ml-2 hidden sm:inline">Questions</span>
+        <div className={`w-8 h-8 rounded-full flex items-center justify-center ${currentStep === 2 ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}>
+          2
+        </div>
+        <span className="ml-2 hidden sm:inline font-medium">Questions</span>
       </div>
       <ChevronRight className="h-4 w-4 text-muted-foreground" />
       <div className={`flex items-center ${currentStep >= 3 ? 'text-primary' : 'text-muted-foreground'}`}>
-        <div className={`w-8 h-8 rounded-full flex items-center justify-center ${currentStep === 3 ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}>3</div>
-        <span className="ml-2 hidden sm:inline">Settings</span>
+        <div className={`w-8 h-8 rounded-full flex items-center justify-center ${currentStep === 3 ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}>
+          3
+        </div>
+        <span className="ml-2 hidden sm:inline font-medium">Settings</span>
       </div>
     </div>
   );
@@ -737,20 +872,26 @@ export default function CreateExamPage() {
 
     return (
       <Card
-        className="w-full h-14 flex flex-row items-center justify-between px-3 hover:bg-muted/50 transition cursor-pointer"
+        className="w-full h-14 flex flex-row items-center justify-between px-3 hover:bg-muted/50 transition cursor-pointer border"
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
       >
         <div className="flex flex-1 items-center gap-2 min-w-0">
-          <Eye className="h-4 w-4 text-muted-foreground shrink-0" />
-          <span className="font-medium text-xs text-muted-foreground shrink-0">{idx + 1}.</span>
+          <div className="flex items-center gap-2">
+            <Eye className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+            <span className="font-medium text-xs text-muted-foreground shrink-0">{idx + 1}.</span>
+          </div>
           <p className="text-xs font-medium truncate">
-            {q.type === "passage" && <span className="text-primary">[Passage] </span>}
-            {q.question}
+            {q.type === "passage" && (
+              <span className="text-primary bg-primary/10 px-1.5 py-0.5 rounded text-[10px] mr-1">
+                Passage
+              </span>
+            )}
+            {q.question.length > 40 ? `${q.question.substring(0, 40)}...` : q.question}
           </p>
         </div>
         <div
-          className={`flex items-center gap-1 shrink-0 ml-4 transition-opacity duration-200 ${
+          className={`flex items-center gap-1 shrink-0 ml-2 transition-opacity duration-200 ${
             hovered ? "opacity-100" : "opacity-0"
           }`}
         >
@@ -758,7 +899,7 @@ export default function CreateExamPage() {
             variant="ghost"
             size="sm"
             onClick={(e) => { e.stopPropagation(); onEdit(idx); }}
-            className="h-6 w-6 p-0"
+            className="h-6 w-6 p-0 hover:bg-muted"
           >
             <Edit className="h-3 w-3" />
           </Button>
@@ -766,7 +907,7 @@ export default function CreateExamPage() {
             variant="ghost"
             size="sm"
             onClick={(e) => { e.stopPropagation(); onDelete(idx); }}
-            className="h-6 w-6 p-0 text-destructive"
+            className="h-6 w-6 p-0 text-destructive hover:bg-destructive/10"
           >
             <Trash className="h-3 w-3" />
           </Button>
@@ -789,14 +930,14 @@ export default function CreateExamPage() {
       <img 
         src={src || "/placeholder.svg"} 
         alt="Preview" 
-        className="max-w-full h-20 w-auto object-cover rounded border" 
+        className="max-w-full h-20 w-auto object-cover rounded border shadow-sm" 
       />
       {imageHover === type && (
         <Button
           variant="destructive"
           size="sm"
           onClick={() => onDelete(type)}
-          className="absolute -top-2 -right-2 h-5 w-5 p-0 rounded-full"
+          className="absolute -top-2 -right-2 h-6 w-6 p-0 rounded-full shadow-md"
         >
           <XIcon className="h-3 w-3" />
         </Button>
@@ -807,9 +948,12 @@ export default function CreateExamPage() {
   if (loading && currentStep === 1) {
     return (
       <div className="flex flex-col w-full items-center p-4 bg-background min-h-screen">
-        <div className="flex justify-center items-center h-64">
-          <Loader2 className="h-8 w-8 animate-spin mr-2" />
-          <span>Loading teacher data and subjects...</span>
+        <div className="flex flex-col justify-center items-center h-64 gap-4">
+          <Loader2 className="h-10 w-10 animate-spin text-primary" />
+          <div className="text-center space-y-1">
+            <p className="font-medium">Loading teacher data...</p>
+            <p className="text-sm text-muted-foreground">Please wait</p>
+          </div>
         </div>
       </div>
     );
@@ -817,7 +961,7 @@ export default function CreateExamPage() {
 
   return (
     <>
-      <Toaster position="top-right" />
+      <Toaster position="top-right" richColors closeButton />
       <ImageUploadModal
         isOpen={showImageModal}
         onClose={() => setShowImageModal(false)}
@@ -830,32 +974,43 @@ export default function CreateExamPage() {
             <SheetTrigger asChild>
               <Button 
                 variant="outline" 
-                className="fixed top-4 left-4 z-50" 
+                className="fixed top-4 left-4 z-50 shadow-md" 
                 size="sm"
               >
-                <Menu className="h-5 w-5" />
+                <Menu className="h-4 w-4 mr-2" />
+                Questions ({questions.length})
               </Button>
             </SheetTrigger>
             <SheetContent side="left" className="w-80 p-0">
               <SheetHeader className="px-4 py-4 border-b">
-                <SheetTitle>Question Bank ({questions.length})</SheetTitle>
+                <SheetTitle className="flex items-center gap-2">
+                  <Eye className="h-5 w-5" />
+                  Question Bank ({questions.length})
+                </SheetTitle>
               </SheetHeader>
               <div className="p-4 space-y-2 overflow-y-auto max-h-[calc(100vh-100px)]">
-                {questions.map((q, idx) => (
-                  <QuestionBankCard
-                    key={q.id}
-                    q={q}
-                    idx={idx}
-                    onEdit={editQuestion}
-                    onDelete={deleteQuestion}
-                  />
-                ))}
+                {questions.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <p className="font-medium mb-2">No questions yet</p>
+                    <p className="text-sm">Add questions in the main panel</p>
+                  </div>
+                ) : (
+                  questions.map((q, idx) => (
+                    <QuestionBankCard
+                      key={q.id}
+                      q={q}
+                      idx={idx}
+                      onEdit={editQuestion}
+                      onDelete={deleteQuestion}
+                    />
+                  ))
+                )}
               </div>
             </SheetContent>
           </Sheet>
         )}
 
-        <Card className="w-full max-w-4xl">
+        <Card className="w-full max-w-4xl shadow-lg">
           <CardHeader className="text-center pb-4">
             <CardTitle className="text-2xl font-bold mb-2">
               Create New Exam
@@ -864,9 +1019,12 @@ export default function CreateExamPage() {
               Complete each step to create your exam
             </p>
             {teacherData && (
-              <p className="text-sm text-green-600">
-                Teacher: {teacherData.fullName}
-              </p>
+              <div className="flex items-center justify-center gap-2">
+                <div className="h-2 w-2 rounded-full bg-green-500"></div>
+                <p className="text-sm text-green-700 font-medium">
+                  Teacher: {teacherData.fullName}
+                </p>
+              </div>
             )}
           </CardHeader>
           <CardContent className="space-y-6 p-6">
@@ -875,22 +1033,22 @@ export default function CreateExamPage() {
             {currentStep === 1 && (
               <div className="space-y-4">
                 <div>
-                  <Label htmlFor="id">Exam ID (Auto-generated)</Label>
-                  <Input 
-                    id="id" 
-                    value={examId} 
-                    disabled
-                    className="mt-1"
-                  />
+                  <Label htmlFor="id" className="flex items-center gap-1">
+                    Exam ID
+                    <span className="text-xs text-muted-foreground">(Auto-generated)</span>
+                  </Label>
+                  <div className="mt-1 p-3 border rounded-md bg-muted/30 font-mono font-medium">
+                    {examId}
+                  </div>
                 </div>
                 <div>
-                  <Label htmlFor="title">Exam Title</Label>
+                  <Label htmlFor="title" className="required">Exam Title</Label>
                   <Input 
                     id="title" 
                     value={examTitle} 
                     onChange={(e) => setExamTitle(e.target.value)} 
                     className="mt-1"
-                    placeholder="Enter exam title"
+                    placeholder="e.g., Mid-term Mathematics Exam"
                   />
                 </div>
                 <div>
@@ -909,7 +1067,6 @@ export default function CreateExamPage() {
                 </div>
                 <div>
                   <Label htmlFor="instructions">Exam Instructions</Label>
-                  {/* Scrollable textarea */}
                   <textarea 
                     id="instructions" 
                     value={examInstructions} 
@@ -919,7 +1076,7 @@ export default function CreateExamPage() {
                   />
                 </div>
                 <div>
-                  <Label htmlFor="time">Time Limit (minutes)</Label>
+                  <Label htmlFor="time" className="required">Time Limit (minutes)</Label>
                   <Input 
                     id="time" 
                     type="number" 
@@ -936,7 +1093,7 @@ export default function CreateExamPage() {
               <div className="space-y-4">
                 <div className="flex justify-between items-center">
                   <h3 className="font-bold text-xl flex items-center gap-2">
-                    Add Question
+                    {editingIndex === -1 ? "Add Question" : "Edit Question"}
                   </h3>
                   <div className="flex items-center gap-2">
                     <Label className="text-sm">Live Preview</Label>
@@ -980,18 +1137,18 @@ export default function CreateExamPage() {
                 {newQuestion.type === "passage" && (
                   <div>
                     <Label>Passage/Paragraph (Rich Text)</Label>
-                    <div className="mt-1 border rounded-md overflow-hidden">
+                    <div className="mt-1 border rounded-md overflow-hidden shadow-sm">
                       <EditorToolbar editor={passageEditor} />
                       <EditorContent 
                         editor={passageEditor} 
-                        className="prose prose-sm max-w-none p-4 min-h-[150px] max-h-[300px] overflow-y-auto focus:outline-none [&_.ProseMirror]:outline-none [&_.ProseMirror]:min-h-[120px]"
+                        className="prose prose-sm max-w-none p-4 min-h-[150px] max-h-[300px] overflow-y-auto focus:outline-none [&_.ProseMirror]:outline-none [&_.ProseMirror]:min-h-[120px] [&_.ProseMirror]:bg-white"
                       />
                     </div>
                     {showPreview && newQuestion.passageHtml && (
-                      <div className="mt-2 p-3 bg-muted/50 rounded-md border">
+                      <div className="mt-2 p-3 bg-muted/30 rounded-md border">
                         <p className="text-sm font-medium mb-2">Passage Preview:</p>
                         <div 
-                          className="prose prose-sm max-w-none"
+                          className="prose prose-sm max-w-none bg-white p-2 rounded"
                           dangerouslySetInnerHTML={{ __html: newQuestion.passageHtml }}
                         />
                       </div>
@@ -1000,64 +1157,76 @@ export default function CreateExamPage() {
                 )}
                 
                 <div>
-                  <Label htmlFor="question">Question Text (Supports KaTeX: $inline$ or $$block$$)</Label>
-                  {/* Scrollable textarea for question */}
+                  <Label htmlFor="question" className="required">Question Text</Label>
+                  <p className="text-xs text-muted-foreground mb-1">
+                    Supports KaTeX: $inline$ or $$block$$ math notation
+                  </p>
                   <textarea 
                     id="question" 
                     value={newQuestion.question} 
                     onChange={handleQuestionChange} 
                     className="mt-1 w-full min-h-[100px] max-h-[200px] overflow-y-auto p-3 border rounded-md resize-none bg-background"
-                    placeholder="Enter your question here. Use $...$ for inline math and $$...$$ for block math."
+                    placeholder="Enter your question here..."
                   />
                   {showPreview && newQuestion.question && (
-                    <div className="mt-2 p-3 bg-muted/50 rounded-md border">
+                    <div className="mt-2 p-3 bg-muted/30 rounded-md border">
                       <p className="text-sm font-medium mb-1">Preview:</p>
                       <div className="whitespace-pre-wrap">{renderWithMath(newQuestion.question)}</div>
                     </div>
                   )}
                 </div>
                 <div>
-                  <Label>Upload Question Image</Label>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => openImageModal("question")}
-                    className="mt-1"
-                  >
-                    <ImageIcon className="h-4 w-4 mr-2" /> Upload Image
-                  </Button>
-                  {newQuestion.questionImage && (
-                    <ImagePreview 
-                      src={newQuestion.questionImage || "/placeholder.svg"} 
-                      onDelete={clearImage} 
-                      type="question"
-                      className="mt-2"
-                    />
-                  )}
+                  <Label>Question Image (Optional)</Label>
+                  <div className="flex flex-col gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => openImageModal("question")}
+                      className="mt-1 w-fit gap-2"
+                    >
+                      <ImageIcon className="h-4 w-4" />
+                      {newQuestion.questionImage ? "Change Image" : "Upload Image"}
+                    </Button>
+                    {newQuestion.questionImage && (
+                      <div className="mt-1">
+                        <ImagePreview 
+                          src={newQuestion.questionImage || "/placeholder.svg"} 
+                          onDelete={clearImage} 
+                          type="question"
+                          className="mt-2"
+                        />
+                      </div>
+                    )}
+                  </div>
                 </div>
                 {newQuestion.type !== "short" && (
                   <div className="space-y-3">
                     <div className="flex justify-between items-center">
-                      <Label>Options</Label>
+                      <Label className="required">Options</Label>
                       <Button 
                         variant="outline" 
                         size="sm" 
                         onClick={addOption} 
                         disabled={newQuestion.type === "tf"}
+                        className="gap-1"
                       >
-                        <Plus className="h-4 w-4 mr-1" /> Add Option
+                        <Plus className="h-3.5 w-3.5" />
+                        Add Option
                       </Button>
                     </div>
                     {newQuestion.options.map((opt, idx) => (
-                      <div key={idx} className="space-y-2">
+                      <div key={idx} className="space-y-2 p-3 border rounded-md bg-white">
                         <div className="flex items-center gap-2">
-                          <span className="min-w-8 h-8 flex items-center justify-center rounded-full bg-muted text-muted-foreground font-semibold flex-shrink-0">
-                            {String.fromCharCode(65 + idx)}
-                          </span>
+                          <div className="flex items-center gap-2">
+                            <div className="min-w-8 h-8 flex items-center justify-center rounded-full bg-primary/10 text-primary font-semibold flex-shrink-0">
+                              {String.fromCharCode(65 + idx)}
+                            </div>
+                            <span className="text-xs text-muted-foreground">Option {String.fromCharCode(65 + idx)}</span>
+                          </div>
                           <div className="relative flex-1">
                             <Input 
-                              placeholder={`Enter option ${String.fromCharCode(65 + idx)}`} 
+                              placeholder={`Enter option ${String.fromCharCode(65 + idx)} text`} 
                               value={opt.text} 
                               onChange={(e) => handleOptionChange(idx, e.target.value)} 
                               disabled={newQuestion.type === "tf"}
@@ -1074,7 +1243,12 @@ export default function CreateExamPage() {
                             </Button>
                           </div>
                           {newQuestion.options.length > 2 && newQuestion.type !== "tf" && (
-                            <Button variant="ghost" size="sm" onClick={() => removeOption(idx)} className="text-destructive flex-shrink-0">
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              onClick={() => removeOption(idx)} 
+                              className="text-destructive flex-shrink-0 hover:bg-destructive/10"
+                            >
                               <Trash className="h-4 w-4" />
                             </Button>
                           )}
@@ -1090,25 +1264,65 @@ export default function CreateExamPage() {
                         )}
                       </div>
                     ))}
+                    
+                    {/* Option Preview Section - Moved to BOTTOM after all options */}
+                    {showPreview && optionPreview.some(opt => opt.trim() !== "") && (
+                      <div className="mt-4 p-3 bg-muted/30 rounded-md border">
+                        <p className="text-sm font-medium mb-2 flex items-center gap-2">
+                          <Eye className="h-4 w-4" />
+                          Options Preview
+                        </p>
+                        <div className="space-y-2">
+                          {newQuestion.options.map((opt, idx) => (
+                            opt.text.trim() && (
+                              <div key={idx} className="flex items-start gap-3 p-2 bg-white rounded border">
+                                <div className="flex items-center justify-center w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-medium flex-shrink-0 mt-0.5">
+                                  {String.fromCharCode(65 + idx)}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-sm font-medium">{opt.text}</span>
+                                    {newQuestion.correctAnswer === idx && (
+                                      <span className="text-xs bg-green-100 text-green-800 px-2 py-0.5 rounded font-medium">
+                                        ✓ Correct Answer
+                                      </span>
+                                    )}
+                                  </div>
+                                  {opt.image && (
+                                    <div className="mt-2">
+                                      <img 
+                                        src={opt.image || "/placeholder.svg"} 
+                                        alt={`Option ${String.fromCharCode(65 + idx)}`}
+                                        className="max-w-32 h-auto object-cover rounded border shadow-sm"
+                                      />
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            )
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
                 {newQuestion.type !== "short" && (
                   <div>
-                    <Label>Correct Answer</Label>
+                    <Label className="required">Correct Answer</Label>
                     <RadioGroup 
                       value={newQuestion.correctAnswer.toString()} 
                       onValueChange={(val) => setNewQuestion({ ...newQuestion, correctAnswer: parseInt(val) })} 
-                      className="flex flex-wrap gap-4 mt-2"
+                      className="flex flex-wrap gap-3 mt-2"
                     >
                       {newQuestion.options.map((_, idx) => (
                         <div key={idx} className="flex items-center space-x-2">
                           <RadioGroupItem value={idx.toString()} id={`correct-${idx}`} className="sr-only" />
                           <Label 
                             htmlFor={`correct-${idx}`} 
-                            className={`cursor-pointer px-4 py-2 rounded-full border-2 transition-all ${
+                            className={`cursor-pointer px-4 py-2 rounded-lg border-2 transition-all ${
                               newQuestion.correctAnswer === idx 
-                                ? "border-primary bg-primary/10 text-primary" 
-                                : "border-muted bg-transparent hover:border-primary/50"
+                                ? "border-primary bg-primary/10 text-primary font-medium" 
+                                : "border-muted bg-white hover:border-primary/30"
                             }`}
                           >
                             {String.fromCharCode(65 + idx)}
@@ -1118,96 +1332,142 @@ export default function CreateExamPage() {
                     </RadioGroup>
                   </div>
                 )}
-                <Button 
-                  onClick={addOrUpdateQuestion} 
-                  disabled={!isAddQuestionValid()}
-                  className="disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <Plus className="h-4 w-4 mr-2" /> 
-                  {editingIndex === -1 ? "Add Question" : "Update Question"}
-                </Button>
+                <div className="flex gap-3">
+                  <Button 
+                    onClick={addOrUpdateQuestion} 
+                    disabled={!isAddQuestionValid()}
+                    className="disabled:opacity-50 disabled:cursor-not-allowed gap-2"
+                  >
+                    <Plus className="h-4 w-4" /> 
+                    {editingIndex === -1 ? "Add Question" : "Update Question"}
+                  </Button>
+                  {editingIndex !== -1 && (
+                    <Button 
+                      variant="outline" 
+                      onClick={() => {
+                        setEditingIndex(-1);
+                        resetNewQuestion();
+                        toast.info("✏️ Edit cancelled");
+                      }}
+                    >
+                      Cancel Edit
+                    </Button>
+                  )}
+                </div>
               </div>
             )}
 
             {currentStep === 3 && (
               <div className="space-y-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label className="font-medium">Shuffle Questions</Label>
+                <div className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/20 transition-colors">
+                  <div className="space-y-1">
+                    <Label className="font-medium text-base">Shuffle Questions</Label>
                     <p className="text-sm text-muted-foreground">Randomize the order of questions for each student</p>
                   </div>
                   <Switch checked={shuffleQuestions} onCheckedChange={setShuffleQuestions} />
                 </div>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label className="font-medium">Shuffle Options</Label>
+                <div className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/20 transition-colors">
+                  <div className="space-y-1">
+                    <Label className="font-medium text-base">Shuffle Options</Label>
                     <p className="text-sm text-muted-foreground">Randomize the order of options for each question</p>
                   </div>
                   <Switch checked={shuffleOptions} onCheckedChange={setShuffleOptions} />
                 </div>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label className="font-medium">Require Fullscreen</Label>
+                <div className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/20 transition-colors">
+                  <div className="space-y-1">
+                    <Label className="font-medium text-base">Require Fullscreen</Label>
                     <p className="text-sm text-muted-foreground">Students must take the exam in fullscreen mode</p>
                   </div>
                   <Switch checked={fullscreenRequired} onCheckedChange={setFullscreenRequired} />
                 </div>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label className="font-medium">Show Results</Label>
+                <div className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/20 transition-colors">
+                  <div className="space-y-1">
+                    <Label className="font-medium text-base">Show Results</Label>
                     <p className="text-sm text-muted-foreground">Show results to students after submitting exam</p>
                   </div>
                   <Switch checked={showResults} onCheckedChange={setShowResults} />
                 </div>
-                <div className="bg-muted/50 p-4 rounded-lg">
-                  <h4 className="font-medium mb-2">Exam Summary</h4>
-                  <div className="grid grid-cols-2 gap-4 text-sm">
-                    <div>
-                      <span className="font-medium">Total Questions:</span> {questions.length}
+                <div className="bg-primary/5 p-5 rounded-lg border border-primary/20">
+                  <h4 className="font-bold text-lg mb-3 text-primary">Exam Summary</h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <div className="flex justify-between">
+                        <span className="font-medium">Total Questions:</span>
+                        <span className="font-bold">{questions.length}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="font-medium">Total Points:</span>
+                        <span className="font-bold">{questions.reduce((sum, q) => sum + q.points, 0)}</span>
+                      </div>
                     </div>
-                    <div>
-                      <span className="font-medium">Total Points:</span> {questions.reduce((sum, q) => sum + q.points, 0)}
+                    <div className="space-y-2">
+                      <div className="flex justify-between">
+                        <span className="font-medium">Time Limit:</span>
+                        <span className="font-bold">{examTime} minutes</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="font-medium">Exam ID:</span>
+                        <code className="font-mono font-bold bg-primary/10 px-2 py-1 rounded">{examId}</code>
+                      </div>
                     </div>
-                    <div>
-                      <span className="font-medium">Time Limit:</span> {examTime} minutes
-                    </div>
-                    <div>
-                      <span className="font-medium">Exam ID:</span> {examId}
+                  </div>
+                  <div className="mt-4 pt-4 border-t border-primary/20">
+                    <div className="flex flex-wrap gap-2">
+                      <div className="text-xs px-2 py-1 bg-primary/10 text-primary rounded">
+                        {shuffleQuestions ? "Questions Shuffled" : "Fixed Order"}
+                      </div>
+                      <div className="text-xs px-2 py-1 bg-primary/10 text-primary rounded">
+                        {fullscreenRequired ? "Fullscreen Required" : "Fullscreen Optional"}
+                      </div>
+                      <div className="text-xs px-2 py-1 bg-primary/10 text-primary rounded">
+                        {showResults ? "Results Visible" : "Results Hidden"}
+                      </div>
                     </div>
                   </div>
                 </div>
               </div>
             )}
 
-            <div className="flex flex-col sm:flex-row justify-between gap-3 pt-4">
-              {currentStep > 1 && (
-                <Button 
-                  variant="outline" 
-                  onClick={handleBack}
-                >
-                  <ArrowLeft className="h-4 w-4 mr-2" /> Back
-                </Button>
-              )}
+            <div className="flex flex-col sm:flex-row justify-between gap-3 pt-4 border-t">
+              <div className="flex gap-3">
+                {currentStep > 1 && (
+                  <Button 
+                    variant="outline" 
+                    onClick={handleBack}
+                    className="gap-2"
+                  >
+                    <ArrowLeft className="h-4 w-4" />
+                    Back
+                  </Button>
+                )}
+              </div>
               {currentStep < 3 ? (
                 <Button 
                   onClick={handleNext} 
-                  className="ml-auto"
+                  className="gap-2"
                   disabled={currentStep === 1 ? !isStep1Valid() : !isStep2Valid()}
                 >
-                  <ChevronRight className="h-4 w-4 mr-2" /> Next
+                  <ChevronRight className="h-4 w-4" />
+                  Next Step
                 </Button>
               ) : (
                 <Button 
                   onClick={handleSubmit} 
-                  disabled={loading}
-                  className="ml-auto"
+                  disabled={savingExam || questions.length === 0}
+                  className="gap-2 bg-green-600 hover:bg-green-700"
+                  size="lg"
                 >
-                  {loading ? (
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  {savingExam ? (
+                    <>
+                      <Loader2 className="h-5 w-5 animate-spin" />
+                      Creating Exam...
+                    </>
                   ) : (
-                    <CheckCircle className="h-4 w-4 mr-2" />
+                    <>
+                      <CheckCircle className="h-5 w-5" />
+                      Create Exam
+                    </>
                   )}
-                  {loading ? "Creating..." : "Create Exam"}
                 </Button>
               )}
             </div>

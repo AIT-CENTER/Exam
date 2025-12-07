@@ -1,22 +1,13 @@
 "use client";
 
 import {
-  Bell,
-  Settings,
-  Sun,
   User,
-  Laptop,
-  ShieldCheck,
-  LifeBuoy,
+  Settings,
   LogOut,
   Moon,
-  UserPlus,
-  AlertTriangle,
-  CheckCircle,
-  Clock,
-  FileText,
-  GraduationCap,
-  BookOpen,
+  Sun,
+  Laptop,
+  Bell,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -30,7 +21,6 @@ import {
   DropdownMenuLabel,
   DropdownMenuPortal,
   DropdownMenuSeparator,
-  DropdownMenuShortcut,
   DropdownMenuSub,
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
@@ -43,43 +33,8 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { SidebarTrigger } from "@/components/ui/sidebar";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-
-// --- DATA FOR TEACHER NOTIFICATIONS ---
-const notifications = [
-  {
-    icon: <Clock className="h-5 w-5 text-blue-500" />,
-    title: "Upcoming Exam",
-    description: "Mathematics Midterm starts in 2 days",
-    time: "5m ago",
-  },
-  {
-    icon: <FileText className="h-5 w-5 text-green-500" />,
-    title: "New Submission",
-    description: "25 students submitted Assignment 3",
-    time: "1h ago",
-  },
-  {
-    icon: <UserPlus className="h-5 w-5 text-purple-500" />,
-    title: "New Student Added",
-    description: "Kebede Alemayehu joined your class",
-    time: "4h ago",
-  },
-  {
-    icon: <AlertTriangle className="h-5 w-5 text-yellow-500" />,
-    title: "Grading Deadline",
-    description: "Physics quiz grades due tomorrow",
-    time: "1d ago",
-  },
-  {
-    icon: <CheckCircle className="h-5 w-5 text-green-500" />,
-    title: "Exam Published",
-    description: "Final exam results are now available",
-    time: "2d ago",
-  },
-];
 
 // --- PROPS INTERFACE ---
 interface ModernHeaderProps {
@@ -97,7 +52,6 @@ export function Header({ title }: ModernHeaderProps) {
     subjectName?: string;
     sections?: string[];
   } | null>(null);
-  const [unreadNotifications, setUnreadNotifications] = useState(3);
 
   useEffect(() => {
     // Get teacher data from cookie
@@ -143,8 +97,8 @@ export function Header({ title }: ModernHeaderProps) {
       .toUpperCase();
   };
 
-  const markAllAsRead = () => {
-    setUnreadNotifications(0);
+  const handleProfileClick = () => {
+    router.push("/teacher/security");
   };
 
   if (!user) {
@@ -162,9 +116,9 @@ export function Header({ title }: ModernHeaderProps) {
             </h1>
           </div>
 
-          {/* Right Section - Notifications and User Menu */}
+          {/* Right Section - User Menu */}
           <div className="flex items-center gap-3 ml-auto">
-
+            
             {/* User Menu Dropdown */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -174,103 +128,88 @@ export function Header({ title }: ModernHeaderProps) {
                 >
                   <Avatar className="h-8 w-8">
                     <AvatarImage src={user.avatar} alt={user.name} />
-                    <AvatarFallback className="bg-blue-100 text-blue-800">
+                    <AvatarFallback className="bg-gradient-to-br from-blue-500 to-indigo-600 text-white">
                       {getInitials(user.name)}
                     </AvatarFallback>
                   </Avatar>
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent
-                className="w-64 animate-scale-in"
+                className="w-64 animate-scale-in shadow-lg"
                 align="end"
                 forceMount
               >
-                <DropdownMenuLabel className="font-normal p-3">
+                {/* User Info Section */}
+                <DropdownMenuLabel className="font-normal p-4 bg-gradient-to-r from-blue-50/50 to-indigo-50/50 border-b">
                   <div className="flex items-center gap-3">
-                    <Avatar className="h-10 w-10">
+                    <Avatar className="h-12 w-12 ring-2 ring-white ring-offset-2">
                       <AvatarImage src={user.avatar} alt={user.name} />
-                      <AvatarFallback className="bg-blue-100 text-blue-800">
+                      <AvatarFallback className="bg-gradient-to-br from-blue-500 to-indigo-600 text-white text-lg font-semibold">
                         {getInitials(user.name)}
                       </AvatarFallback>
                     </Avatar>
-                    <div className="flex flex-col space-y-1">
-                      <p className="text-sm font-medium leading-none">
+                    <div className="flex flex-col space-y-1.5">
+                      <p className="text-sm font-semibold leading-none text-gray-900">
                         {user.name}
                       </p>
-                      <p className="text-xs leading-none text-muted-foreground">
+                      <p className="text-xs leading-none text-gray-600">
                         {user.email}
                       </p>
-                      <Badge variant="secondary" className="w-fit text-xs mt-1">
-                        {user.role}
-                      </Badge>
-                      {user.gradeName && (
-                        <p className="text-xs text-muted-foreground">
-                          {user.gradeName} • {user.sections?.join(', ')}
-                        </p>
-                      )}
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        <Badge variant="secondary" className="text-xs bg-blue-100 text-blue-800 border-blue-200">
+                          {user.role}
+                        </Badge>
+                        {user.gradeName && (
+                          <Badge variant="outline" className="text-xs bg-indigo-50 text-indigo-700 border-indigo-200">
+                            {user.gradeName}
+                          </Badge>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </DropdownMenuLabel>
+
                 <DropdownMenuSeparator />
-                <DropdownMenuGroup>
-                  <DropdownMenuItem>
-                    <User className="mr-2 h-4 w-4" />
-                    <span>Teacher Profile</span>
-                    <DropdownMenuShortcut>⇧⌘P</DropdownMenuShortcut>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem>
-                    <BookOpen className="mr-2 h-4 w-4" />
-                    <span>My Classes</span>
-                    <DropdownMenuShortcut>⌘C</DropdownMenuShortcut>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem>
-                    <Settings className="mr-2 h-4 w-4" />
-                    <span>Account Settings</span>
-                    <DropdownMenuShortcut>⌘S</DropdownMenuShortcut>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem>
-                    <ShieldCheck className="mr-2 h-4 w-4" />
-                    <span>Security & Privacy</span>
-                  </DropdownMenuItem>
-                </DropdownMenuGroup>
-                <DropdownMenuSeparator />
-                <DropdownMenuGroup>
-                  <DropdownMenuSub>
-                    <DropdownMenuSubTrigger>
-                      <div className="relative mr-2 h-4 w-4">
-                        <Sun className="absolute h-full w-full rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
-                        <Moon className="absolute h-full w-full rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+
+                {/* Main Actions */}
+                <DropdownMenuGroup className="p-1">
+                  <DropdownMenuItem onClick={handleProfileClick} className="cursor-pointer px-3 py-2.5 rounded-md hover:bg-blue-50 transition-colors">
+                    <div className="flex items-center justify-between w-full">
+                      <div className="flex items-center gap-3">
+                        <div className="p-1.5 rounded-md bg-blue-100">
+                          <User className="h-4 w-4 text-blue-600" />
+                        </div>
+                        <div>
+                          <span className="text-sm font-medium ">Profile</span>
+                          <p className="text-xs text-gray-500">View and edit profile</p>
+                        </div>
                       </div>
-                      <span>Theme</span>
-                    </DropdownMenuSubTrigger>
-                    <DropdownMenuPortal>
-                      <DropdownMenuSubContent>
-                        <DropdownMenuItem>
-                          <Sun className="mr-2 h-4 w-4" />
-                          <span>Light</span>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem>
-                          <Moon className="mr-2 h-4 w-4" />
-                          <span>Dark</span>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem>
-                          <Laptop className="mr-2 h-4 w-4" />
-                          <span>System</span>
-                        </DropdownMenuItem>
-                      </DropdownMenuSubContent>
-                    </DropdownMenuPortal>
-                  </DropdownMenuSub>
-                  <DropdownMenuItem>
-                    <LifeBuoy className="mr-2 h-4 w-4" />
-                    <span>Teacher Support</span>
+                    </div>
                   </DropdownMenuItem>
                 </DropdownMenuGroup>
+
+
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={handleLogout}>
-                  <LogOut className="mr-2 h-4 w-4" />
-                  <span>Log out</span>
-                  <DropdownMenuShortcut>⇧⌘Q</DropdownMenuShortcut>
-                </DropdownMenuItem>
+
+                {/* Logout Button */}
+                <div className="p-2">
+                  <DropdownMenuItem 
+                    onClick={handleLogout}
+                    className="cursor-pointer px-3 py-2.5 rounded-md hover:bg-red-50 transition-colors text-red-600 hover:text-red-700"
+                  >
+                    <div className="flex items-center justify-between w-full">
+                      <div className="flex items-center gap-3">
+                        <div className="p-1.5 rounded-md bg-red-100">
+                          <LogOut className="h-4 w-4" />
+                        </div>
+                        <div>
+                          <span className="text-sm font-medium">Log out</span>
+                          <p className="text-xs text-red-500">Sign out of your account</p>
+                        </div>
+                      </div>
+                    </div>
+                  </DropdownMenuItem>
+                </div>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>

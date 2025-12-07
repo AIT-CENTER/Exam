@@ -47,6 +47,8 @@ export default function StudentsPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
   const [sectionFilter, setSectionFilter] = useState("all")
+  const [streamFilter, setStreamFilter] = useState("all")
+  const [genderFilter, setGenderFilter] = useState("all")
   const [currentPage, setCurrentPage] = useState(1)
   const [teacherData, setTeacherData] = useState<any>(null)
 
@@ -106,30 +108,46 @@ export default function StudentsPage() {
     const total = students.length
     const maleCount = students.filter((s) => s.gender === "male").length
     const femaleCount = students.filter((s) => s.gender === "female").length
+    const otherCount = students.filter((s) => s.gender === "other").length
 
     return [
       { title: "Total Students", value: total, icon: Users },
       { title: "Male Students", value: maleCount, icon: Users },
       { title: "Female Students", value: femaleCount, icon: Users },
+      { title: "Other", value: otherCount, icon: Users },
     ]
   }, [students])
 
   const filteredStudents = useMemo(() => {
     return students.filter((s) => {
+      // Search filter
       const matchesSearch =
         s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         s.student_id.toLowerCase().includes(searchQuery.toLowerCase()) ||
         `${s.name} ${s.father_name} ${s.grandfather_name}`.toLowerCase().includes(searchQuery.toLowerCase())
 
+      // Section filter
       const matchesSection = sectionFilter === "all" || s.section === sectionFilter
 
-      return matchesSearch && matchesSection
+      // Stream filter
+      const matchesStream = streamFilter === "all" || s.stream === streamFilter
+
+      // Gender filter
+      const matchesGender = genderFilter === "all" || s.gender === genderFilter
+
+      return matchesSearch && matchesSection && matchesStream && matchesGender
     })
-  }, [students, searchQuery, sectionFilter])
+  }, [students, searchQuery, sectionFilter, streamFilter, genderFilter])
 
   const teacherSections = useMemo(() => {
     return teacherData?.sections || []
   }, [teacherData])
+
+  // Available streams in the filtered students
+  const availableStreams = useMemo(() => {
+    const streams = [...new Set(students.map((s) => s.stream).filter(Boolean))] as string[]
+    return streams.sort()
+  }, [students])
 
   const sectionOptions = useMemo(() => {
     const sections = [...new Set(students.map((s) => s.section))]
@@ -164,21 +182,31 @@ export default function StudentsPage() {
       }
 
       let y = teacherData?.stream && !isHigherGrade(teacherData?.gradeName) ? 72 : 65
-      const header = ["#", "Student ID", "Name", "Father's Name", "Grandfather's Name", "Section", "Gender"]
+      const header = ["#", "Student ID", "Full Name", "Section", "Stream", "Gender"]
       doc.setFillColor(79, 70, 229)
       doc.rect(14, y, 190, 8, "F")
       doc.setTextColor(255, 255, 255)
       doc.setFontSize(10)
-      header.forEach((h, i) => doc.text(h, 14 + i * 23, y + 5))
+      // Adjust column widths
+      const columnPositions = [14, 30, 60, 110, 140, 170]
+      header.forEach((h, i) => doc.text(h, columnPositions[i], y + 5))
       y += 8
 
       filteredStudents.forEach((s, i) => {
-        const row = [(i + 1).toString(), s.student_id, s.name, s.father_name, s.grandfather_name, s.section, s.gender]
+        const fullName = `${s.name} ${s.father_name} ${s.grandfather_name}`
+        const row = [
+          (i + 1).toString(),
+          s.student_id,
+          fullName,
+          s.section,
+          s.stream || "N/A",
+          s.gender.charAt(0).toUpperCase() + s.gender.slice(1)
+        ]
         if (i % 2 === 0) doc.setFillColor(248, 250, 252)
         else doc.setFillColor(255, 255, 255)
         doc.rect(14, y, 190, 6, "F")
         doc.setTextColor(0, 0, 0)
-        row.forEach((cell, j) => doc.text(cell, 14 + j * 23, y + 4))
+        row.forEach((cell, j) => doc.text(cell, columnPositions[j], y + 4))
         y += 6
         if (y > 280) {
           doc.addPage()
@@ -204,12 +232,11 @@ export default function StudentsPage() {
         return {
           "#": index + 1,
           "Student ID": s.student_id,
-          Name: s.name,
-          "Father's Name": s.father_name,
-          "Grandfather's Name": s.grandfather_name,
-          Section: s.section,
-          Gender: s.gender,
-          Grade: s.grades?.grade_name || "N/A",
+          "Full Name": `${s.name} ${s.father_name} ${s.grandfather_name}`,
+          "Section": s.section,
+          "Stream": s.stream || "N/A",
+          "Gender": s.gender.charAt(0).toUpperCase() + s.gender.slice(1),
+          "Grade": s.grades?.grade_name || "N/A",
         }
       })
 
@@ -231,17 +258,17 @@ export default function StudentsPage() {
 
     try {
       const tableHeader =
-        '<table border="1" style="border-collapse: collapse; width:100%;"><tr style="background-color: #4F46E5; color: white;"><th>#</th><th>Student ID</th><th>Name</th><th>Father\'s Name</th><th>Grandfather\'s Name</th><th>Section</th><th>Gender</th><th>Grade</th></tr>'
+        '<table border="1" style="border-collapse: collapse; width:100%;"><tr style="background-color: #4F46E5; color: white;"><th>#</th><th>Student ID</th><th>Full Name</th><th>Section</th><th>Stream</th><th>Gender</th><th>Grade</th></tr>'
       const tableBody = filteredStudents
         .map((s, i) => {
+          const fullName = `${s.name} ${s.father_name} ${s.grandfather_name}`
           return `<tr style="${i % 2 === 0 ? "background-color: #F8FAFC;" : ""}">
           <td>${i + 1}</td>
           <td>${s.student_id}</td>
-          <td>${s.name}</td>
-          <td>${s.father_name}</td>
-          <td>${s.grandfather_name}</td>
+          <td>${fullName}</td>
           <td>${s.section}</td>
-          <td>${s.gender}</td>
+          <td>${s.stream || "N/A"}</td>
+          <td>${s.gender.charAt(0).toUpperCase() + s.gender.slice(1)}</td>
           <td>${s.grades?.grade_name || "N/A"}</td>
         </tr>`
         })
@@ -281,7 +308,7 @@ export default function StudentsPage() {
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {[...Array(3)].map((_, i) => (
+          {[...Array(4)].map((_, i) => (
             <Card key={i}>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <div className="h-4 w-32 bg-gray-200 rounded animate-pulse" />
@@ -297,6 +324,8 @@ export default function StudentsPage() {
         <div className="flex flex-col sm:flex-row gap-4 items-center">
           <div className="h-10 w-80 bg-gray-200 rounded animate-pulse" />
           <div className="h-10 w-40 bg-gray-200 rounded animate-pulse" />
+          <div className="h-10 w-40 bg-gray-200 rounded animate-pulse" />
+          <div className="h-10 w-40 bg-gray-200 rounded animate-pulse" />
           <div className="h-10 w-32 bg-gray-200 rounded animate-pulse" />
         </div>
 
@@ -308,8 +337,8 @@ export default function StudentsPage() {
                 <div className="h-4 flex-1 bg-gray-200 rounded animate-pulse" />
                 <div className="h-4 flex-1 bg-gray-200 rounded animate-pulse" />
                 <div className="h-4 flex-1 bg-gray-200 rounded animate-pulse" />
+                <div className="h-4 flex-1 bg-gray-200 rounded animate-pulse" />
                 <div className="h-4 w-20 bg-gray-200 rounded animate-pulse" />
-                <div className="h-4 w-16 bg-gray-200 rounded animate-pulse" />
               </div>
             ))}
           </div>
@@ -346,7 +375,7 @@ export default function StudentsPage() {
         </div>
       </div>
 
-      {/* Stats */}
+      {/* Stats - Now showing 4 cards with Other gender */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {stats.map((stat, index) => (
           <Card key={index}>
@@ -374,6 +403,7 @@ export default function StudentsPage() {
             />
           </div>
 
+          {/* Section Filter */}
           <Select value={sectionFilter} onValueChange={setSectionFilter}>
             <SelectTrigger className="w-40">
               <SelectValue placeholder="All Sections" />
@@ -385,6 +415,36 @@ export default function StudentsPage() {
                   Section {section}
                 </SelectItem>
               ))}
+            </SelectContent>
+          </Select>
+
+          {/* Stream Filter - Only show if streams are available */}
+          {availableStreams.length > 0 && (
+            <Select value={streamFilter} onValueChange={setStreamFilter}>
+              <SelectTrigger className="w-40">
+                <SelectValue placeholder="All Streams" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Streams</SelectItem>
+                {availableStreams.map((stream) => (
+                  <SelectItem key={stream} value={stream}>
+                    {stream}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+
+          {/* Gender Filter */}
+          <Select value={genderFilter} onValueChange={setGenderFilter}>
+            <SelectTrigger className="w-40">
+              <SelectValue placeholder="All Genders" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Genders</SelectItem>
+              <SelectItem value="male">Male</SelectItem>
+              <SelectItem value="female">Female</SelectItem>
+              <SelectItem value="other">Other</SelectItem>
             </SelectContent>
           </Select>
 
@@ -409,6 +469,43 @@ export default function StudentsPage() {
           </DropdownMenu>
         </div>
 
+        {/* Active Filters */}
+        <div className="flex flex-wrap gap-2">
+          {sectionFilter !== "all" && (
+            <Badge variant="secondary" className="gap-1">
+              Section: {sectionFilter}
+              <button
+                onClick={() => setSectionFilter("all")}
+                className="ml-1 hover:text-red-500"
+              >
+                ×
+              </button>
+            </Badge>
+          )}
+          {streamFilter !== "all" && (
+            <Badge variant="secondary" className="gap-1">
+              Stream: {streamFilter}
+              <button
+                onClick={() => setStreamFilter("all")}
+                className="ml-1 hover:text-red-500"
+              >
+                ×
+              </button>
+            </Badge>
+          )}
+          {genderFilter !== "all" && (
+            <Badge variant="secondary" className="gap-1">
+              Gender: {genderFilter}
+              <button
+                onClick={() => setGenderFilter("all")}
+                className="ml-1 hover:text-red-500"
+              >
+                ×
+              </button>
+            </Badge>
+          )}
+        </div>
+
         {/* Table */}
         <Card>
           <Table>
@@ -417,16 +514,15 @@ export default function StudentsPage() {
                 <TableHead>#</TableHead>
                 <TableHead>Student ID</TableHead>
                 <TableHead>Full Name</TableHead>
-                <TableHead>Father's Name</TableHead>
-                <TableHead>Grandfather's Name</TableHead>
                 <TableHead>Section</TableHead>
+                <TableHead>Stream</TableHead>
                 <TableHead>Gender</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {paginatedStudents.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
+                  <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
                     {students.length === 0
                       ? teacherData?.gradeId
                         ? "No students found in your assigned sections."
@@ -442,15 +538,35 @@ export default function StudentsPage() {
                     <TableCell className="font-medium">
                       {student.name} {student.father_name} {student.grandfather_name}
                     </TableCell>
-                    <TableCell>{student.father_name}</TableCell>
-                    <TableCell>{student.grandfather_name}</TableCell>
                     <TableCell>
                       <Badge variant="outline" className="text-indigo-600 border-indigo-200">
                         {student.section}
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      <Badge variant={student.gender === "male" ? "default" : "secondary"}>{student.gender}</Badge>
+                      {student.stream ? (
+                        <Badge variant="outline" className="text-emerald-600 border-emerald-200">
+                          {student.stream}
+                        </Badge>
+                      ) : (
+                        <span className="text-muted-foreground">-</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <Badge 
+                        variant={
+                          student.gender === "male" ? "default" : 
+                          student.gender === "female" ? "secondary" : 
+                          "outline"
+                        }
+                        className={
+                          student.gender === "male" ? "" :
+                          student.gender === "female" ? "bg-pink-100 text-pink-800 hover:bg-pink-100" :
+                          "bg-gray-100 text-gray-800 border-gray-300"
+                        }
+                      >
+                        {student.gender.charAt(0).toUpperCase() + student.gender.slice(1)}
+                      </Badge>
                     </TableCell>
                   </TableRow>
                 ))

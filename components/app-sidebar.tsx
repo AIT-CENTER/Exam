@@ -2,21 +2,12 @@
 
 import * as React from "react"
 import {
-  BookOpen,
-  Brain,
   GraduationCap,
   Home,
-  Trophy,
   Users,
-  FileText,
-  Settings,
-  HelpCircle,
-  Bell,
   Shield,
-  Plus,
   ChevronsUpDown,
   LucideIcon,
-  FileQuestion,
   ClipboardList,
   UserCheck,
   BarChart3,
@@ -39,6 +30,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { usePathname } from "next/navigation"
 import Link from "next/link"
 import { AppUser } from "./app-user"
+import { cn } from "@/lib/utils"
 
 interface NavItem {
   title: string;
@@ -53,11 +45,20 @@ interface QuickAccessItem {
   icon: LucideIcon;
 }
 
+interface Team {
+  name: string;
+  logo: LucideIcon;
+  plan: string;
+  isActive?: boolean;
+}
+
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const pathname = usePathname();
   const [isLoading, setIsLoading] = React.useState(true);
   const [isCollapsed, setIsCollapsed] = React.useState(false);
   const [teacherData, setTeacherData] = React.useState<any>(null);
+  const [teams, setTeams] = React.useState<Team[]>([]);
+  const [activeTeam, setActiveTeam] = React.useState<Team | null>(null);
 
   // Get teacher data from cookie
   React.useEffect(() => {
@@ -71,6 +72,25 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           const decodedValue = decodeURIComponent(cookieValue);
           const teacherData = JSON.parse(decodedValue);
           setTeacherData(teacherData);
+          
+          // Create teams data with active status
+          const teacherTeams: Team[] = [
+            {
+              name: teacherData?.gradeName ? `${teacherData.gradeName} Teacher` : "Teacher",
+              logo: GraduationCap,
+              plan: teacherData?.subjectName || "Teacher",
+              isActive: true
+            },
+            {
+              name: "My Sections",
+              logo: Users,
+              plan: teacherData?.sections?.join(', ') || "Not assigned",
+              isActive: false
+            },
+          ];
+          
+          setTeams(teacherTeams);
+          setActiveTeam(teacherTeams[0]); // Set first team as active
         }
       } catch (error) {
         console.error("Error parsing teacher data:", error);
@@ -88,18 +108,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       email: teacherData?.email || "loading@teacher.edu",
       avatar: "/teacher-avatar.png",
     },
-    teams: [
-      {
-        name: teacherData?.gradeName ? `${teacherData.gradeName} Teacher` : "Loading...",
-        logo: GraduationCap,
-        plan: teacherData?.subjectName || "Teacher",
-      },
-      {
-        name: "My Sections",
-        logo: Users,
-        plan: teacherData?.sections?.join(', ') || "Not assigned",
-      },
-    ],
     navMain: [
       {
         title: "Dashboard",
@@ -132,8 +140,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         isActive: pathname === "/teacher/individual",
       },
     ] as NavItem[],
-    // --- REMOVED "New Exam" FROM QUICK ACTIONS ---
-    quickAccess: [] as QuickAccessItem[], // Empty array since we removed New Exam
+    quickAccess: [] as QuickAccessItem[],
     system: [
       {
         title: "Security",
@@ -143,8 +150,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       },
     ] as NavItem[],
   }
-
-  const [activeTeam, setActiveTeam] = React.useState(data.teams[0])
 
   // Skeleton loader component
   const SkeletonItem = () => (
@@ -188,7 +193,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               ))}
             </div>
           </div>
-          {/* Quick Actions Section removed from skeleton since it's empty */}
         </SidebarContent>
         <SidebarFooter>
           <div className="flex items-center space-x-3 p-2">
@@ -220,11 +224,15 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                   className="data-[state=open]:bg-sidebar-accent cursor-pointer data-[state=open]:text-sidebar-accent-foreground hover:bg-gray-100/80 transition-all duration-200 h-10"
                 >
                   <div className="flex -ms-2 aspect-square size-7 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground shadow-sm">
-                    <activeTeam.logo className="size-4" />
+                    {activeTeam ? <activeTeam.logo className="size-4" /> : <GraduationCap className="size-4" />}
                   </div>
                   <div className="grid flex-1 text-left text-sm leading-tight">
-                    <span className="truncate font-semibold text-sm">{activeTeam.name}</span>
-                    <span className="truncate text-xs text-gray-600">{activeTeam.plan}</span>
+                    <span className="truncate font-semibold text-sm">
+                      {activeTeam ? activeTeam.name : "Teacher"}
+                    </span>
+                    <span className="truncate text-xs text-gray-600">
+                      {activeTeam ? activeTeam.plan : "Loading..."}
+                    </span>
                   </div>
                   <ChevronsUpDown className="ml-auto size-3.5" />
                 </SidebarMenuButton>
@@ -235,16 +243,41 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 side="bottom"
                 sideOffset={4}
               >
-                {data.teams.map((team) => (
+                {teams.map((team) => (
                   <DropdownMenuItem
                     key={team.name}
                     onClick={() => setActiveTeam(team)}
-                    className="gap-2.5 p-2.5 hover:bg-gray-100/80 transition-colors duration-200"
+                    className={cn(
+                      "gap-2.5 p-2.5 hover:bg-gray-100/80 transition-colors duration-200 relative",
+                      team.isActive && "bg-blue-50"
+                    )}
                   >
-                    <div className="flex -ms-1 size-5 items-center justify-center rounded-sm border border-gray-200">
-                      <team.logo className="size-3.5 shrink-0" />
+                    <div className={cn(
+                      "flex -ms-1 size-5 items-center justify-center rounded-sm border",
+                      team.isActive 
+                        ? "border-blue-300 bg-blue-50" 
+                        : "border-gray-200"
+                    )}>
+                      <team.logo className={cn(
+                        "size-3.5 shrink-0",
+                        team.isActive ? "text-blue-600" : ""
+                      )} />
                     </div>
-                    <span className="text-sm">{team.name}</span>
+                    <div className="flex-1">
+                      <span className={cn(
+                        "text-sm",
+                        team.isActive ? "font-semibold text-blue-700" : ""
+                      )}>
+                        {team.name}
+                      </span>
+                      <div className="text-xs text-gray-500 mt-0.5">{team.plan}</div>
+                    </div>
+                    
+                    {team.isActive && (
+                      <div className="flex items-center justify-center size-2 rounded-full bg-green-500 ml-2">
+                        <div className="size-1 rounded-full bg-white"></div>
+                      </div>
+                    )}
                   </DropdownMenuItem>
                 ))}
               </DropdownMenuContent>

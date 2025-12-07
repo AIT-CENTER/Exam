@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { getTeacherDataFromCookie, TeacherData } from "@/utils/teacherCookie";
+import bcrypt from "bcryptjs";
 
 interface TeacherProfileData {
   full_name: string;
@@ -273,6 +274,20 @@ export default function TeacherSettingsPage() {
     }
   };
 
+  const hashPassword = async (password: string) => {
+    const saltRounds = 12;
+    return await bcrypt.hash(password, saltRounds);
+  };
+
+  const comparePasswords = async (plainPassword: string, hashedPassword: string) => {
+    try {
+      return await bcrypt.compare(plainPassword, hashedPassword);
+    } catch (error) {
+      console.error("Password comparison error:", error);
+      return false;
+    }
+  };
+
   const handleChangePassword = async () => {
     if (!validatePassword()) {
       toast.error("Please fix the errors in the form");
@@ -281,53 +296,56 @@ export default function TeacherSettingsPage() {
 
     setSaving(true);
     try {
-      // First verify current password by attempting to sign in
-      const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
-        email: teacherData.email,
-        password: passwordData.currentPassword
-      });
-
-      if (signInError) {
-        if (signInError.message.includes("Invalid login credentials")) {
-          toast.error("Current password is incorrect");
-          setErrors(prev => ({
-            ...prev,
-            password: {
-              ...prev.password,
-              currentPassword: "Current password is incorrect"
-            }
-          }));
-          return;
-        } else {
-          toast.error("Failed to verify current password: " + signInError.message);
-          return;
-        }
+      if (!teacherCookie?.teacherId) {
+        toast.error("You must be logged in");
+        return;
       }
 
-      // Update password in auth system
-      const { error: updateError } = await supabase.auth.updateUser({
-        password: passwordData.newPassword
-      });
+      // First, get the current teacher's hashed password from the database
+      const { data: teacher, error: fetchError } = await supabase
+        .from("teacher")
+        .select("password")
+        .eq("id", teacherCookie.teacherId)
+        .single();
+
+      if (fetchError || !teacher) {
+        toast.error("Failed to fetch teacher data");
+        return;
+      }
+
+      // Verify current password by comparing with bcrypt
+      const isCurrentPasswordCorrect = await comparePasswords(
+        passwordData.currentPassword, 
+        teacher.password || ""
+      );
+
+      if (!isCurrentPasswordCorrect) {
+        toast.error("Current password is incorrect");
+        setErrors(prev => ({
+          ...prev,
+          password: {
+            ...prev.password,
+            currentPassword: "Current password is incorrect"
+          }
+        }));
+        return;
+      }
+
+      // Hash the new password
+      const hashedNewPassword = await hashPassword(passwordData.newPassword);
+
+      // Update password in teacher table
+      const { error: updateError } = await supabase
+        .from("teacher")
+        .update({ 
+          password: hashedNewPassword,
+          updated_at: new Date().toISOString()
+        })
+        .eq("id", teacherCookie.teacherId);
 
       if (updateError) {
         toast.error("Failed to update password: " + updateError.message);
         return;
-      }
-
-      // Also update in teacher table using teacherId from cookie
-      if (teacherCookie?.teacherId) {
-        const { error: teacherUpdateError } = await supabase
-          .from("teacher")
-          .update({ 
-            password: passwordData.newPassword,
-            updated_at: new Date().toISOString()
-          })
-          .eq("id", teacherCookie.teacherId);
-
-        if (teacherUpdateError) {
-          console.error("Failed to update teacher table password:", teacherUpdateError);
-          // Continue anyway since auth password was updated
-        }
       }
 
       toast.success("Password updated successfully!");
@@ -339,7 +357,14 @@ export default function TeacherSettingsPage() {
         confirmPassword: ""
       });
 
+      // Clear errors
+      setErrors(prev => ({
+        ...prev,
+        password: {}
+      }));
+
     } catch (error) {
+      console.error("Password change error:", error);
       toast.error("An unexpected error occurred");
     } finally {
       setSaving(false);

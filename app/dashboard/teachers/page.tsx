@@ -106,6 +106,7 @@ export default function TeacherManagementPage() {
   const [allTeachers, setAllTeachers] = useState<Teacher[]>([])
   const [grades, setGrades] = useState<Grade[]>([])
   const [subjects, setSubjects] = useState<Subject[]>([])
+  const [gradeSubjects, setGradeSubjects] = useState<Record<string, string[]>>({}) // grade_id -> subject_ids
   const [gradeSections, setGradeSections] = useState<Record<string, Section[]>>({})
   const [searchQuery, setSearchQuery] = useState("")
   const [currentPage, setCurrentPage] = useState(1)
@@ -159,6 +160,15 @@ export default function TeacherManagementPage() {
         .select("id, subject_name, stream")
       if (subjectsError) throw subjectsError
 
+      // グレードに割り当てられた科目を取得
+      const { data: gradeSubjectsData, error: gradeSubjectsError } = await supabase
+        .from("grade_subjects")
+        .select("grade_id, subject_id")
+      
+      if (gradeSubjectsError) {
+        console.warn("grade_subjects table may not exist yet")
+      }
+
       const { data: sectionsData, error: sectionsError } = await supabase
         .from("grade_sections")
         .select("id, grade_id, section_name")
@@ -177,7 +187,7 @@ export default function TeacherManagementPage() {
         stream: u.stream || "",
         assignedGrade: u.grade_id ? u.grade_id.toString() : "",
         assignedSubject: u.subject_id ? u.subject_id.toString() : "",
-        assignedSections: u.section ? u.section.split(",") : [],
+        assignedSections: u.section ? u.section.split(",").filter(Boolean) : [],
         created_at: u.created_at,
       }))
 
@@ -188,7 +198,20 @@ export default function TeacherManagementPage() {
         (subjectsData || []).map((s: any) => ({ id: s.id.toString(), name: s.subject_name, stream: s.stream })),
       )
 
-      // Group sections by grade
+      // グレードごとに割り当てられた科目をグループ化
+      const subjectsByGrade: Record<string, string[]> = {}
+      if (gradeSubjectsData) {
+        gradeSubjectsData.forEach((gs: any) => {
+          const gradeId = gs.grade_id.toString()
+          if (!subjectsByGrade[gradeId]) {
+            subjectsByGrade[gradeId] = []
+          }
+          subjectsByGrade[gradeId].push(gs.subject_id.toString())
+        })
+      }
+      setGradeSubjects(subjectsByGrade)
+
+      // グレードごとにセクションをグループ化
       const sectionsByGrade: Record<string, Section[]> = {}
       if (sectionsData) {
         sectionsData.forEach((s: any) => {
@@ -199,7 +222,7 @@ export default function TeacherManagementPage() {
           sectionsByGrade[gradeId].push({ id: s.section_name, name: s.section_name })
         })
       }
-      // If no sections from DB, use default A-E
+      // DBにセクションがない場合はデフォルトのA-Eを使用
       if (Object.keys(sectionsByGrade).length === 0) {
         gradesData?.forEach((g: any) => {
           sectionsByGrade[g.id.toString()] = ["A", "B", "C", "D", "E"].map((s) => ({ id: s, name: s }))
@@ -218,18 +241,50 @@ export default function TeacherManagementPage() {
     loadData()
   }, [])
 
+  // 選択されたグレードに割り当てられている科目だけをフィルタリング
+  const filteredSubjectsByStreamAndGrade = useMemo(() => {
+    if (!assignForm.stream) return []
+    
+    if (!assignForm.assignedGrade) {
+      // グレードが選択されていない場合は、ストリームに基づいてフィルタリング
+      return subjects.filter((s) => 
+        s.stream === assignForm.stream || 
+        s.stream === "Common" || 
+        !s.stream
+      )
+    }
+    
+    // グレードが選択されている場合は、そのグレードに割り当てられている科目だけを表示
+    const gradeSubjectIds = gradeSubjects[assignForm.assignedGrade] || []
+    const gradeSubjectsList = subjects.filter((s) => 
+      gradeSubjectIds.includes(s.id) && 
+      (s.stream === assignForm.stream || s.stream === "Common" || !s.stream)
+    )
+    
+    return gradeSubjectsList
+  }, [subjects, assignForm.stream, assignForm.assignedGrade, gradeSubjects])
+
+  // 選択されたグレードに割り当てられているセクションだけを取得
+  const availableSections = useMemo(() => {
+    if (!assignForm.assignedGrade) return []
+    return gradeSections[assignForm.assignedGrade] || []
+  }, [assignForm.assignedGrade, gradeSections])
+
+  // すでに割り当てられている科目とセクションの組み合わせをチェック
   const getAssignedSubjectsForGradeAndSections = useMemo(() => {
     if (!assignForm.assignedGrade || assignForm.assignedSections.length === 0) return new Set<string>()
 
     const assigned = new Set<string>()
     allTeachers.forEach((teacher) => {
-      // Skip the currently selected user (when editing)
+      // 編集中の現在のユーザーをスキップ
       if (selectedUser && teacher.id === selectedUser.id) return
 
-      // Check if teacher is assigned to same grade
+      // 同じグレードに割り当てられているかチェック
       if (teacher.assignedGrade === assignForm.assignedGrade && teacher.assignedSubject) {
-        // Check if there's any overlap in sections
-        const hasOverlap = teacher.assignedSections.some((section) => assignForm.assignedSections.includes(section))
+        // セクションの重複があるかチェック
+        const hasOverlap = teacher.assignedSections.some((section) => 
+          assignForm.assignedSections.includes(section)
+        )
         if (hasOverlap) {
           assigned.add(teacher.assignedSubject)
         }
@@ -237,18 +292,6 @@ export default function TeacherManagementPage() {
     })
     return assigned
   }, [allTeachers, assignForm.assignedGrade, assignForm.assignedSections, selectedUser])
-
-  // Filter subjects by stream
-  const filteredSubjectsByStream = useMemo(() => {
-    if (!assignForm.stream) return []
-    return subjects.filter((s) => s.stream === assignForm.stream || s.stream === "Common" || !s.stream)
-  }, [subjects, assignForm.stream])
-
-  // Available sections for selected grade
-  const availableSections = useMemo(() => {
-    if (!assignForm.assignedGrade) return []
-    return gradeSections[assignForm.assignedGrade] || ["A", "B", "C", "D", "E"].map((s) => ({ id: s, name: s }))
-  }, [assignForm.assignedGrade, gradeSections])
 
   const stats = useMemo(() => {
     const total = users.length
@@ -361,6 +404,16 @@ export default function TeacherManagementPage() {
     }
     if (!assignForm.assignedSubject) {
       toast.error("Please select a subject")
+      return
+    }
+
+    
+    const isAlreadyAssigned = Array.from(getAssignedSubjectsForGradeAndSections).some(
+      (subjectId) => subjectId === assignForm.assignedSubject
+    )
+
+    if (isAlreadyAssigned) {
+      toast.error("This subject is already assigned to another teacher for the selected sections")
       return
     }
 
@@ -534,11 +587,6 @@ export default function TeacherManagementPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-gray-900">Teacher Management</h1>
-          <p className="text-muted-foreground mt-1">
-            Manage teacher accounts. Teachers login with phone number and password. Assign teachers to one grade (9-12),
-            one subject, and multiple sections for isolated access to exams and data. Use 'Assign' to set permissions.
-            Admins are managed separately.
-          </p>
         </div>
         <Button onClick={openCreate} className="gap-2">
           <UserPlus className="h-4 w-4" />
@@ -816,7 +864,11 @@ export default function TeacherManagementPage() {
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Assign to {selectedUser?.fullName}</DialogTitle>
-            <DialogDescription>Select stream first, then grade, sections, and one subject.</DialogDescription>
+            <DialogDescription>
+              Select stream first, then grade, then sections, and finally one subject.
+              <br />
+              Only subjects assigned to the selected grade will be shown.
+            </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
             {/* Stream Selection - Must be first */}
@@ -828,7 +880,9 @@ export default function TeacherManagementPage() {
                   setAssignForm((prev) => ({
                     ...prev,
                     stream: value,
-                    assignedSubject: "", // Reset subject when stream changes
+                    assignedGrade: "",
+                    assignedSubject: "",
+                    assignedSections: [],
                   }))
                 }
               >
@@ -851,8 +905,8 @@ export default function TeacherManagementPage() {
                   setAssignForm((prev) => ({
                     ...prev,
                     assignedGrade: value,
-                    assignedSections: [], // Reset sections when grade changes
-                    assignedSubject: "", // Reset subject when grade changes
+                    assignedSections: [],
+                    assignedSubject: "",
                   }))
                 }
                 disabled={!assignForm.stream}
@@ -870,7 +924,7 @@ export default function TeacherManagementPage() {
               </Select>
             </div>
 
-            {/* Sections Selection with Select (multiple selection) */}
+            {/* Sections Selection */}
             <div className="grid gap-2">
               <Label>Sections *</Label>
               <Select
@@ -880,6 +934,7 @@ export default function TeacherManagementPage() {
                     setAssignForm((prev) => ({
                       ...prev,
                       assignedSections: [...prev.assignedSections, value],
+                      assignedSubject: "", // Reset subject when sections change
                     }))
                   }
                 }}
@@ -915,6 +970,7 @@ export default function TeacherManagementPage() {
                             setAssignForm((prev) => ({
                               ...prev,
                               assignedSections: prev.assignedSections.filter((id) => id !== sectionId),
+                              assignedSubject: "", // Reset subject when section is removed
                             }))
                           }}
                           className="ml-1 hover:text-destructive"
@@ -928,7 +984,11 @@ export default function TeacherManagementPage() {
               )}
 
               {assignForm.assignedSections.length === 0 && (
-                <p className="text-sm text-muted-foreground">No sections selected yet</p>
+                <p className="text-sm text-muted-foreground">
+                  {assignForm.assignedGrade 
+                    ? `Select sections from this grade (${availableSections.length} available)`
+                    : "Select a grade first to see available sections"}
+                </p>
               )}
             </div>
 
@@ -946,14 +1006,22 @@ export default function TeacherManagementPage() {
                 disabled={!assignForm.stream || !assignForm.assignedGrade || assignForm.assignedSections.length === 0}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Select subject" />
+                  <SelectValue placeholder={
+                    !assignForm.stream 
+                      ? "Select stream first" 
+                      : !assignForm.assignedGrade 
+                      ? "Select grade first"
+                      : assignForm.assignedSections.length === 0
+                      ? "Select sections first"
+                      : "Select subject"
+                  } />
                 </SelectTrigger>
                 <SelectContent>
-                  {filteredSubjectsByStream
+                  {filteredSubjectsByStreamAndGrade
                     .map((subject) => {
                       const isAlreadyAssigned = getAssignedSubjectsForGradeAndSections.has(subject.id)
 
-                      // Skip subjects already assigned to other teachers
+                      // Skip subjects already assigned to other teachers for the same sections
                       if (isAlreadyAssigned) {
                         return null
                       }
@@ -961,6 +1029,7 @@ export default function TeacherManagementPage() {
                       return (
                         <SelectItem key={subject.id} value={subject.id}>
                           {subject.name}
+                          {subject.stream && ` (${subject.stream})`}
                         </SelectItem>
                       )
                     })
@@ -987,10 +1056,6 @@ export default function TeacherManagementPage() {
                   </Badge>
                 </div>
               )}
-
-              <p className="text-xs text-muted-foreground">
-                Subjects already assigned to other teachers for the same grade+section are not shown.
-              </p>
             </div>
 
             {assignmentError && (
@@ -1004,7 +1069,12 @@ export default function TeacherManagementPage() {
             <Button type="button" variant="outline" onClick={() => setIsAssignOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleAssignUser}>Update Assignment</Button>
+            <Button 
+              onClick={handleAssignUser}
+              disabled={!assignForm.stream || !assignForm.assignedGrade || !assignForm.assignedSubject || assignForm.assignedSections.length === 0}
+            >
+              Update Assignment
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

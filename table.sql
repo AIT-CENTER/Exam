@@ -104,30 +104,31 @@ CREATE TABLE IF NOT EXISTS public.admin (
 ) TABLESPACE pg_default;
 
 -- 6. Create exams table (depends on teacher, grades, subjects)
-CREATE TABLE IF NOT EXISTS public.exams (
-  id SERIAL NOT NULL,
-  exam_code TEXT NOT NULL,
-  title TEXT NOT NULL,
-  description TEXT NULL,
-  subject_id INTEGER NOT NULL,
-  grade_id INTEGER NOT NULL,
-  section TEXT NOT NULL,
-  exam_date DATE NOT NULL,
-  duration INTEGER NULL,
-  total_marks INTEGER NOT NULL,
-  fullscreen_required BOOLEAN NULL DEFAULT false,
-  questions_shuffled BOOLEAN NULL DEFAULT true,
-  options_shuffled BOOLEAN NULL DEFAULT true,
-  created_by UUID NULL,
-  image_url TEXT NULL,
-  exam_active BOOLEAN NULL DEFAULT true,
-  created_at TIMESTAMP WITH TIME ZONE NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP WITH TIME ZONE NULL DEFAULT CURRENT_TIMESTAMP,
-  CONSTRAINT exams_pkey PRIMARY KEY (id),
-  CONSTRAINT exams_exam_code_key UNIQUE (exam_code),
-  CONSTRAINT exams_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.teacher(id),
-  CONSTRAINT exams_grade_id_fkey FOREIGN KEY (grade_id) REFERENCES public.grades(id),
-  CONSTRAINT exams_subject_id_fkey FOREIGN KEY (subject_id) REFERENCES public.subjects(id)
+create table public.exams (
+  id serial not null,
+  exam_code text not null,
+  title text not null,
+  description text null,
+  subject_id integer not null,
+  grade_id integer not null,
+  section text not null,
+  exam_date date not null,
+  duration integer null,
+  total_marks integer not null,
+  fullscreen_required boolean null default false,
+  questions_shuffled boolean null default true,
+  options_shuffled boolean null default true,
+  created_by uuid null,
+  image_url text null,
+  exam_active boolean null default true,
+  created_at timestamp with time zone null default CURRENT_TIMESTAMP,
+  updated_at timestamp with time zone null default CURRENT_TIMESTAMP,
+  show_results boolean null default true,
+  constraint exams_pkey primary key (id),
+  constraint exams_exam_code_key unique (exam_code),
+  constraint exams_created_by_fkey foreign KEY (created_by) references teacher (id),
+  constraint exams_grade_id_fkey foreign KEY (grade_id) references grades (id),
+  constraint exams_subject_id_fkey foreign KEY (subject_id) references subjects (id)
 ) TABLESPACE pg_default;
 
 -- 7. Create questions table (depends on exams)
@@ -431,3 +432,9 @@ ORDER BY
 -- You'll need to create these functions separately:
 -- 1. mark_answer()
 -- 2. update_last_activity()
+
+
+-- Single policy that allows all authenticated operations
+CREATE POLICY "Enable all for authenticated users" ON storage.objects
+FOR ALL USING (bucket_id = 'exam_images')
+WITH CHECK (bucket_id = 'exam_images');

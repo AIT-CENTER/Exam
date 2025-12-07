@@ -560,12 +560,17 @@ export default function StudentLogin() {
 
         <div className="relative w-full max-w-lg">
           <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-indigo-600 text-white mb-4 shadow-lg shadow-indigo-200">
-              <GraduationCap className="h-8 w-8" />
+              {/* Logo favicon fayyadamna */}
+              <div className="inline-flex items-center justify-center mb-4">
+                <img 
+                  src="/logo.jpg" 
+                  alt="Logo" 
+                  className="w-30 h-30 rounded-2xl shadow-lg shadow-indigo-200"
+                />
+              </div>
+              <h1 className="text-3xl font-bold text-gray-900 mb-2">Exam Portal</h1>
+              <p className="text-gray-600">Enter your credentials to start the exam</p>
             </div>
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">Exam Portal</h1>
-            <p className="text-gray-600">Enter your credentials to start the exam</p>
-          </div>
 
           <div className="bg-white rounded-2xl shadow-xl shadow-gray-200/50 border border-gray-100 overflow-hidden">
             <div className="h-1.5 bg-gradient-to-r from-indigo-500 via-purple-500 to-emerald-500" />
