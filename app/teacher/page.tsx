@@ -583,7 +583,6 @@ export default function TeacherDashboardPage() {
                 <TableHeader>
                   <TableRow className="border-b">
                     <TableHead className="text-gray-700">Status</TableHead>
-                    <TableHead className="text-gray-700">Type</TableHead>
                     <TableHead className="text-gray-700">Exam Code</TableHead>
                     <TableHead className="text-gray-700">Title</TableHead>
                     <TableHead className="text-gray-700">Subject</TableHead>
@@ -612,22 +611,10 @@ export default function TeacherDashboardPage() {
                             {exam.exam_active ? "Active" : "Inactive"}
                           </Badge>
                         </TableCell>
-                        <TableCell>
-                          <Badge 
-                            variant="outline" 
-                            className={
-                              isCreatedByMe 
-                                ? "bg-blue-50 text-blue-700 border-blue-200" 
-                                : "bg-purple-50 text-purple-700 border-purple-200"
-                            }
-                          >
-                            {isCreatedByMe ? "Created" : "Assigned"}
-                          </Badge>
-                        </TableCell>
                         <TableCell className="font-medium text-gray-900">{exam.exam_code}</TableCell>
-                        <TableCell className="text-gray-900">{exam.title}</TableCell>
+                        <TableCell className="text-gray-900 truncate max-w-[180px]">{exam.title}</TableCell>
                         <TableCell>
-                          <Badge variant="outline" className="text-orange-600 border-orange-200">
+                          <Badge variant="outline" className="text-orange-600 border-orange-200 truncate">
                             {(exam as any).subjects?.subject_name || exam.subject_id || "N/A"}
                           </Badge>
                         </TableCell>

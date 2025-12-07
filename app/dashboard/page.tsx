@@ -264,12 +264,29 @@ async function DashboardContent() {
               <TableBody>
                 {teachers.map((teacher) => (
                   <TableRow key={teacher.id} className="hover:bg-gray-50 transition-colors">
-                    <TableCell className="font-medium text-gray-900">{teacher.full_name}</TableCell>
-                    <TableCell className="text-muted-foreground">{teacher.username}</TableCell>
-                    <TableCell className="text-muted-foreground">{teacher.phone_number}</TableCell>
-                    <TableCell className="text-muted-foreground">{teacher.section}</TableCell>
-                    <TableCell className="text-muted-foreground">{teacher.grade_name}</TableCell>
-                    <TableCell className="text-muted-foreground">{teacher.subject_name}</TableCell>
+                    <TableCell className="font-medium text-gray-900 truncate max-w-[150px]">
+                      {teacher.full_name}
+                    </TableCell>
+                   <TableCell className="text-muted-foreground truncate max-w-[120px] overflow-hidden whitespace-nowrap">
+                    {teacher.username}
+                  </TableCell>
+
+                  <TableCell className="text-muted-foreground truncate max-w-[120px] overflow-hidden whitespace-nowrap">
+                    {teacher.phone_number}
+                  </TableCell>
+
+                  <TableCell className="text-muted-foreground truncate max-w-[120px] overflow-hidden whitespace-nowrap">
+                    {teacher.section}
+                  </TableCell>
+
+                  <TableCell className="text-muted-foreground truncate max-w-[120px] overflow-hidden whitespace-nowrap">
+                    {teacher.grade_name}
+                  </TableCell>
+
+                  <TableCell className="text-muted-foreground truncate max-w-[120px] overflow-hidden whitespace-nowrap">
+                    {teacher.subject_name}
+                  </TableCell>
+
                   </TableRow>
                 ))}
               </TableBody>
