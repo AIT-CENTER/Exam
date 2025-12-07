@@ -38,8 +38,8 @@ export default function TeacherLayout({
     <html lang="en" suppressHydrationWarning>
       <head>
         {/* Teacher-specific PWA manifest */}
-        {/* <link rel="manifest" href="/manifest-teacher.json" />
-        <meta name="theme-color" content="#1a73e8" /> */}
+        <link rel="manifest" href="/manifest-teacher.json" />
+        <meta name="theme-color" content="#1a73e8" />
       </head>
       <body className={`${inter.variable} ${poppins.variable} font-inter antialiased`}>
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false}>

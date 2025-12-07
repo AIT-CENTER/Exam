@@ -677,7 +677,7 @@ export default function StudentLogin() {
 
           <div className="text-center mt-6 space-y-2">
             <p className="text-sm text-gray-500">Need help? Contact your teacher</p>
-            <p className="text-sm text-gray-500">Developer By Alpha Institute Tech <a target="_blank" className="text-gray-900" href="https://alphainstitutetech.com">(AIT Tech Center)</a></p>
+            <p className="text-sm text-gray-500">Developer By Alpha Institute Tech <a target="_blank" className="text-gray-900" href="https://www.alphainstitutetech.com">(AIT Tech Center)</a></p>
           </div>
         </div>
       </div>

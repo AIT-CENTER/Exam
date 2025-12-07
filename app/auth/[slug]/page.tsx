@@ -283,7 +283,7 @@ export default function AdminLogin() {
                 </Button>
               </form>
             </Form>
-            <p className="text-sm ml-7 text-gray-500">Developer By Alpha Institute Tech <a target="_blank" className="text-gray-900 text-center" href="https://alphainstitutetech.com">(AIT Tech Center)</a></p>
+            <p className="text-sm ml-7 text-gray-500">Developer By Alpha Institute Tech <a target="_blank" className="text-gray-900 text-center" href="https://www.alphainstitutetech.com">(AIT Tech Center)</a></p>
           </CardContent>
         </Card>
       </div>

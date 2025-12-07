@@ -38,8 +38,8 @@ export default function AdminLayout({
     <html lang="en" suppressHydrationWarning>
       <head>
         {/* PWA manifest */}
-        {/* <link rel="manifest" href="/manifest-admin.json" />
-        <meta name="theme-color" content="#1a73e8" /> */}
+        <link rel="manifest" href="/manifest-admin.json" />
+        <meta name="theme-color" content="#1a73e8" />
       </head>
       <body className={`${inter.variable} ${poppins.variable} font-inter antialiased`}>
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false}>
