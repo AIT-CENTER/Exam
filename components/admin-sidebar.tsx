@@ -99,7 +99,7 @@ export function AdminSidebar({ ...props }: React.ComponentProps<typeof Sidebar>)
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_OUT') {
-        router.push('/auth/kmss')
+        router.push('/auth/alpha')
       } else if (session?.user) {
         fetchUser()
       }

@@ -75,7 +75,7 @@ export function ModernHeader({ title }: ModernHeaderProps) {
 
           if (error || !adminData) {
             console.error('Error fetching admin profile:', error)
-            router.push('/auth/kmss')
+            router.push('/auth/alpha')
             return
           }
 
@@ -85,11 +85,11 @@ export function ModernHeader({ title }: ModernHeaderProps) {
             // avatar: adminData.avatar_url, // Add if you have avatar field
           })
         } else {
-          router.push('/auth/kmss')
+          router.push('/auth/alpha')
         }
       } catch (error) {
         console.error('Error fetching user:', error)
-        router.push('/auth/kmss')
+        router.push('/auth/alpha')
       } finally {
         setLoading(false)
       }
@@ -100,7 +100,7 @@ export function ModernHeader({ title }: ModernHeaderProps) {
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_OUT') {
-        router.push('/auth/kmss')
+        router.push('/auth/alpha')
       } else if (session?.user) {
         fetchUser()
       }
@@ -111,7 +111,7 @@ export function ModernHeader({ title }: ModernHeaderProps) {
 
   const handleLogout = async () => {
     await supabase.auth.signOut()
-    router.push('/auth/kmss')
+    router.push('/auth/alpha')
   }
 
   const getInitials = (name: string) => {
