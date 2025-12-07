@@ -43,6 +43,9 @@ import {
   Upload,
   FileSpreadsheet,
   Plus,
+  Shield,
+  UserX,
+  ShieldAlert,
 } from "lucide-react"
 import { supabase } from "@/lib/supabaseClient"
 import { format } from "date-fns"
@@ -66,6 +69,7 @@ export default function SettingsPage() {
   const [confirmPassword, setConfirmPassword] = useState("")
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [currentEmail, setCurrentEmail] = useState<string | null>(null)
+  const [currentAdminData, setCurrentAdminData] = useState<Admin | null>(null)
 
   // Admins Management
   const [admins, setAdmins] = useState<Admin[]>([])
@@ -77,6 +81,8 @@ export default function SettingsPage() {
   const [newAdminPassword, setNewAdminPassword] = useState("")
   const [deleteAdminConfirmOpen, setDeleteAdminConfirmOpen] = useState(false)
   const [adminToDelete, setAdminToDelete] = useState<Admin | null>(null)
+  const [deleteAdminLoading, setDeleteAdminLoading] = useState(false)
+  const [confirmDeleteText, setConfirmDeleteText] = useState("")
 
   // Exam Sessions
   const [showDeleteSessionsDialog, setShowDeleteSessionsDialog] = useState(false)
@@ -96,6 +102,7 @@ export default function SettingsPage() {
   const [importFile, setImportFile] = useState<File | null>(null)
   const [importPreview, setImportPreview] = useState<{ tables: string[]; recordCount: number } | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const [isDragOver, setIsDragOver] = useState(false)
 
   const backupTables = [
     "admin",
@@ -113,6 +120,98 @@ export default function SettingsPage() {
     "subjects",
     "teacher",
   ]
+
+  // Drag & Drop handlers
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+    
+    const files = e.dataTransfer.files;
+    if (files && files.length > 0) {
+      const file = files[0];
+      
+      // Validate file
+      const validation = validateFile(file);
+      if (!validation.isValid) {
+        toast.error(validation.message || "Invalid file");
+        return;
+      }
+      
+      setImportFile(file);
+      processFilePreview(file);
+    }
+  };
+
+  // File validation function
+  const validateFile = (file: File): { isValid: boolean; message?: string } => {
+    const allowedExtensions = ['.json', '.csv'];
+    const extension = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
+    
+    if (!allowedExtensions.includes(extension)) {
+      return { 
+        isValid: false, 
+        message: "Only JSON (.json) and CSV (.csv) files are allowed" 
+      };
+    }
+    
+    const maxSize = 50 * 1024 * 1024; // 50MB
+    if (file.size > maxSize) {
+      return { 
+        isValid: false, 
+        message: "File size must be less than 50MB" 
+      };
+    }
+    
+    if (file.size === 0) {
+      return { 
+        isValid: false, 
+        message: "File is empty" 
+      };
+    }
+    
+    return { isValid: true };
+  };
+
+  // File preview processing
+  const processFilePreview = async (file: File) => {
+    try {
+      const content = await file.text();
+      let parsedData: Record<string, any>;
+
+      if (file.name.endsWith(".csv")) {
+        parsedData = parseCSVToJSON(content);
+      } else {
+        parsedData = JSON.parse(content);
+      }
+
+      const tables = Object.keys(parsedData).filter((k) => k !== "metadata");
+      let totalRecords = 0;
+      tables.forEach((t) => {
+        if (Array.isArray(parsedData[t])) {
+          totalRecords += parsedData[t].length;
+        }
+      });
+
+      setImportPreview({ tables, recordCount: totalRecords });
+    } catch (err) {
+      toast.error("Invalid backup file format");
+      setImportFile(null);
+      setImportPreview(null);
+    }
+  };
 
   const calculateEstimatedSize = async () => {
     let totalSize = 0
@@ -321,32 +420,14 @@ export default function SettingsPage() {
     const file = e.target.files?.[0]
     if (!file) return
 
-    setImportFile(file)
-
-    try {
-      const content = await file.text()
-      let parsedData: Record<string, any>
-
-      if (file.name.endsWith(".csv")) {
-        parsedData = parseCSVToJSON(content)
-      } else {
-        parsedData = JSON.parse(content)
-      }
-
-      const tables = Object.keys(parsedData).filter((k) => k !== "metadata")
-      let totalRecords = 0
-      tables.forEach((t) => {
-        if (Array.isArray(parsedData[t])) {
-          totalRecords += parsedData[t].length
-        }
-      })
-
-      setImportPreview({ tables, recordCount: totalRecords })
-    } catch (err) {
-      toast.error("Invalid backup file format")
-      setImportFile(null)
-      setImportPreview(null)
+    const validation = validateFile(file);
+    if (!validation.isValid) {
+      toast.error(validation.message || "Invalid file");
+      return;
     }
+
+    setImportFile(file)
+    processFilePreview(file)
   }
 
   const handleImportData = async () => {
@@ -422,6 +503,19 @@ export default function SettingsPage() {
       const { data } = await supabase.auth.getUser()
       setCurrentUserId(data.user?.id || null)
       setCurrentEmail(data.user?.email || null)
+      
+      // Fetch current admin data
+      if (data.user?.id) {
+        const { data: adminData } = await supabase
+          .from("admin")
+          .select("*")
+          .eq("id", data.user.id)
+          .single();
+        
+        if (adminData) {
+          setCurrentAdminData(adminData);
+        }
+      }
     }
     fetchCurrentUser()
     fetchAdmins()
@@ -540,7 +634,6 @@ export default function SettingsPage() {
 
         if (insertError) {
           toast.error("Failed to add admin: " + insertError.message)
-          // Optionally delete the auth user if insert fails
           return
         }
 
@@ -562,50 +655,123 @@ export default function SettingsPage() {
   const handleDeleteAdminClick = (admin: Admin) => {
     setAdminToDelete(admin)
     setDeleteAdminConfirmOpen(true)
+    setConfirmDeleteText("") // Reset confirmation text
   }
 
   const handleConfirmDeleteAdmin = async () => {
     if (!adminToDelete) return
 
+    // Check confirmation text
+    if (confirmDeleteText !== "DELETE") {
+      toast.error("Please type 'DELETE' to confirm deletion")
+      return
+    }
+
+    // Check if it's the last admin
     if (admins.length <= 1) {
       toast.error("Cannot delete the last admin")
+      setDeleteAdminConfirmOpen(false)
+      setAdminToDelete(null)
       return
     }
+
+    // Check if trying to delete own account
     if (adminToDelete.id === currentUserId) {
       toast.error("Cannot delete your own account")
+      setDeleteAdminConfirmOpen(false)
+      setAdminToDelete(null)
       return
     }
 
-    try {
-      const { error } = await supabase.from("admin").delete().eq("id", adminToDelete.id)
+    setDeleteAdminLoading(true)
 
-      if (error) {
-        toast.error("Failed to delete admin: " + error.message)
-        return
+    try {
+      // First try to use the database function
+      const { data: functionData, error: functionError } = await supabase
+        .rpc('delete_admin_with_auth', { admin_id_to_delete: adminToDelete.id })
+
+      if (functionError) {
+        console.log("Function not available, using manual deletion");
+        
+        // Manual deletion approach
+        // 1. Delete from admin table
+        const { error: adminError } = await supabase
+          .from("admin")
+          .delete()
+          .eq("id", adminToDelete.id)
+
+        if (adminError) {
+          toast.error("Failed to delete admin: " + adminError.message)
+          return
+        }
+
+        // 2. Delete from auth using admin API (requires proper setup)
+        // This is handled by Supabase trigger or separate admin API call
+        toast.warning("Admin deleted from database. Auth user may still exist.")
+      } else {
+        // Function was successful
+        const result = functionData as { success: boolean; message: string };
+        if (result.success) {
+          toast.success(result.message)
+        } else {
+          toast.error(result.message)
+          return
+        }
       }
 
-      toast.success("Admin deleted successfully!")
+      // Refresh admin list
       fetchAdmins()
+      
+      // Close dialog and reset
+      setDeleteAdminConfirmOpen(false)
+      setAdminToDelete(null)
+      setConfirmDeleteText("")
+      
     } catch (err) {
       console.error("Error deleting admin:", err)
       toast.error("Failed to delete admin")
     } finally {
-      setDeleteAdminConfirmOpen(false)
-      setAdminToDelete(null)
+      setDeleteAdminLoading(false)
     }
   }
 
   const handleDeleteAllSessions = async () => {
     setDeletingSessionsLoading(true)
     try {
-      const { error } = await supabase.rpc('delete_all_sessions')
+      // First try to use the function
+      const { data, error } = await supabase.rpc('delete_all_sessions')
 
       if (error) {
-        toast.error("Failed to delete exam sessions: " + error.message)
-        return
+        console.log('Function not found, using manual deletion');
+        
+        // Manual deletion
+        const { error: answersError } = await supabase
+          .from('student_answers')
+          .delete()
+          .neq('id', 0);
+        
+        if (answersError) {
+          toast.error("Failed to delete student answers: " + answersError.message)
+          return
+        }
+        
+        const { error: sessionsError } = await supabase
+          .from('exam_sessions')
+          .delete()
+          .neq('id', 0);
+        
+        if (sessionsError) {
+          toast.error("Failed to delete exam sessions: " + sessionsError.message)
+          return
+        }
+        
+        toast.success("All exam session data deleted successfully!");
+      } else {
+        // Function was successful
+        const stats = data as { deleted_sessions: number; deleted_answers: number };
+        toast.success(`Deleted ${stats.deleted_sessions} sessions and ${stats.deleted_answers} student answers successfully!`);
       }
-
-      toast.success("All exam session data deleted successfully!")
+      
       setShowDeleteSessionsDialog(false)
       fetchSessionStats()
     } catch (err) {
@@ -614,6 +780,16 @@ export default function SettingsPage() {
     } finally {
       setDeletingSessionsLoading(false)
     }
+  }
+
+  // Check if current user has permission to delete
+  const canDeleteAdmin = (admin: Admin) => {
+    // Cannot delete yourself
+    if (admin.id === currentUserId) return false
+    
+    // Check if current user is super admin or has delete permissions
+    // Add your permission logic here
+    return true
   }
 
   if (loading) {
@@ -657,6 +833,15 @@ export default function SettingsPage() {
             </p>
           </div>
         </div>
+        {currentAdminData && (
+          <div className="flex items-center gap-2 px-4 py-2 bg-white rounded-lg border border-gray-200">
+            <Shield className="h-4 w-4 text-indigo-600" />
+            <span className="text-sm font-medium">{currentAdminData.username}</span>
+            <Badge variant="outline" className="ml-2">
+              Admin
+            </Badge>
+          </div>
+        )}
       </div>
 
       <Tabs defaultValue="system" className="space-y-6">
@@ -869,21 +1054,38 @@ export default function SettingsPage() {
                   {admins.map((admin) => (
                     <div
                       key={admin.id}
-                      className="flex items-center justify-between p-4 rounded-lg border bg-white border-gray-200"
+                      className={`flex items-center justify-between p-4 rounded-lg border ${
+                        admin.id === currentUserId 
+                          ? 'bg-indigo-50 border-indigo-200' 
+                          : 'bg-white border-gray-200'
+                      }`}
                     >
                       <div className="flex-1">
-                        <p className="font-medium">{admin.full_name}</p>
+                        <div className="flex items-center gap-2 mb-1">
+                          <p className="font-medium">{admin.full_name}</p>
+                          {admin.id === currentUserId && (
+                            <Badge variant="outline" className="text-xs">
+                              You
+                            </Badge>
+                          )}
+                        </div>
                         <p className="text-sm text-gray-500">{admin.username}</p>
                         <p className="text-sm text-gray-500">{admin.email}</p>
                       </div>
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50"
-                        onClick={() => handleDeleteAdminClick(admin)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                      {canDeleteAdmin(admin) ? (
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50"
+                          onClick={() => handleDeleteAdminClick(admin)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      ) : (
+                        <div className="h-8 w-8 flex items-center justify-center text-gray-400">
+                          <ShieldAlert className="h-4 w-4" />
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -969,23 +1171,84 @@ export default function SettingsPage() {
               Delete Admin
             </DialogTitle>
             <DialogDescription>
-              Are you sure you want to delete admin "{adminToDelete?.full_name}"? This action cannot be undone.
+              Are you sure you want to delete admin "{adminToDelete?.full_name}"? This action is permanent and cannot be undone.
             </DialogDescription>
           </DialogHeader>
-          <div className="py-4">
-            <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
-              <p className="text-sm text-red-800">
-                Warning: Deleting this admin will remove their access.
+          <div className="py-4 space-y-4">
+            {/* Warning Box */}
+            <div className="p-4 bg-red-50 border border-red-200 rounded-lg space-y-2">
+              <p className="text-sm font-semibold text-red-800">Warning: This action will:</p>
+              <ul className="text-sm text-red-800 list-disc list-inside ml-2">
+                <li>Remove admin from the system</li>
+                <li>Delete admin account from authentication</li>
+                <li>Revoke all access immediately</li>
+                <li>Cannot be undone</li>
+              </ul>
+            </div>
+            
+            {/* Confirmation Input */}
+            <div className="space-y-2">
+              <Label htmlFor="confirm-delete" className="text-sm font-medium">
+                Type <span className="font-bold text-red-600">DELETE</span> to confirm
+              </Label>
+              <Input
+                id="confirm-delete"
+                value={confirmDeleteText}
+                onChange={(e) => setConfirmDeleteText(e.target.value)}
+                placeholder="Type DELETE to confirm"
+                className="border-red-200 focus:border-red-500"
+              />
+              <p className="text-xs text-gray-500">
+                This is required to prevent accidental deletion
               </p>
             </div>
+            
+            {/* Admin Info */}
+            {adminToDelete && (
+              <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
+                <p className="text-sm font-medium text-gray-900">Admin to be deleted:</p>
+                <div className="mt-2 grid grid-cols-2 gap-2 text-sm">
+                  <div>
+                    <p className="text-gray-500">Name:</p>
+                    <p className="font-medium">{adminToDelete.full_name}</p>
+                  </div>
+                  <div>
+                    <p className="text-gray-500">Email:</p>
+                    <p className="font-medium">{adminToDelete.email}</p>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteAdminConfirmOpen(false)}>
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setDeleteAdminConfirmOpen(false)
+                setAdminToDelete(null)
+                setConfirmDeleteText("")
+              }}
+              disabled={deleteAdminLoading}
+            >
               Cancel
             </Button>
-            <Button variant="destructive" onClick={handleConfirmDeleteAdmin} className="gap-2">
-              <Trash2 className="h-4 w-4" />
-              Delete Admin
+            <Button 
+              variant="destructive" 
+              onClick={handleConfirmDeleteAdmin} 
+              disabled={deleteAdminLoading || confirmDeleteText !== "DELETE"}
+              className="gap-2"
+            >
+              {deleteAdminLoading ? (
+                <>
+                  <RotateCw className="h-4 w-4 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                <>
+                  <UserX className="h-4 w-4" />
+                  Delete Admin Permanently
+                </>
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1113,6 +1376,7 @@ export default function SettingsPage() {
         </DialogContent>
       </Dialog>
 
+      {/* Import Backup Dialog */}
       <Dialog open={showImportDialog} onOpenChange={setShowImportDialog}>
         <DialogContent>
           <DialogHeader>
@@ -1130,7 +1394,18 @@ export default function SettingsPage() {
               <Label className="text-sm font-medium">Select Backup File</Label>
               <div
                 onClick={() => fileInputRef.current?.click()}
-                className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center cursor-pointer hover:border-emerald-400 hover:bg-emerald-50 transition-colors"
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+                className={`
+                  border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors
+                  ${isDragOver 
+                    ? 'border-emerald-400 bg-emerald-50 border-2' 
+                    : importFile 
+                      ? 'border-emerald-200 bg-emerald-50' 
+                      : 'border-gray-300 hover:border-emerald-400 hover:bg-emerald-50'
+                  }
+                `}
               >
                 <input
                   ref={fileInputRef}
@@ -1140,41 +1415,109 @@ export default function SettingsPage() {
                   className="hidden"
                 />
                 {importFile ? (
-                  <div className="flex items-center justify-center gap-2">
-                    {importFile.name.endsWith(".csv") ? (
-                      <FileSpreadsheet className="h-8 w-8 text-green-600" />
-                    ) : (
-                      <FileJson className="h-8 w-8 text-blue-600" />
-                    )}
-                    <div className="text-left">
-                      <p className="font-medium text-gray-900">{importFile.name}</p>
-                      <p className="text-sm text-gray-500">{(importFile.size / 1024).toFixed(2)} KB</p>
+                  <div className="flex items-center justify-center gap-3">
+                    <div className={`p-2 rounded-full ${importFile.name.endsWith(".csv") ? 'bg-green-100' : 'bg-blue-100'}`}>
+                      {importFile.name.endsWith(".csv") ? (
+                        <FileSpreadsheet className="h-6 w-6 text-green-600" />
+                      ) : (
+                        <FileJson className="h-6 w-6 text-blue-600" />
+                      )}
                     </div>
+                    <div className="text-left flex-1">
+                      <p className="font-medium text-gray-900 truncate">{importFile.name}</p>
+                      <div className="flex items-center gap-2 text-sm text-gray-500">
+                        <span>{(importFile.size / 1024).toFixed(2)} KB</span>
+                        <span>•</span>
+                        <span>{importFile.type || 'Backup file'}</span>
+                      </div>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 w-8 p-0"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setImportFile(null);
+                        setImportPreview(null);
+                      }}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
                   </div>
                 ) : (
-                  <>
-                    <Upload className="h-8 w-8 text-gray-400 mx-auto mb-2" />
-                    <p className="text-sm text-gray-600">Click to select or drag and drop</p>
-                    <p className="text-xs text-gray-400 mt-1">Supports JSON and CSV formats</p>
-                  </>
+                  <div>
+                    <div className="mb-3">
+                      {isDragOver ? (
+                        <Upload className="h-10 w-10 text-emerald-500 mx-auto animate-pulse" />
+                      ) : (
+                        <>
+                          <Upload className="h-10 w-10 text-gray-400 mx-auto mb-2" />
+                          <p className="text-sm text-gray-600 mb-1">
+                            <span className="font-medium text-emerald-600">Click to select</span> or drag and drop
+                          </p>
+                          <p className="text-xs text-gray-400">JSON or CSV files up to 50MB</p>
+                        </>
+                      )}
+                    </div>
+                    {isDragOver && (
+                      <p className="text-emerald-600 text-sm font-medium animate-pulse">
+                        Drop your file here...
+                      </p>
+                    )}
+                  </div>
                 )}
               </div>
+              
+              {/* File format info */}
+              {!importFile && !isDragOver && (
+                <div className="flex items-center justify-center gap-4 mt-3">
+                  <div className="flex items-center gap-1.5">
+                    <FileJson className="h-4 w-4 text-blue-500" />
+                    <span className="text-xs text-gray-500">JSON</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <FileSpreadsheet className="h-4 w-4 text-green-500" />
+                    <span className="text-xs text-gray-500">CSV</span>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Import Preview */}
             {importPreview && (
-              <div className="p-4 bg-emerald-50 rounded-lg border border-emerald-200 space-y-2">
-                <p className="text-sm font-medium text-emerald-900">Backup Contents:</p>
-                <div className="flex flex-wrap gap-2">
-                  {importPreview.tables.map((tableName) => (
-                    <Badge key={tableName} variant="secondary" className="bg-emerald-100">
-                      {tableName}
-                    </Badge>
-                  ))}
+              <div className="p-4 bg-emerald-50 rounded-lg border border-emerald-200 space-y-3">
+                <div className="flex items-center gap-2">
+                  <Database className="h-4 w-4 text-emerald-600" />
+                  <p className="text-sm font-medium text-emerald-900">Backup Contents Preview</p>
                 </div>
-                <p className="text-sm text-emerald-700">
-                  Total records: <strong>{importPreview.recordCount.toLocaleString()}</strong>
-                </p>
+                
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="bg-white p-3 rounded border">
+                    <p className="text-xs text-gray-500">Tables</p>
+                    <p className="font-semibold text-gray-900">{importPreview.tables.length}</p>
+                  </div>
+                  <div className="bg-white p-3 rounded border">
+                    <p className="text-xs text-gray-500">Records</p>
+                    <p className="font-semibold text-gray-900">{importPreview.recordCount.toLocaleString()}</p>
+                  </div>
+                </div>
+                
+                <div>
+                  <p className="text-xs text-gray-500 mb-2">Included Tables:</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {importPreview.tables.slice(0, 8).map((tableName) => (
+                      <Badge key={tableName} variant="outline" className="bg-white text-xs">
+                        {tableName}
+                      </Badge>
+                    ))}
+                    {importPreview.tables.length > 8 && (
+                      <Badge variant="outline" className="bg-white text-xs">
+                        +{importPreview.tables.length - 8} more
+                      </Badge>
+                    )}
+                  </div>
+                </div>
               </div>
             )}
 
@@ -1186,6 +1529,9 @@ export default function SettingsPage() {
                   <span className="font-medium">{importProgress}%</span>
                 </div>
                 <Progress value={importProgress} className="h-2" />
+                <p className="text-xs text-gray-500 text-center">
+                  Please don't close this window during import
+                </p>
               </div>
             )}
 
@@ -1193,10 +1539,17 @@ export default function SettingsPage() {
             <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
               <div className="flex gap-3">
                 <AlertTriangle className="h-5 w-5 text-amber-600 flex-shrink-0" />
-                <p className="text-sm text-amber-800">
-                  Importing will update existing records with matching IDs. Make sure to backup your current data before
-                  proceeding.
-                </p>
+                <div className="space-y-2">
+                  <p className="text-sm font-medium text-amber-900">Important Notice</p>
+                  <p className="text-sm text-amber-800">
+                    Importing will update existing records with matching IDs. This action cannot be undone.
+                  </p>
+                  <ul className="text-sm text-amber-800 list-disc list-inside space-y-1">
+                    <li>Backup your current data before proceeding</li>
+                    <li>Import may take several minutes for large files</li>
+                    <li>Some records may fail if data format is incorrect</li>
+                  </ul>
+                </div>
               </div>
             </div>
           </div>
@@ -1204,9 +1557,10 @@ export default function SettingsPage() {
             <Button
               variant="outline"
               onClick={() => {
-                setShowImportDialog(false)
-                setImportFile(null)
-                setImportPreview(null)
+                setShowImportDialog(false);
+                setImportFile(null);
+                setImportPreview(null);
+                setIsDragOver(false);
               }}
               disabled={isImporting}
             >
@@ -1220,7 +1574,7 @@ export default function SettingsPage() {
               {isImporting ? (
                 <>
                   <RotateCw className="h-4 w-4 animate-spin" />
-                  Importing...
+                  Importing... ({importProgress}%)
                 </>
               ) : (
                 <>
