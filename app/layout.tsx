@@ -61,7 +61,7 @@ export default function RootLayout({
       >
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false}>
           {children}
-
+          <Toaster richColors position="top-right" />
           {/* 3Dmol.js */}
           <Script
             src="https://3Dmol.org/build/3Dmol-min.js"
