@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -21,6 +21,8 @@ import {
   AlertCircle,
   GraduationCap,
   XCircle,
+  Eye,
+  EyeOff,
 } from "lucide-react"
 
 export default function StudentLogin() {
@@ -45,9 +47,30 @@ export default function StudentLogin() {
     maxLength: 20
   })
 
+  // State for visibility - DEFAULT CLOSED (hidden)
+  const [showStudentId, setShowStudentId] = useState(false)
+  const [showExamId, setShowExamId] = useState(false)
+
+  // Refs for inputs to control type
+  const studentInputRef = useRef<HTMLInputElement>(null)
+  const examInputRef = useRef<HTMLInputElement>(null)
+
   useEffect(() => {
     fetchStudentIdFormat()
   }, [])
+
+  // Sync input type with visibility state
+  useEffect(() => {
+    if (studentInputRef.current) {
+      studentInputRef.current.type = showStudentId ? 'text' : 'password'
+    }
+  }, [showStudentId])
+
+  useEffect(() => {
+    if (examInputRef.current) {
+      examInputRef.current.type = showExamId ? 'text' : 'password'
+    }
+  }, [showExamId])
 
   const fetchStudentIdFormat = async () => {
     try {
@@ -97,16 +120,43 @@ export default function StudentLogin() {
   }
 
   const handleStudentIdChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    let value = e.target.value.toUpperCase()
+    let value = e.target.value
+    value = value.toUpperCase()
     value = value.slice(0, studentIdFormat.maxLength)
     setStudentId(value)
     if (errors.studentId) setErrors(prev => ({ ...prev, studentId: "" }))
   }
 
   const handleExamIdChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value.replace(/\D/g, "").slice(0, 6)
+    let value = e.target.value
+    value = value.replace(/\D/g, "")
+    value = value.slice(0, 6)
     setExamId(value)
     if (errors.examId) setErrors(prev => ({ ...prev, examId: "" }))
+  }
+
+  // Handle focus on student ID input - show if has value
+  const handleStudentIdFocus = () => {
+    if (studentId && !showStudentId) {
+      setShowStudentId(true)
+    }
+  }
+
+  // Handle focus on exam ID input - show if has value
+  const handleExamIdFocus = () => {
+    if (examId && !showExamId) {
+      setShowExamId(true)
+    }
+  }
+
+  // Toggle student ID visibility
+  const toggleStudentIdVisibility = () => {
+    setShowStudentId(!showStudentId)
+  }
+
+  // Toggle exam ID visibility
+  const toggleExamIdVisibility = () => {
+    setShowExamId(!showExamId)
   }
 
   const validateExamAccess = async (studentId: string, examCode: string) => {
@@ -568,7 +618,6 @@ export default function StudentLogin() {
                   className="w-30 h-30 rounded-2xl shadow-lg shadow-indigo-200"
                 />
               </div>
-              <h1 className="text-3xl font-bold text-gray-900 mb-2">Exam Portal</h1>
               <p className="text-gray-600">Enter your credentials to start the exam</p>
             </div>
 
@@ -592,11 +641,14 @@ export default function StudentLogin() {
                   </Label>
                   <div className="relative">
                     <Input
+                      ref={studentInputRef}
                       id="studentId"
                       value={studentId}
                       onChange={handleStudentIdChange}
+                      onFocus={handleStudentIdFocus}
                       placeholder="Enter student ID"
-                      className={`h-12 pr-10 uppercase ${
+                      type={showStudentId ? "text" : "password"}
+                      className={`h-12 pr-24 uppercase ${
                         errors.studentId
                           ? "border-red-300 focus:border-red-400 focus:ring-red-100"
                           : studentId && !errors.studentId
@@ -605,17 +657,43 @@ export default function StudentLogin() {
                       }`}
                       maxLength={studentIdFormat.maxLength}
                     />
-                    {studentId && !errors.studentId && (
-                      <CheckCircle2 className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-emerald-500" />
-                    )}
-                    {errors.studentId && (
-                      <AlertCircle className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-red-500" />
-                    )}
+                    
+                    {/* Icon container - right side */}
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
+                      {/* Show/Hide toggle button */}
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 w-8 p-0 hover:bg-gray-100"
+                        onClick={toggleStudentIdVisibility}
+                        title={showStudentId ? "Hide text" : "Show text"}
+                      >
+                        {showStudentId ? (
+                          <EyeOff className="h-4 w-4 text-gray-500" />
+                        ) : (
+                          <Eye className="h-4 w-4 text-gray-500" />
+                        )}
+                      </Button>
+                      
+                      {/* Status icons */}
+                      <div className="w-px h-5 bg-gray-300"></div>
+                      {studentId && !errors.studentId ? (
+                        <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+                      ) : errors.studentId ? (
+                        <AlertCircle className="h-5 w-5 text-red-500" />
+                      ) : null}
+                    </div>
                   </div>
                   {errors.studentId && (
                     <p className="text-xs text-red-500 flex items-center gap-1">
                       <AlertCircle className="h-3 w-3" />
                       {errors.studentId}
+                    </p>
+                  )}
+                  {studentId && !showStudentId && (
+                    <p className="text-xs text-gray-500 mt-1">
+                      Click the eye icon or focus on the field to show your Student ID
                     </p>
                   )}
                 </div>
@@ -631,11 +709,14 @@ export default function StudentLogin() {
                   </Label>
                   <div className="relative">
                     <Input
+                      ref={examInputRef}
                       id="examId"
                       value={examId}
                       onChange={handleExamIdChange}
+                      onFocus={handleExamIdFocus}
                       placeholder="Enter 6-digit exam code"
-                      className={`h-12 pr-10 tracking-widest ${
+                      type={showExamId ? "text" : "password"}
+                      className={`h-12 pr-24 tracking-widest ${
                         errors.examId
                           ? "border-red-300 focus:border-red-400 focus:ring-red-100"
                           : examId && !errors.examId
@@ -644,17 +725,43 @@ export default function StudentLogin() {
                       }`}
                       maxLength={6}
                     />
-                    {examId && !errors.examId && (
-                      <CheckCircle2 className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-emerald-500" />
-                    )}
-                    {errors.examId && (
-                      <AlertCircle className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-red-500" />
-                    )}
+                    
+                    {/* Icon container - right side */}
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
+                      {/* Show/Hide toggle button */}
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 w-8 p-0 hover:bg-gray-100"
+                        onClick={toggleExamIdVisibility}
+                        title={showExamId ? "Hide text" : "Show text"}
+                      >
+                        {showExamId ? (
+                          <EyeOff className="h-4 w-4 text-gray-500" />
+                        ) : (
+                          <Eye className="h-4 w-4 text-gray-500" />
+                        )}
+                      </Button>
+                      
+                      {/* Status icons */}
+                      <div className="w-px h-5 bg-gray-300"></div>
+                      {examId && !errors.examId ? (
+                        <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+                      ) : errors.examId ? (
+                        <AlertCircle className="h-5 w-5 text-red-500" />
+                      ) : null}
+                    </div>
                   </div>
                   {errors.examId && (
                     <p className="text-xs text-red-500 flex items-center gap-1">
                       <AlertCircle className="h-3 w-3" />
                       {errors.examId}
+                    </p>
+                  )}
+                  {examId && !showExamId && (
+                    <p className="text-xs text-gray-500 mt-1">
+                      Click the eye icon or focus on the field to show your Exam Code
                     </p>
                   )}
                 </div>

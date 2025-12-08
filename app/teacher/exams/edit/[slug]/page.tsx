@@ -36,6 +36,37 @@ const renderWithMath = (text: string) => {
   });
 };
 
+// Helper function to parse question text from database
+const parseQuestionText = (questionText: string) => {
+  if (!questionText) return { passage: "", passageHtml: "", question: questionText };
+  
+  // Check for PASSAGE_HTML format
+  if (questionText.includes('[PASSAGE_HTML]')) {
+    const passageMatch = questionText.match(/\[PASSAGE_HTML\](.*?)\[\/PASSAGE_HTML\]/s);
+    if (passageMatch) {
+      const passageHtml = passageMatch[1].trim();
+      const remainingText = questionText.replace(/\[PASSAGE_HTML\].*?\[\/PASSAGE_HTML\]\s*/s, '').trim();
+      return { 
+        passage: passageHtml.replace(/<[^>]*>/g, ''), // Extract text from HTML
+        passageHtml: passageHtml,
+        question: remainingText
+      };
+    }
+  }
+  
+  // Fallback: Check for newline separation
+  const lines = questionText.split('\n\n');
+  if (lines.length > 1 && (lines[0].length > 100 || lines[0].includes('\n'))) {
+    return {
+      passage: lines[0],
+      passageHtml: lines[0].replace(/\n/g, '<br>'), // Convert newlines to HTML
+      question: lines.slice(1).join('\n\n').trim()
+    };
+  }
+  
+  return { passage: "", passageHtml: "", question: questionText };
+};
+
 // Rich Text Editor Toolbar Component
 const EditorToolbar = ({ editor }: { editor: any }) => {
   if (!editor) return null;
@@ -120,7 +151,7 @@ const EditorToolbar = ({ editor }: { editor: any }) => {
   );
 };
 
-// Image Upload Modal with real Supabase upload - FIXED
+// Image Upload Modal with real Supabase upload
 const ImageUploadModal = ({ isOpen, onClose, onUpload, title }: { 
   isOpen: boolean; 
   onClose: () => void; 
@@ -380,12 +411,6 @@ const ImageUploadModal = ({ isOpen, onClose, onUpload, title }: {
               Enter a direct image URL (must end with .jpg, .png, .gif, etc.)
             </p>
           </div>
-          <div className="pt-4 border-t">
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <div className="h-2 w-2 rounded-full bg-primary/50"></div>
-              <p>Storage Bucket: <code className="bg-muted px-1.5 py-0.5 rounded text-xs">{bucketName}</code></p>
-            </div>
-          </div>
         </div>
       </DialogContent>
     </Dialog>
@@ -402,6 +427,7 @@ interface Question {
   points: number;
   options: Array<{ text: string; image: string | null }>;
   correctAnswer: number;
+  createdOrder: number; // NEW: Track creation order
 }
 
 interface TeacherData {
@@ -456,6 +482,7 @@ export default function EditExamPage() {
   const [savingExam, setSavingExam] = useState(false);
   const [optionPreview, setOptionPreview] = useState<string[]>([]);
   const [examDate, setExamDate] = useState("");
+  const [questionCounter, setQuestionCounter] = useState(1); // Track question order
 
   // TipTap editor for passage with rich text support
   const passageEditor = useEditor({
@@ -506,7 +533,7 @@ export default function EditExamPage() {
         
         if (!teacher || !teacher.teacherId) {
           toast.error("❌ Please login as a teacher");
-          router.push("/teacher/login");
+          router.push("/login/tech");
           return;
         }
 
@@ -593,34 +620,22 @@ export default function EditExamPage() {
           return;
         }
 
-        const processedQuestions: Question[] = questionsData.map((q) => {
+        const processedQuestions: Question[] = questionsData.map((q, index) => {
           let options: Array<{ text: string; image: string | null }> = [];
           let correctAnswer = 0;
-          let passage = "";
-          let passageHtml = "";
-          let questionText = q.question_text;
-          let type = q.question_type === "multiple_choice" ? "mcq" : 
-                     q.question_type === "true_false" ? "tf" : "mcq";
           
-          // Extract passage if it exists
-          if (q.question_text.includes('[PASSAGE_HTML]')) {
-            const match = q.question_text.match(/\[PASSAGE_HTML\](.*?)\[\/PASSAGE_HTML\]/s);
-            if (match && match[1]) {
-              passageHtml = match[1];
-              questionText = q.question_text.replace(/\[PASSAGE_HTML\].*?\[\/PASSAGE_HTML\]\s*/s, '').trim();
-              type = "passage";
-            }
-          } else if (q.question_text.includes('\n\n')) {
-            const parts = q.question_text.split('\n\n');
-            if (parts.length > 1) {
-              passage = parts[0];
-              questionText = parts.slice(1).join('\n\n').trim();
-              if (passage.length > 100 || passage.includes('\n')) {
-                type = "passage";
-              }
-            }
+          // Parse question text using helper function
+          const { passage, passageHtml, question } = parseQuestionText(q.question_text);
+          
+          // Determine question type based on content
+          let type = "mcq";
+          if (passageHtml) {
+            type = "passage";
+          } else if (q.question_type === "true_false") {
+            type = "tf";
           }
           
+          // Parse options
           if (q.options) {
             try {
               const parsed = typeof q.options === 'string' ? JSON.parse(q.options) : q.options;
@@ -639,17 +654,19 @@ export default function EditExamPage() {
           return {
             id: q.id,
             type: type,
-            question: questionText,
+            question: question,
             passage: passage,
             passageHtml: passageHtml,
             options: options.length > 0 ? options : Array(4).fill({ text: "", image: null }),
             correctAnswer: correctAnswer,
             points: q.marks || 1,
             questionImage: q.image_url || null,
+            createdOrder: index + 1, // Preserve database order
           };
         });
 
         setQuestions(processedQuestions);
+        setQuestionCounter(processedQuestions.length > 0 ? processedQuestions.length + 1 : 1);
 
       } catch (error) {
         console.error("Error fetching exam data:", error);
@@ -767,12 +784,23 @@ export default function EditExamPage() {
     }
     
     if (editingIndex === -1) {
-      const newQ: Question = { ...newQuestion, id: Date.now() };
+      // Add new question with order tracking
+      const newQ: Question = { 
+        ...newQuestion, 
+        id: Date.now(),
+        createdOrder: questionCounter // Use current counter
+      };
       setQuestions([...questions, newQ]);
-      toast.success("✅ Question added successfully!");
+      setQuestionCounter(questionCounter + 1); // Increment counter
+      toast.success(`✅ Question ${questionCounter} added successfully!`);
     } else {
+      // Update existing question - preserve order
       const updated = [...questions];
-      updated[editingIndex] = { ...newQuestion, id: updated[editingIndex].id };
+      updated[editingIndex] = { 
+        ...newQuestion, 
+        id: updated[editingIndex].id,
+        createdOrder: updated[editingIndex].createdOrder // Keep original order
+      };
       setQuestions(updated);
       setEditingIndex(-1);
       toast.success("✅ Question updated successfully!");
@@ -801,12 +829,24 @@ export default function EditExamPage() {
     passageEditor?.commands.setContent(q.passageHtml || '');
     setEditingIndex(index);
     setIsSidebarOpen(false);
-    toast.info("📝 Editing question...");
+    toast.info(`📝 Editing question ${q.createdOrder}...`);
   };
 
   const deleteQuestion = (index: number) => {
+    const deletedOrder = questions[index].createdOrder;
     setQuestions(questions.filter((_, i) => i !== index));
-    toast.error("🗑️ Question deleted!");
+    
+    // Reorder remaining questions
+    const reorderedQuestions = questions
+      .filter((_, i) => i !== index)
+      .map((q, idx) => ({
+        ...q,
+        createdOrder: idx + 1
+      }));
+    
+    setQuestions(reorderedQuestions);
+    setQuestionCounter(reorderedQuestions.length + 1);
+    toast.error(`🗑️ Question ${deletedOrder} deleted!`);
   };
 
   const isStep1Valid = () => {
@@ -896,8 +936,8 @@ export default function EditExamPage() {
           .in("id", questionsToDelete);
       }
 
-      // Update/insert questions
-      const questionPromises = questions.map(async (q) => {
+      // Update/insert questions in order
+      const questionPromises = questions.map(async (q, index) => {
         let question_type;
         if (q.type === "mcq" || q.type === "passage") {
           question_type = "multiple_choice";
@@ -906,10 +946,14 @@ export default function EditExamPage() {
         }
 
         let question_text = q.question;
-        if (q.type === "passage" && q.passageHtml) {
-          question_text = `[PASSAGE_HTML]${q.passageHtml}[/PASSAGE_HTML]\n\n${q.question}`;
-        } else if (q.passage) {
-          question_text = q.passage + "\n\n" + q.question;
+        if (q.type === "passage") {
+          if (q.passageHtml) {
+            // Use HTML format for passages with rich text
+            question_text = `[PASSAGE_HTML]${q.passageHtml}[/PASSAGE_HTML]\n\n${q.question}`;
+          } else if (q.passage) {
+            // Use plain text format
+            question_text = q.passage + "\n\n" + q.question;
+          }
         }
 
         let options = null;
@@ -1006,23 +1050,35 @@ export default function EditExamPage() {
 
     return (
       <Card
-        className="w-full h-14 flex flex-row items-center justify-between px-3 hover:bg-muted/50 transition cursor-pointer border"
+        className="w-full flex flex-row items-center justify-between px-3 py-3 hover:bg-muted/50 transition cursor-pointer border"
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
       >
-        <div className="flex flex-1 items-center gap-2 min-w-0">
-          <div className="flex items-center gap-2">
-            <Eye className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-            <span className="font-medium text-xs text-muted-foreground shrink-0">{idx + 1}.</span>
+        <div className="flex flex-1 items-center gap-3 min-w-0">
+          <div className="flex items-center justify-center w-7 h-7 rounded-full bg-primary/10 text-primary font-semibold flex-shrink-0">
+            {q.createdOrder}
           </div>
-          <p className="text-xs font-medium truncate">
-            {q.type === "passage" && (
-              <span className="text-primary bg-primary/10 px-1.5 py-0.5 rounded text-[10px] mr-1">
-                Passage
+          <div className="flex flex-col min-w-0">
+            <p className="text-sm font-medium truncate">
+              {q.type === "passage" && (
+                <span className="text-primary bg-primary/10 px-1.5 py-0.5 rounded text-[10px] mr-1">
+                  Passage
+                </span>
+              )}
+              {q.question.length > 35 ? `${q.question.substring(0, 35)}...` : q.question}
+            </p>
+            <div className="flex items-center gap-2 mt-1">
+              <span className="text-xs text-muted-foreground">{q.type.toUpperCase()}</span>
+              <span className="text-xs bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded font-medium">
+                {q.points} point{q.points !== 1 ? 's' : ''}
               </span>
-            )}
-            {q.question.length > 40 ? `${q.question.substring(0, 40)}...` : q.question}
-          </p>
+              {q.questionImage && (
+                <span className="text-xs bg-green-100 text-green-800 px-1.5 py-0.5 rounded font-medium flex items-center gap-1">
+                  <ImageIcon className="h-3 w-3" /> Image
+                </span>
+              )}
+            </div>
+          </div>
         </div>
         <div
           className={`flex items-center gap-1 shrink-0 ml-2 transition-opacity duration-200 ${
@@ -1033,17 +1089,17 @@ export default function EditExamPage() {
             variant="ghost"
             size="sm"
             onClick={(e) => { e.stopPropagation(); onEdit(idx); }}
-            className="h-6 w-6 p-0 hover:bg-muted"
+            className="h-7 w-7 p-0 hover:bg-muted"
           >
-            <Edit className="h-3 w-3" />
+            <Edit className="h-3.5 w-3.5" />
           </Button>
           <Button
             variant="ghost"
             size="sm"
             onClick={(e) => { e.stopPropagation(); onDelete(idx); }}
-            className="h-6 w-6 p-0 text-destructive hover:bg-destructive/10"
+            className="h-7 w-7 p-0 text-destructive hover:bg-destructive/10"
           >
-            <Trash className="h-3 w-3" />
+            <Trash className="h-3.5 w-3.5" />
           </Button>
         </div>
       </Card>
@@ -1115,29 +1171,39 @@ export default function EditExamPage() {
                 Questions ({questions.length})
               </Button>
             </SheetTrigger>
-            <SheetContent side="left" className="w-80 p-0">
-              <SheetHeader className="px-4 py-4 border-b">
-                <SheetTitle className="flex items-center gap-2">
-                  <Eye className="h-5 w-5" />
-                  Question Bank ({questions.length})
+            <SheetContent side="left" className="w-96 p-0">
+              <SheetHeader className="px-6 py-4 border-b">
+                <SheetTitle className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Eye className="h-5 w-5" />
+                    Question Bank
+                  </div>
+                  <div className="text-sm font-medium text-primary bg-primary/10 px-2.5 py-1 rounded-full">
+                    {questions.length} Questions
+                  </div>
                 </SheetTitle>
               </SheetHeader>
-              <div className="p-4 space-y-2 overflow-y-auto max-h-[calc(100vh-100px)]">
+              <div className="p-4 space-y-3 overflow-y-auto max-h-[calc(100vh-120px)]">
                 {questions.length === 0 ? (
-                  <div className="text-center py-8 text-muted-foreground">
+                  <div className="text-center py-10 text-muted-foreground">
+                    <div className="mx-auto w-16 h-16 rounded-full bg-muted flex items-center justify-center mb-4">
+                      <Eye className="h-8 w-8 text-muted-foreground/70" />
+                    </div>
                     <p className="font-medium mb-2">No questions yet</p>
                     <p className="text-sm">Add questions in the main panel</p>
                   </div>
                 ) : (
-                  questions.map((q, idx) => (
-                    <QuestionBankCard
-                      key={q.id}
-                      q={q}
-                      idx={idx}
-                      onEdit={editQuestion}
-                      onDelete={deleteQuestion}
-                    />
-                  ))
+                  questions
+                    .sort((a, b) => a.createdOrder - b.createdOrder) // Sort by creation order
+                    .map((q, idx) => (
+                      <QuestionBankCard
+                        key={q.id}
+                        q={q}
+                        idx={idx}
+                        onEdit={editQuestion}
+                        onDelete={deleteQuestion}
+                      />
+                    ))
                 )}
               </div>
             </SheetContent>
@@ -1236,47 +1302,56 @@ export default function EditExamPage() {
             )}
 
             {currentStep === 2 && (
-              <div className="space-y-4">
+              <div className="space-y-6">
                 <div className="flex justify-between items-center">
-                  <h3 className="font-bold text-xl flex items-center gap-2">
-                    {editingIndex === -1 ? "Add Question" : "Edit Question"}
-                  </h3>
+                  <div>
+                    <h3 className="font-bold text-xl flex items-center gap-2">
+                      {editingIndex === -1 ? "Add Question" : "Edit Question"}
+                    </h3>
+                    <p className="text-sm text-muted-foreground">
+                      {editingIndex === -1 
+                        ? `Next question will be #${questionCounter}`
+                        : `Editing question #${questions[editingIndex]?.createdOrder || 1}`}
+                    </p>
+                  </div>
                   <div className="flex items-center gap-2">
                     <Label className="text-sm">Live Preview</Label>
                     <Switch checked={showPreview} onCheckedChange={setShowPreview} />
                   </div>
                 </div>
-                <div>
-                  <Label htmlFor="question-type">Question Type</Label>
-                  <Select 
-                    value={newQuestion.type} 
-                    onValueChange={(value) => {
-                      setNewQuestion({ 
-                        ...newQuestion, 
-                        type: value 
-                      });
-                    }}
-                  >
-                    <SelectTrigger className="mt-1">
-                      <SelectValue placeholder="Select type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {questionTypes.map((type) => (
-                        <SelectItem key={type.value} value={type.value}>{type.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label htmlFor="points">Points</Label>
-                  <Input 
-                    id="points" 
-                    type="number" 
-                    value={newQuestion.points} 
-                    onChange={(e) => setNewQuestion({ ...newQuestion, points: parseInt(e.target.value) || 1 })} 
-                    className="mt-1"
-                    min="1"
-                  />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="question-type">Question Type</Label>
+                    <Select 
+                      value={newQuestion.type} 
+                      onValueChange={(value) => {
+                        setNewQuestion({ 
+                          ...newQuestion, 
+                          type: value 
+                        });
+                      }}
+                    >
+                      <SelectTrigger className="mt-1">
+                        <SelectValue placeholder="Select type" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {questionTypes.map((type) => (
+                          <SelectItem key={type.value} value={type.value}>{type.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label htmlFor="points">Points</Label>
+                    <Input 
+                      id="points" 
+                      type="number" 
+                      value={newQuestion.points} 
+                      onChange={(e) => setNewQuestion({ ...newQuestion, points: parseInt(e.target.value) || 1 })} 
+                      className="mt-1"
+                      min="1"
+                    />
+                  </div>
                 </div>
                 
                 {/* Rich text editor for passage */}
@@ -1478,14 +1553,15 @@ export default function EditExamPage() {
                     </RadioGroup>
                   </div>
                 )}
-                <div className="flex gap-3">
+                <div className="flex gap-3 pt-4">
                   <Button 
                     onClick={addOrUpdateQuestion} 
                     disabled={!isAddQuestionValid()}
-                    className="disabled:opacity-50 disabled:cursor-not-allowed gap-2"
+                    className="disabled:opacity-50 disabled:cursor-not-allowed gap-2 flex-1"
+                    size="lg"
                   >
-                    <Plus className="h-4 w-4" /> 
-                    {editingIndex === -1 ? "Add Question" : "Update Question"}
+                    <Plus className="h-5 w-5" /> 
+                    {editingIndex === -1 ? `Add Question ${questionCounter}` : "Update Question"}
                   </Button>
                   {editingIndex !== -1 && (
                     <Button 
@@ -1495,6 +1571,7 @@ export default function EditExamPage() {
                         resetNewQuestion();
                         toast.info("✏️ Edit cancelled");
                       }}
+                      className="flex-1"
                     >
                       Cancel Edit
                     </Button>

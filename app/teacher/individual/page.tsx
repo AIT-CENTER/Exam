@@ -461,7 +461,7 @@ export default function ExamResultsPage() {
                           key={exam.id}
                           className="min-w-[120px] text-xs font-medium text-center p-3 border border-gray-200 bg-gray-50"
                         >
-                          <div className="truncate" title={exam.title}>
+                          <div className="truncate max-w-[120px]" title={exam.title}>
                             {exam.title} ({exam.totalMarks})
                           </div>
                         </th>

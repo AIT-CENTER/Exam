@@ -1,7 +1,7 @@
 {
   "name": "Admin",
   "short_name": "Admin",
-  "start_url": "/auth/kmss",
+  "start_url": "/auth/alpha",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#1a73e8",

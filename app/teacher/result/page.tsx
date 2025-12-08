@@ -547,7 +547,7 @@ export default function IndividualExamResultsPage() {
                         <td className="bg-white p-3 border border-gray-200 text-sm truncate max-w-[120px]" title={result.exam_title}>
                           {result.exam_title}
                         </td>
-                        <td className="bg-white p-3 border truncate border-gray-200 text-sm">{result.exam_subject_name}</td>
+                        <td className="bg-white p-3 border truncate border-gray-200 text-sm truncate max-w-[120px]">{result.exam_subject_name}</td>
                         <td className="bg-white p-3 border border-gray-200 text-sm">
                           <div className="flex items-center gap-2">
                             <span className="font-bold text-xs">

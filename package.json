@@ -62,7 +62,7 @@
     "@tiptap/extensions": "3.13.0",
     "@tiptap/pm": "3.13.0",
     "@tiptap/react": "3.13.0",
-    "@tiptap/starter-kit": "3.13.0",
+    "@tiptap/starter-kit": "^3.13.0",
     "@uidotdev/usehooks": "^2.4.1",
     "@vercel/speed-insights": "^1.2.0",
     "3dmol": "^2.5.2",
