@@ -132,28 +132,36 @@ create table public.exams (
 ) TABLESPACE pg_default;
 
 -- 7. Create questions table (depends on exams)
-CREATE TABLE IF NOT EXISTS public.questions (
-  id SERIAL NOT NULL,
-  exam_id INTEGER NOT NULL,
-  question_text TEXT NOT NULL,
-  question_type TEXT NOT NULL,
-  marks INTEGER NOT NULL DEFAULT 1,
-  options JSONB NULL,
-  correct_option_id INTEGER NULL,
-  correct_answer_text TEXT NULL,
-  image_url TEXT NULL,
-  created_at TIMESTAMP WITH TIME ZONE NULL DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE NULL DEFAULT NOW(),
-  CONSTRAINT questions_pkey PRIMARY KEY (id),
-  CONSTRAINT questions_exam_id_fkey FOREIGN KEY (exam_id) REFERENCES public.exams(id) ON DELETE CASCADE,
-  CONSTRAINT questions_question_type_check CHECK (
+create table public.questions (
+  id serial not null,
+  exam_id integer not null,
+  question_text text not null,
+  question_type text not null,
+  marks integer not null default 1,
+  options jsonb null,
+  correct_option_id integer null,
+  correct_answer_text text null,
+  image_url text null,
+  created_at timestamp with time zone null default now(),
+  updated_at timestamp with time zone null default now(),
+  metadata jsonb null,
+  constraint questions_pkey primary key (id),
+  constraint questions_exam_id_fkey foreign KEY (exam_id) references exams (id) on delete CASCADE,
+  constraint questions_question_type_check check (
     (
-      question_type = ANY (
-        ARRAY['multiple_choice'::text, 'true_false'::text]
+      question_type = any (
+        array[
+          'multiple_choice'::text,
+          'true_false'::text,
+          'matching'::text,
+          'fill_blank'::text
+        ]
       )
     )
   )
 ) TABLESPACE pg_default;
+
+create index IF not exists idx_questions_exam_id on public.questions using btree (exam_id) TABLESPACE pg_default;
 
 -- 8. Create exam_sessions table (depends on exams, students, teacher)
 CREATE TABLE IF NOT EXISTS public.exam_sessions (

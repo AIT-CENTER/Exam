@@ -11,16 +11,66 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { ArrowLeft, CheckCircle, Plus, Edit, Trash, Eye, Menu, ImageIcon, ChevronLeft, ChevronRight, Upload, XIcon, Loader2, Bold, Italic, Underline, List, ListOrdered, AlignLeft, AlignCenter, AlignRight } from 'lucide-react';
+import {
+  ArrowLeft,
+  CheckCircle,
+  Plus,
+  Edit,
+  Trash,
+  Eye,
+  Menu,
+  ImageIcon,
+  ChevronLeft,
+  ChevronRight,
+  Upload,
+  X,
+  Loader2,
+  Bold,
+  Italic,
+  List,
+  ListOrdered,
+  AlignLeft,
+  AlignCenter,
+  AlignRight,
+  Link2,
+  Link2Off,
+  Minus,
+  Heading2,
+  Quote,
+  Code,
+  Undo,
+  Redo,
+  Strikethrough,
+  Highlighter,
+  Subscript,
+  Superscript,
+  Palette,
+  Type,
+  ExternalLink,
+  UnderlineIcon,
+} from "lucide-react";
 import { InlineMath, BlockMath } from "react-katex";
 import "katex/dist/katex.min.css";
 import { toast, Toaster } from "sonner";
 import { supabase } from "@/lib/supabaseClient";
 import { getTeacherDataFromCookie } from "@/utils/teacherCookie";
-import { useEditor, EditorContent } from '@tiptap/react';
-import StarterKit from '@tiptap/starter-kit';
-import TextAlign from '@tiptap/extension-text-align';
-import UnderlineExtension from '@tiptap/extension-underline';
+import { useEditor, EditorContent } from "@tiptap/react";
+import StarterKit from "@tiptap/starter-kit";
+import TextAlign from "@tiptap/extension-text-align";
+import Underline from "@tiptap/extension-underline";
+import Heading from "@tiptap/extension-heading";
+import Blockquote from "@tiptap/extension-blockquote";
+import CodeBlock from "@tiptap/extension-code-block";
+import Strike from "@tiptap/extension-strike";
+import Highlight from "@tiptap/extension-highlight";
+import SubscriptExtension from "@tiptap/extension-subscript";
+import SuperscriptExtension from "@tiptap/extension-superscript";
+import Color from "@tiptap/extension-color";
+import TextStyle from "@tiptap/extension-text-style";
+import Placeholder from "@tiptap/extension-placeholder";
+import Link from "@tiptap/extension-link";
+
+// --- Utility Functions ---
 
 const renderWithMath = (text: string) => {
   if (!text) return null;
@@ -31,174 +81,488 @@ const renderWithMath = (text: string) => {
     } else if (part.startsWith("$") && part.endsWith("$")) {
       return <InlineMath key={index} math={part.slice(1, -1)} />;
     } else {
-      return <span key={index}>{part}</span>;
+      return <span key={index} style={{ whiteSpace: 'pre-wrap' }}>{part}</span>;
     }
   });
 };
 
-// Helper function to parse question text from database
 const parseQuestionText = (questionText: string) => {
   if (!questionText) return { passage: "", passageHtml: "", question: questionText };
-  
-  // Check for PASSAGE_HTML format
   if (questionText.includes('[PASSAGE_HTML]')) {
     const passageMatch = questionText.match(/\[PASSAGE_HTML\](.*?)\[\/PASSAGE_HTML\]/s);
     if (passageMatch) {
       const passageHtml = passageMatch[1].trim();
       const remainingText = questionText.replace(/\[PASSAGE_HTML\].*?\[\/PASSAGE_HTML\]\s*/s, '').trim();
-      return { 
-        passage: passageHtml.replace(/<[^>]*>/g, ''), // Extract text from HTML
-        passageHtml: passageHtml,
-        question: remainingText
-      };
+      return { passage: passageHtml.replace(/<[^>]*>/g, ''), passageHtml: passageHtml, question: remainingText };
     }
   }
-  
-  // Fallback: Check for newline separation
-  const lines = questionText.split('\n\n');
-  if (lines.length > 1 && (lines[0].length > 100 || lines[0].includes('\n'))) {
-    return {
-      passage: lines[0],
-      passageHtml: lines[0].replace(/\n/g, '<br>'), // Convert newlines to HTML
-      question: lines.slice(1).join('\n\n').trim()
-    };
-  }
-  
   return { passage: "", passageHtml: "", question: questionText };
 };
 
-// Rich Text Editor Toolbar Component
+// Color palette for text color selection
+const colorPalette = [
+  "#000000", "#434343", "#666666", "#999999", "#b7b7b7", "#cccccc", "#d9d9d9", "#efefef", "#f3f3f3", "#ffffff",
+  "#980000", "#ff0000", "#ff9900", "#ffff00", "#00ff00", "#00ffff", "#4a86e8", "#0000ff", "#9900ff", "#ff00ff",
+  "#e6b8af", "#f4cccc", "#fce5cd", "#fff2cc", "#d9ead3", "#d0e0e3", "#c9daf8", "#cfe2f3", "#d9d2e9", "#ead1dc",
+  "#dd7e6b", "#ea9999", "#f9cb9c", "#ffe599", "#b6d7a8", "#a2c4c9", "#a4c2f4", "#9fc5e8", "#b4a7d6", "#d5a6bd",
+  "#cc4125", "#e06666", "#f6b26b", "#ffd966", "#93c47d", "#76a5af", "#6d9eeb", "#6fa8dc", "#8e7cc3", "#c27ba0",
+  "#a61c00", "#cc0000", "#e69138", "#f1c232", "#6aa84f", "#45818e", "#3c78d8", "#3d85c6", "#674ea7", "#a64d79",
+  "#85200c", "#990000", "#b45f06", "#bf9000", "#38761d", "#134f5c", "#1155cc", "#0b5394", "#351c75", "#741b47",
+  "#5b0f00", "#660000", "#783f04", "#7f6000", "#274e13", "#0c343d", "#1c4587", "#073763", "#20124d", "#4c1130"
+];
+
+// --- Enhanced Rich Text Editor Toolbar with Link Dialog ---
 const EditorToolbar = ({ editor }: { editor: any }) => {
+  const [showColorPicker, setShowColorPicker] = useState(false);
+  const [showHighlightPicker, setShowHighlightPicker] = useState(false);
+  const [showTextColor, setShowTextColor] = useState(false);
+  const [showLinkDialog, setShowLinkDialog] = useState(false);
+  const [linkUrl, setLinkUrl] = useState("");
+  const [linkText, setLinkText] = useState("");
+
   if (!editor) return null;
 
+  const applyTextColor = (color: string) => {
+    editor.chain().focus().setColor(color).run();
+    setShowTextColor(false);
+  };
+
+  const applyHighlightColor = (color: string) => {
+    editor.chain().focus().setHighlight({ color }).run();
+    setShowHighlightPicker(false);
+  };
+
+  const currentColor = editor.getAttributes('textStyle').color || '#000000';
+  const currentHighlight = editor.getAttributes('highlight')?.color || '#FFFF00';
+  const currentLink = editor.getAttributes('link');
+
+  const handleAddLink = () => {
+    if (linkUrl) {
+      editor
+        .chain()
+        .focus()
+        .setLink({ href: linkUrl })
+        .run();
+      setLinkUrl("");
+      setLinkText("");
+      setShowLinkDialog(false);
+    }
+  };
+
+  const handleRemoveLink = () => {
+    editor.chain().focus().unsetLink().run();
+  };
+
   return (
-    <div className="flex flex-wrap gap-1 p-2 border-b bg-muted/30">
-      <Button
-        type="button"
-        variant={editor.isActive('bold') ? 'default' : 'ghost'}
-        size="sm"
-        onClick={() => editor.chain().focus().toggleBold().run()}
-        className="h-8 w-8 p-0"
-      >
-        <Bold className="h-4 w-4" />
-      </Button>
-      <Button
-        type="button"
-        variant={editor.isActive('italic') ? 'default' : 'ghost'}
-        size="sm"
-        onClick={() => editor.chain().focus().toggleItalic().run()}
-        className="h-8 w-8 p-0"
-      >
-        <Italic className="h-4 w-4" />
-      </Button>
-      <Button
-        type="button"
-        variant={editor.isActive('underline') ? 'default' : 'ghost'}
-        size="sm"
-        onClick={() => editor.chain().focus().toggleUnderline().run()}
-        className="h-8 w-8 p-0"
-      >
-        <Underline className="h-4 w-4" />
-      </Button>
-      <div className="w-px h-6 bg-border mx-1 self-center" />
-      <Button
-        type="button"
-        variant={editor.isActive('bulletList') ? 'default' : 'ghost'}
-        size="sm"
-        onClick={() => editor.chain().focus().toggleBulletList().run()}
-        className="h-8 w-8 p-0"
-      >
-        <List className="h-4 w-4" />
-      </Button>
-      <Button
-        type="button"
-        variant={editor.isActive('orderedList') ? 'default' : 'ghost'}
-        size="sm"
-        onClick={() => editor.chain().focus().toggleOrderedList().run()}
-        className="h-8 w-8 p-0"
-      >
-        <ListOrdered className="h-4 w-4" />
-      </Button>
-      <div className="w-px h-6 bg-border mx-1 self-center" />
-      <Button
-        type="button"
-        variant={editor.isActive({ textAlign: 'left' }) ? 'default' : 'ghost'}
-        size="sm"
-        onClick={() => editor.chain().focus().setTextAlign('left').run()}
-        className="h-8 w-8 p-0"
-      >
-        <AlignLeft className="h-4 w-4" />
-      </Button>
-      <Button
-        type="button"
-        variant={editor.isActive({ textAlign: 'center' }) ? 'default' : 'ghost'}
-        size="sm"
-        onClick={() => editor.chain().focus().setTextAlign('center').run()}
-        className="h-8 w-8 p-0"
-      >
-        <AlignCenter className="h-4 w-4" />
-      </Button>
-      <Button
-        type="button"
-        variant={editor.isActive({ textAlign: 'right' }) ? 'default' : 'ghost'}
-        size="sm"
-        onClick={() => editor.chain().focus().setTextAlign('right').run()}
-        className="h-8 w-8 p-0"
-      >
-        <AlignRight className="h-4 w-4" />
-      </Button>
-    </div>
+    <>
+      <div className="flex flex-wrap gap-1 p-2 border-b bg-muted/30 relative">
+        <div className="flex items-center gap-1 border-r pr-2 mr-1">
+          <Select
+            value={editor.isActive("heading", { level: 2 }) ? "h2" : 
+                    editor.isActive("heading", { level: 3 }) ? "h3" : 
+                    editor.isActive("heading", { level: 4 }) ? "h4" : "p"}
+            onValueChange={(value) => {
+              if (value === "p") {
+                editor.chain().focus().setParagraph().run();
+              } else if (value === "h2") {
+                editor.chain().focus().toggleHeading({ level: 2 }).run();
+              } else if (value === "h3") {
+                editor.chain().focus().toggleHeading({ level: 3 }).run();
+              } else if (value === "h4") {
+                editor.chain().focus().toggleHeading({ level: 4 }).run();
+              }
+            }}
+          >
+            <SelectTrigger className="h-8 w-36">
+              <Type className="h-4 w-4 mr-2" />
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="p">Normal Text</SelectItem>
+              <SelectItem value="h2">Heading 2</SelectItem>
+              <SelectItem value="h3">Heading 3</SelectItem>
+              <SelectItem value="h4">Heading 4</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="flex items-center gap-1 border-r pr-2 mr-1">
+          <Button
+            type="button"
+            variant={editor.isActive("bold") ? "default" : "ghost"}
+            size="sm"
+            onClick={() => editor.chain().focus().toggleBold().run()}
+            className="h-8 w-8 p-0"
+            title="Bold (Ctrl+B)"
+          >
+            <Bold className="h-4 w-4" />
+          </Button>
+          <Button
+            type="button"
+            variant={editor.isActive("italic") ? "default" : "ghost"}
+            size="sm"
+            onClick={() => editor.chain().focus().toggleItalic().run()}
+            className="h-8 w-8 p-0"
+            title="Italic (Ctrl+I)"
+          >
+            <Italic className="h-4 w-4" />
+          </Button>
+          <Button
+            type="button"
+            variant={editor.isActive("underline") ? "default" : "ghost"}
+            size="sm"
+            onClick={() => editor.chain().focus().toggleUnderline().run()}
+            className="h-8 w-8 p-0"
+            title="Underline (Ctrl+U)"
+          >
+            <UnderlineIcon className="h-4 w-4" />
+          </Button>
+          <Button
+            type="button"
+            variant={editor.isActive("strike") ? "default" : "ghost"}
+            size="sm"
+            onClick={() => editor.chain().focus().toggleStrike().run()}
+            className="h-8 w-8 p-0"
+            title="Strikethrough"
+          >
+            <Strikethrough className="h-4 w-4" />
+          </Button>
+        </div>
+
+        <div className="flex items-center gap-1 border-r pr-2 mr-1 relative">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => setShowTextColor(!showTextColor)}
+            className="h-8 px-2 gap-1"
+            title="Text Color"
+          >
+            <Palette className="h-4 w-4" />
+            <div className="h-3 w-3 rounded border" style={{ backgroundColor: currentColor }} />
+          </Button>
+          {showTextColor && (
+            <div className="absolute top-10 left-0 z-50 bg-white border rounded-lg shadow-lg p-3 w-64 max-h-80 overflow-y-auto">
+              <div className="grid grid-cols-10 gap-1">
+                {colorPalette.map((color) => (
+                  <button
+                    key={color}
+                    type="button"
+                    className="h-6 w-6 rounded border hover:scale-110 transition-transform"
+                    style={{ backgroundColor: color }}
+                    onClick={() => applyTextColor(color)}
+                    title={color}
+                  />
+                ))}
+              </div>
+              <div className="mt-2 pt-2 border-t">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => editor.chain().focus().unsetColor().run()}
+                  className="w-full"
+                >
+                  Remove Color
+                </Button>
+              </div>
+            </div>
+          )}
+
+          <Button
+            type="button"
+            variant={editor.isActive("highlight") ? "default" : "ghost"}
+            size="sm"
+            onClick={() => setShowHighlightPicker(!showHighlightPicker)}
+            className="h-8 px-2 gap-1"
+            title="Highlight Color"
+          >
+            <Highlighter className="h-4 w-4" />
+            <div className="h-3 w-3 rounded border" style={{ backgroundColor: currentHighlight }} />
+          </Button>
+          {showHighlightPicker && (
+            <div className="absolute top-10 left-10 z-50 bg-white border rounded-lg shadow-lg p-3 w-64 max-h-80 overflow-y-auto">
+              <div className="grid grid-cols-10 gap-1">
+                {colorPalette.map((color) => (
+                  <button
+                    key={color}
+                    type="button"
+                    className="h-6 w-6 rounded border hover:scale-110 transition-transform"
+                    style={{ backgroundColor: color }}
+                    onClick={() => applyHighlightColor(color)}
+                    title={color}
+                  />
+                ))}
+              </div>
+              <div className="mt-2 pt-2 border-t">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => editor.chain().focus().unsetHighlight().run()}
+                  className="w-full"
+                >
+                  Remove Highlight
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center gap-1 border-r pr-2 mr-1">
+          <Button
+            type="button"
+            variant={editor.isActive("subscript") ? "default" : "ghost"}
+            size="sm"
+            onClick={() => editor.chain().focus().toggleSubscript().run()}
+            className="h-8 w-8 p-0"
+            title="Subscript"
+          >
+            <Subscript className="h-4 w-4" />
+          </Button>
+          <Button
+            type="button"
+            variant={editor.isActive("superscript") ? "default" : "ghost"}
+            size="sm"
+            onClick={() => editor.chain().focus().toggleSuperscript().run()}
+            className="h-8 w-8 p-0"
+            title="Superscript"
+          >
+            <Superscript className="h-4 w-4" />
+          </Button>
+        </div>
+
+        <div className="flex items-center gap-1 border-r pr-2 mr-1">
+          <Button
+            type="button"
+            variant={editor.isActive("bulletList") ? "default" : "ghost"}
+            size="sm"
+            onClick={() => editor.chain().focus().toggleBulletList().run()}
+            className="h-8 w-8 p-0"
+            title="Bullet List"
+          >
+            <List className="h-4 w-4" />
+          </Button>
+          <Button
+            type="button"
+            variant={editor.isActive("orderedList") ? "default" : "ghost"}
+            size="sm"
+            onClick={() => editor.chain().focus().toggleOrderedList().run()}
+            className="h-8 w-8 p-0"
+            title="Numbered List"
+          >
+            <ListOrdered className="h-4 w-4" />
+          </Button>
+        </div>
+
+        <div className="flex items-center gap-1 border-r pr-2 mr-1">
+          <Button
+            type="button"
+            variant={editor.isActive("blockquote") ? "default" : "ghost"}
+            size="sm"
+            onClick={() => editor.chain().focus().toggleBlockquote().run()}
+            className="h-8 w-8 p-0"
+            title="Blockquote"
+          >
+            <Quote className="h-4 w-4" />
+          </Button>
+          <Button
+            type="button"
+            variant={editor.isActive("codeBlock") ? "default" : "ghost"}
+            size="sm"
+            onClick={() => editor.chain().focus().toggleCodeBlock().run()}
+            className="h-8 w-8 p-0"
+            title="Code Block"
+          >
+            <Code className="h-4 w-4" />
+          </Button>
+        </div>
+
+        <div className="flex items-center gap-1 border-r pr-2 mr-1">
+          <Button
+            type="button"
+            variant={editor.isActive({ textAlign: "left" }) ? "default" : "ghost"}
+            size="sm"
+            onClick={() => editor.chain().focus().setTextAlign("left").run()}
+            className="h-8 w-8 p-0"
+            title="Align Left"
+          >
+            <AlignLeft className="h-4 w-4" />
+          </Button>
+          <Button
+            type="button"
+            variant={editor.isActive({ textAlign: "center" }) ? "default" : "ghost"}
+            size="sm"
+            onClick={() => editor.chain().focus().setTextAlign("center").run()}
+            className="h-8 w-8 p-0"
+            title="Align Center"
+          >
+            <AlignCenter className="h-4 w-4" />
+          </Button>
+          <Button
+            type="button"
+            variant={editor.isActive({ textAlign: "right" }) ? "default" : "ghost"}
+            size="sm"
+            onClick={() => editor.chain().focus().setTextAlign("right").run()}
+            className="h-8 w-8 p-0"
+            title="Align Right"
+          >
+            <AlignRight className="h-4 w-4" />
+          </Button>
+        </div>
+
+        <div className="flex items-center gap-1 border-r pr-2 mr-1">
+          <Button
+            type="button"
+            variant={editor.isActive("link") ? "default" : "ghost"}
+            size="sm"
+            onClick={() => {
+              const selection = editor.state.selection;
+              const text = editor.state.doc.textBetween(selection.from, selection.to, ' ');
+              setLinkText(text);
+              setLinkUrl(currentLink?.href || '');
+              setShowLinkDialog(true);
+            }}
+            className="h-8 w-8 p-0"
+            title="Add Link"
+          >
+            <Link2 className="h-4 w-4" />
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={handleRemoveLink}
+            disabled={!editor.isActive("link")}
+            className="h-8 w-8 p-0"
+            title="Remove Link"
+          >
+            <Link2Off className="h-4 w-4" />
+          </Button>
+        </div>
+
+        <div className="flex items-center gap-1">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => editor.chain().focus().undo().run()}
+            disabled={!editor.can().undo()}
+            className="h-8 w-8 p-0"
+            title="Undo (Ctrl+Z)"
+          >
+            <Undo className="h-4 w-4" />
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => editor.chain().focus().redo().run()}
+            disabled={!editor.can().redo()}
+            className="h-8 w-8 p-0"
+            title="Redo (Ctrl+Y)"
+          >
+            <Redo className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+
+      {/* Link Dialog */}
+      {showLinkDialog && (
+        <Dialog open={showLinkDialog} onOpenChange={setShowLinkDialog}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Add/Edit Link</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="link-text">Link Text</Label>
+                <Input
+                  id="link-text"
+                  value={linkText}
+                  onChange={(e) => setLinkText(e.target.value)}
+                  placeholder="Link text"
+                />
+              </div>
+              <div>
+                <Label htmlFor="link-url">URL</Label>
+                <Input
+                  id="link-url"
+                  value={linkUrl}
+                  onChange={(e) => setLinkUrl(e.target.value)}
+                  placeholder="https://example.com"
+                  type="url"
+                />
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setShowLinkDialog(false)}>
+                  Cancel
+                </Button>
+                <Button onClick={handleAddLink}>
+                  Apply Link
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+    </>
   );
 };
 
-// Image Upload Modal with real Supabase upload
-const ImageUploadModal = ({ isOpen, onClose, onUpload, title }: { 
-  isOpen: boolean; 
-  onClose: () => void; 
-  onUpload: (url: string) => void; 
+// --- Image Upload Modal ---
+const ImageUploadModal = ({
+  isOpen,
+  onClose,
+  onUpload,
+  title,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  onUpload: (url: string) => void;
   title: string;
 }) => {
   const [dragActive, setDragActive] = useState(false);
   const [url, setUrl] = useState("");
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const bucketName = process.env.NEXT_PUBLIC_SUPABASE_IMAGE_BUCKET || "exam_images";
+  const bucketName =
+    process.env.NEXT_PUBLIC_SUPABASE_IMAGE_BUCKET || "exam_images";
 
   const showBucketCreationToast = useCallback(() => {
     toast.error(
       <div className="space-y-3 max-w-md">
         <p className="font-bold text-red-700">📁 Storage Bucket Missing</p>
-        <p className="text-sm">The required storage bucket <code className="bg-gray-200 px-2 py-1 rounded font-mono">{bucketName}</code> does not exist.</p>
+        <p className="text-sm">
+          The required storage bucket{" "}
+          <code className="bg-gray-200 px-2 py-1 rounded font-mono">
+            {bucketName}
+          </code>{" "}
+          does not exist.
+        </p>
         <div className="bg-yellow-50 p-3 rounded border border-yellow-200">
           <p className="font-medium text-sm mb-2">🔧 How to fix:</p>
           <ol className="list-decimal ml-4 text-sm space-y-1">
-            <li>Login to <a href="https://supabase.com/dashboard" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline font-medium">Supabase Dashboard</a></li>
-            <li>Select your project</li>
-            <li>Click <strong>Storage</strong> in left menu</li>
-            <li>Click <strong>Create New Bucket</strong> button</li>
-            <li>Bucket Name: <code className="bg-gray-100 px-1 font-mono">{bucketName}</code></li>
-            <li>Set to <strong>Public</strong> access</li>
-            <li>Click <strong>Create Bucket</strong></li>
-            <li>Refresh this page after creation</li>
+            <li>Login to Supabase Dashboard</li>
+            <li>
+              Create bucket:{" "}
+              <code className="bg-gray-100 px-1 font-mono">{bucketName}</code>
+            </li>
+            <li>
+              Set to <strong>Public</strong> access
+            </li>
           </ol>
-          <p className="text-xs mt-3 text-gray-600">💡 Bucket name can be changed in .env.local as NEXT_PUBLIC_SUPABASE_IMAGE_BUCKET</p>
         </div>
       </div>,
-      { 
-        duration: 20000,
-        dismissible: true
-      }
+      { duration: 10000, dismissible: true }
     );
   }, [bucketName]);
 
   const handleDrag = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    if (e.type === "dragenter" || e.type === "dragover") {
-      setDragActive(true);
-    } else if (e.type === "dragleave") {
-      setDragActive(false);
-    }
+    if (e.type === "dragenter" || e.type === "dragover") setDragActive(true);
+    else if (e.type === "dragleave") setDragActive(false);
   };
 
   const handleDrop = (e: React.DragEvent) => {
@@ -207,37 +571,28 @@ const ImageUploadModal = ({ isOpen, onClose, onUpload, title }: {
     setDragActive(false);
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
       const selectedFile = e.dataTransfer.files[0];
-      if (selectedFile.type.startsWith("image/")) {
-        uploadFile(selectedFile);
-      } else {
-        toast.error("❌ Please drop an image file (PNG, JPG, GIF, etc.)");
-      }
+      if (selectedFile.type.startsWith("image/")) uploadFile(selectedFile);
+      else toast.error("❌ Please drop an image file (PNG, JPG, GIF, etc.)");
     }
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
-    if (selectedFile && selectedFile.type.startsWith("image/")) {
+    if (selectedFile && selectedFile.type.startsWith("image/"))
       uploadFile(selectedFile);
-    } else {
-      toast.error("❌ Please select an image file");
-    }
+    else if (selectedFile) toast.error("❌ Please select an image file");
   };
 
   const checkBucketExists = async (): Promise<boolean> => {
     try {
       const { data, error } = await supabase.storage.from(bucketName).list();
-      
-      if (error) {
-        if (error.message?.includes('not found') || error.statusCode === '404' || error.code === '404') {
-          return false;
-        }
-        console.error("Bucket check error:", error);
+      if (
+        error &&
+        (error.message?.includes("not found") || error.statusCode === "404")
+      )
         return false;
-      }
       return true;
-    } catch (err) {
-      console.error("Bucket check exception:", err);
+    } catch {
       return false;
     }
   };
@@ -251,57 +606,29 @@ const ImageUploadModal = ({ isOpen, onClose, onUpload, title }: {
         return;
       }
 
-      const fileExt = selectedFile.name.split('.').pop();
-      const fileName = `${Date.now()}_${Math.random().toString(36).substring(2, 15)}.${fileExt}`;
+      const fileExt = selectedFile.name.split(".").pop();
+      const fileName = `${Date.now()}_${Math.random()
+        .toString(36)
+        .substring(2, 15)}.${fileExt}`;
       const filePath = `exam-images/${fileName}`;
-      
-      const { data, error } = await supabase.storage
+
+      const { error } = await supabase.storage
         .from(bucketName)
         .upload(filePath, selectedFile, {
-          cacheControl: '3600',
-          upsert: false
+          cacheControl: "3600",
+          upsert: false,
         });
-
-      if (error) {
-        console.error("Upload error:", error);
-        
-        if (error.message?.includes('row-level security') || error.message?.includes('policy')) {
-          toast.error(
-            <div className="text-left max-w-md">
-              <p className="font-semibold mb-2">🔐 Storage Policy Issue</p>
-              <p className="mb-3">Bucket exists but upload permissions are missing.</p>
-              <div className="text-sm space-y-2">
-                <p><strong>To fix in Supabase Dashboard:</strong></p>
-                <ol className="list-decimal ml-4 space-y-1">
-                  <li>Go to <strong>Storage</strong> → <strong>Policies</strong></li>
-                  <li>Click <strong>Create Policy</strong> for {bucketName}</li>
-                  <li>Select <strong>Enable INSERT for all users</strong></li>
-                  <li>Save policy and try again</li>
-                </ol>
-              </div>
-            </div>,
-            { duration: 15000 }
-          );
-        } else if (error.message?.includes('File size exceeds')) {
-          toast.error("❌ File size exceeds limit (max 5MB)");
-        } else {
-          toast.error(`Upload failed: ${error.message || 'Unknown error'}`);
-        }
-        return;
-      }
+      if (error) throw error;
 
       const { data: publicData } = supabase.storage
         .from(bucketName)
         .getPublicUrl(filePath);
-
-      const imageUrl = publicData.publicUrl;
-      
-      onUpload(imageUrl);
+      onUpload(publicData.publicUrl);
       toast.success("✅ Image uploaded successfully!");
       onClose();
-    } catch (err) {
+    } catch (err: any) {
       console.error("Upload exception:", err);
-      toast.error("❌ Failed to upload image. Please try again or use URL upload.");
+      toast.error(`Upload failed: ${err.message || "Unknown error"}`);
     } finally {
       setUploading(false);
     }
@@ -318,9 +645,7 @@ const ImageUploadModal = ({ isOpen, onClose, onUpload, title }: {
       } catch {
         toast.error("❌ Please enter a valid URL");
       }
-    } else {
-      toast.error("❌ Please enter an image URL");
-    }
+    } else toast.error("❌ Please enter an image URL");
   };
 
   if (!isOpen) return null;
@@ -337,7 +662,9 @@ const ImageUploadModal = ({ isOpen, onClose, onUpload, title }: {
         <div className="space-y-4">
           <div
             className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${
-              dragActive ? "border-primary bg-primary/5" : "border-muted-foreground/25"
+              dragActive
+                ? "border-primary bg-primary/5"
+                : "border-muted-foreground/25"
             } ${uploading ? "opacity-50 pointer-events-none" : ""}`}
             onDragEnter={handleDrag}
             onDragLeave={handleDrag}
@@ -347,10 +674,7 @@ const ImageUploadModal = ({ isOpen, onClose, onUpload, title }: {
             {uploading ? (
               <div className="flex flex-col items-center gap-3">
                 <Loader2 className="h-10 w-10 animate-spin text-primary" />
-                <div className="space-y-1">
-                  <p className="text-sm font-medium">Uploading...</p>
-                  <p className="text-xs text-muted-foreground">Please wait</p>
-                </div>
+                <p className="text-sm font-medium">Uploading...</p>
               </div>
             ) : (
               <>
@@ -361,9 +685,9 @@ const ImageUploadModal = ({ isOpen, onClose, onUpload, title }: {
                 <p className="text-xs text-muted-foreground mb-4">
                   Supports: JPG, PNG, GIF, WebP (Max 5MB)
                 </p>
-                <Button 
+                <Button
                   type="button"
-                  variant="outline" 
+                  variant="outline"
                   onClick={() => fileInputRef.current?.click()}
                   className="gap-2"
                 >
@@ -385,7 +709,9 @@ const ImageUploadModal = ({ isOpen, onClose, onUpload, title }: {
               <span className="w-full border-t" />
             </div>
             <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-background px-3 text-muted-foreground font-medium">Or</span>
+              <span className="bg-background px-3 text-muted-foreground font-medium">
+                Or
+              </span>
             </div>
           </div>
           <div className="space-y-2">
@@ -398,8 +724,8 @@ const ImageUploadModal = ({ isOpen, onClose, onUpload, title }: {
                 onChange={(e) => setUrl(e.target.value)}
                 className="flex-1"
               />
-              <Button 
-                onClick={handleUrlUpload} 
+              <Button
+                onClick={handleUrlUpload}
                 disabled={!url.trim()}
                 className="gap-2"
               >
@@ -407,15 +733,28 @@ const ImageUploadModal = ({ isOpen, onClose, onUpload, title }: {
                 Add URL
               </Button>
             </div>
-            <p className="text-xs text-muted-foreground">
-              Enter a direct image URL (must end with .jpg, .png, .gif, etc.)
-            </p>
           </div>
         </div>
       </DialogContent>
     </Dialog>
   );
 };
+
+// --- Helper Interfaces & Components ---
+
+interface BlankField {
+  id: string;
+  correctAnswer: string;
+  placeholder?: string;
+  points?: number;
+}
+
+interface MatchingPair {
+  sideA: string;
+  sideB: string;
+  correctMatch: string | null;
+  points?: number;
+}
 
 interface Question {
   id: number;
@@ -427,7 +766,10 @@ interface Question {
   points: number;
   options: Array<{ text: string; image: string | null }>;
   correctAnswer: number;
-  createdOrder: number; // NEW: Track creation order
+  createdOrder: number;
+  blanks?: BlankField[];
+  matchingInstructions?: string;
+  matchingPairs?: MatchingPair[];
 }
 
 interface TeacherData {
@@ -440,11 +782,310 @@ interface TeacherData {
   subjectName?: string;
 }
 
+// Underlined Input Component for MCQ Options with KaTeX preview
+const UnderlinedOptionInput = ({
+  value,
+  onChange,
+  placeholder,
+  showKaTeXPreview = false,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+  showKaTeXPreview?: boolean;
+}) => {
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = "auto";
+      const scrollHeight = textareaRef.current.scrollHeight;
+      const maxHeight = 120;
+      textareaRef.current.style.height = `${Math.min(scrollHeight, maxHeight)}px`;
+    }
+  }, [value]);
+
+  const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    onChange(e.target.value);
+  };
+
+  return (
+    <div className="relative w-full">
+      <textarea
+        ref={textareaRef}
+        value={value}
+        onChange={handleChange}
+        placeholder={placeholder}
+        className="w-full px-2 py-2 text-sm border-0 border-b-2 border-dashed border-gray-300 focus:border-primary focus:outline-none bg-transparent resize-none overflow-y-auto min-h-[40px] max-h-[120px]"
+        rows={1}
+      />
+      {showKaTeXPreview && value && value.includes("$") && (
+        <div className="mt-1 p-2 bg-muted/20 rounded text-xs">
+          <div className="font-medium text-xs mb-1">KaTeX Preview:</div>
+          {renderWithMath(value)}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Underlined Input Component for Matching Pairs with KaTeX preview
+const UnderlinedMatchingInput = ({
+  value,
+  onChange,
+  placeholder,
+  showKaTeXPreview = false,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+  showKaTeXPreview?: boolean;
+}) => {
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = "auto";
+      const scrollHeight = textareaRef.current.scrollHeight;
+      const maxHeight = 100;
+      textareaRef.current.style.height = `${Math.min(scrollHeight, maxHeight)}px`;
+    }
+  }, [value]);
+
+  const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    onChange(e.target.value);
+  };
+
+  return (
+    <div className="relative w-full">
+      <textarea
+        ref={textareaRef}
+        value={value}
+        onChange={handleChange}
+        placeholder={placeholder}
+        className="w-full px-2 py-2 text-sm border-0 border-b-2 border-dashed border-gray-300 focus:border-primary focus:outline-none bg-transparent resize-none overflow-y-auto min-h-[40px] max-h-[100px]"
+        rows={1}
+      />
+      {showKaTeXPreview && value && value.includes("$") && (
+        <div className="mt-1 p-2 bg-muted/20 rounded text-xs">
+          <div className="font-medium text-xs mb-1">KaTeX Preview:</div>
+          {renderWithMath(value)}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Correct Answer Input for Matching Preview
+const CorrectAnswerInput = ({
+  value,
+  onChange,
+  pairs,
+  index,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  pairs: MatchingPair[];
+  index: number;
+}) => {
+  const inputRef = useRef<HTMLInputElement>(null);
+  
+  const availableOptions = pairs.map((_, idx) => 
+    String.fromCharCode(65 + idx)
+  );
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    let newValue = e.target.value.toUpperCase();
+    newValue = newValue.replace(/[^A-Z]/g, '');
+    
+    if (newValue && !availableOptions.includes(newValue)) {
+      return;
+    }
+    
+    onChange(newValue);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!/^[a-zA-Z]$/.test(e.key) && 
+        e.key !== 'Backspace' && 
+        e.key !== 'Delete' && 
+        e.key !== 'ArrowLeft' && 
+        e.key !== 'ArrowRight' &&
+        e.key !== 'Tab') {
+      e.preventDefault();
+    }
+  };
+
+  return (
+    <div className="relative">
+      <input
+        ref={inputRef}
+        type="text"
+        value={value || ""}
+        onChange={handleChange}
+        onKeyDown={handleKeyDown}
+        className="w-12 px-1 py-0.5 text-center text-sm border-0 border-b-2 border-gray-400 focus:border-primary focus:outline-none bg-transparent"
+        placeholder="A"
+        maxLength={1}
+      />
+    </div>
+  );
+};
+
+// Blank Preview Component
+const BlankPreviewInput = ({
+  value,
+  onChange,
+  pointsPerBlank,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  pointsPerBlank?: number;
+}) => {
+  const inputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (inputRef.current) {
+      const tempSpan = document.createElement("span");
+      tempSpan.style.visibility = "hidden";
+      tempSpan.style.position = "absolute";
+      tempSpan.style.font = window.getComputedStyle(inputRef.current).font;
+      tempSpan.textContent = value || " ";
+      document.body.appendChild(tempSpan);
+      const width = tempSpan.offsetWidth;
+      document.body.removeChild(tempSpan);
+      inputRef.current.style.width = `${Math.max(
+        80,
+        Math.min(width + 20, 300)
+      )}px`;
+    }
+  }, [value]);
+
+  return (
+    <div className="inline-flex items-center gap-1 mx-1">
+      <input
+        ref={inputRef}
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="inline-block px-2 py-1 border-b-2 border-dashed border-gray-400 focus:border-primary focus:outline-none bg-transparent min-w-[80px] transition-all"
+        placeholder="Type answer..."
+        style={{ width: "80px" }}
+      />
+      {pointsPerBlank && (
+        <span className="text-xs text-green-600 font-medium">
+          ({pointsPerBlank.toFixed(1)} pts)
+        </span>
+      )}
+    </div>
+  );
+};
+
+// Matching Preview Component
+const MatchingPreview = ({
+  pairs,
+  instructions,
+  onCorrectAnswerChange,
+  pointsPerMatch,
+}: {
+  pairs: MatchingPair[];
+  instructions?: string;
+  onCorrectAnswerChange?: (index: number, answer: string) => void;
+  pointsPerMatch?: number;
+}) => {
+  const totalPoints = pointsPerMatch ? pointsPerMatch * pairs.length : 0;
+
+  return (
+    <div className="rounded-lg p-4 bg-white border shadow-sm">
+      {instructions && (
+        <div className="mb-4 p-3 bg-slate-50 rounded border-l-4 border-slate-300">
+          <p className="text-sm font-bold mb-1 text-slate-700">Instructions:</p>
+          <p className="text-sm text-slate-600">{instructions}</p>
+        </div>
+      )}
+
+      {pointsPerMatch && (
+        <div className="mb-4 p-2 bg-blue-50 rounded border border-blue-100">
+          <p className="text-xs font-semibold text-blue-700 uppercase tracking-wider">
+            Scoring: {pointsPerMatch.toFixed(1)} pts per match | Total: {totalPoints.toFixed(1)} pts
+          </p>
+        </div>
+      )}
+
+      <div className="bg-white rounded-lg border overflow-hidden">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-0 divide-x divide-gray-200">
+          {/* Column A */}
+          <div className="flex flex-col">
+            <div className="p-3 border-b bg-gray-50/50">
+              <h3 className="text-center font-bold text-gray-800 uppercase tracking-tight">
+                Column A
+              </h3>
+            </div>
+            <div className="">
+              {pairs.map((pair, idx) => (
+                <div key={idx} className="p-4 hover:bg-gray-50/30 transition-colors">
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <div className="w-10">
+                        <CorrectAnswerInput
+                          value={pair.correctMatch || ""}
+                          onChange={(value) => onCorrectAnswerChange?.(idx, value)}
+                          pairs={pairs}
+                          index={idx}
+                        />
+                      </div>
+                      <div className="w-7 h-7 rounded-full bg-blue-600 text-white text-sm font-bold flex items-center justify-center">
+                        {idx + 1}
+                      </div>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-base text-gray-700 leading-relaxed break-words whitespace-pre-wrap">
+                        {renderWithMath(pair.sideA)}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Column B */}
+          <div className="flex flex-col">
+            <div className="p-3 border-b bg-gray-50/50">
+              <h3 className="text-center font-bold text-gray-800 uppercase tracking-tight">
+                Column B
+              </h3>
+            </div>
+            <div className="">
+              {pairs.map((pair, idx) => (
+                <div key={idx} className="p-4 hover:bg-gray-50/30 transition-colors">
+                  <div className="flex items-center gap-3">
+                    <div className="w-7 h-7 rounded-full bg-emerald-600 text-white text-sm font-bold flex items-center justify-center flex-shrink-0">
+                      {String.fromCharCode(65 + idx)}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-base text-gray-700 leading-relaxed break-words whitespace-pre-wrap">
+                        {renderWithMath(pair.sideB)}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// --- Main Page Component ---
+
 export default function EditExamPage() {
   const router = useRouter();
   const params = useParams();
   const examId = params.slug as string;
   
+  // State
   const [currentStep, setCurrentStep] = useState(1);
   const [examTitle, setExamTitle] = useState("");
   const [examCode, setExamCode] = useState("");
@@ -452,16 +1093,31 @@ export default function EditExamPage() {
   const [examSubject, setExamSubject] = useState("");
   const [examInstructions, setExamInstructions] = useState("");
   const [examTime, setExamTime] = useState(60);
+  const [examDate, setExamDate] = useState("");
   const [questions, setQuestions] = useState<Question[]>([]);
-  const [newQuestion, setNewQuestion] = useState({
+  const [newQuestion, setNewQuestion] = useState<Question>({
+    id: 0,
     question: "",
     passage: "",
     passageHtml: "",
-    questionImage: null as string | null,
+    questionImage: null,
     type: "mcq",
     points: 1,
-    options: [{ text: "", image: null }, { text: "", image: null }, { text: "", image: null }, { text: "", image: null }] as Array<{ text: string; image: string | null }>,
+    options: [
+      { text: "", image: null },
+      { text: "", image: null },
+      { text: "", image: null },
+      { text: "", image: null },
+    ],
     correctAnswer: 0,
+    createdOrder: 0,
+    matchingPairs: Array.from({ length: 4 }, () => ({
+      sideA: "",
+      sideB: "",
+      correctMatch: null,
+    })),
+    matchingInstructions: "",
+    blanks: [],
   });
   const [editingIndex, setEditingIndex] = useState(-1);
   const [shuffleQuestions, setShuffleQuestions] = useState(false);
@@ -481,80 +1137,118 @@ export default function EditExamPage() {
   const [teacherSubjectName, setTeacherSubjectName] = useState("");
   const [savingExam, setSavingExam] = useState(false);
   const [optionPreview, setOptionPreview] = useState<string[]>([]);
-  const [examDate, setExamDate] = useState("");
-  const [questionCounter, setQuestionCounter] = useState(1); // Track question order
+  const [questionCounter, setQuestionCounter] = useState(1);
+  const [mounted, setMounted] = useState(false);
+  
+  const [blankCursorPos, setBlankCursorPos] = useState<number | null>(null);
+  const questionTextareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // TipTap editor for passage with rich text support
+  // Initialize mounted state
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // Rich Text Editor with KaTeX support
   const passageEditor = useEditor({
     extensions: [
-      StarterKit,
-      UnderlineExtension,
-      TextAlign.configure({
+      StarterKit.configure({
+        codeBlock: false,
+      }),
+      Underline,
+      Strike,
+      Highlight.configure({ multicolor: true }),
+      SubscriptExtension,
+      SuperscriptExtension,
+      TextStyle,
+      Color,
+      Heading.configure({
+        levels: [2, 3, 4],
+      }),
+      Blockquote,
+      CodeBlock.configure({
+        HTMLAttributes: {
+          class: 'code-block',
+        },
+      }),
+      TextAlign.configure({ 
         types: ['heading', 'paragraph'],
+        alignments: ['left', 'center', 'right'],
+        defaultAlignment: 'left',
+      }),
+      Placeholder.configure({
+        placeholder: 'Start typing your passage here...',
+      }),
+      Link.configure({
+        openOnClick: false,
+        HTMLAttributes: {
+          class: 'text-primary underline',
+        },
       }),
     ],
-    content: newQuestion.passageHtml || '',
+    content: newQuestion.passageHtml || "",
     onUpdate: ({ editor }) => {
-      const html = editor.getHTML();
-      const text = editor.getText();
-      setNewQuestion(prev => ({
+      setNewQuestion((prev) => ({
         ...prev,
-        passageHtml: html,
-        passage: text
+        passageHtml: editor.getHTML(),
+        passage: editor.getText(),
       }));
+    },
+    editorProps: {
+      attributes: {
+        class: 'prose prose-sm max-w-none focus:outline-none min-h-[200px] p-4',
+        spellcheck: 'false',
+      },
     },
     immediatelyRender: false,
   });
 
-  // Update editor content when editing a question
   useEffect(() => {
-    if (passageEditor && newQuestion.passageHtml !== passageEditor.getHTML()) {
-      passageEditor.commands.setContent(newQuestion.passageHtml || '');
-    }
+    if (passageEditor && newQuestion.passageHtml !== passageEditor.getHTML())
+      passageEditor.commands.setContent(newQuestion.passageHtml || "");
   }, [editingIndex, passageEditor, newQuestion.passageHtml]);
 
-  // Update option preview when options change
   useEffect(() => {
-    const previews = newQuestion.options.map(opt => opt.text);
-    setOptionPreview(previews);
+    setOptionPreview(newQuestion.options.map((opt) => opt.text));
   }, [newQuestion.options]);
 
   const questionTypes = [
     { value: "mcq", label: "Multiple Choice" },
     { value: "passage", label: "Passage-based Multiple Choice" },
     { value: "tf", label: "True/False" },
+    { value: "matching", label: "Matching" },
+    { value: "blank", label: "Fill in the Blank" },
   ];
 
+  // Load exam data
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
       try {
+        // Get teacher data
         const teacher = await getTeacherDataFromCookie();
-        
         if (!teacher || !teacher.teacherId) {
           toast.error("❌ Please login as a teacher");
-          router.push("/login/tech");
+          router.push("/teacher/login");
           return;
         }
-
         setTeacherData(teacher);
 
-        // Fetch exam data
+        // Get exam data
         const { data: examData, error: examError } = await supabase
           .from("exams")
           .select("*")
           .eq("id", examId)
           .single();
-
+        
         if (examError || !examData) {
           toast.error("❌ Exam not found");
           router.push("/teacher/exams");
           return;
         }
 
-        // Verify ownership
+        // Check if teacher owns this exam
         if (examData.created_by !== teacher.teacherId) {
-          toast.error("❌ Unauthorized access");
+          toast.error("❌ You don't have permission to edit this exam");
           router.push("/teacher/exams");
           return;
         }
@@ -572,118 +1266,123 @@ export default function EditExamPage() {
         setShuffleOptions(examData.options_shuffled || false);
         setShowResults(examData.show_results !== false);
 
-        // Fetch teacher's assigned grade and subject names
-        const { data: teacherDbData } = await supabase
-          .from("teacher")
-          .select("grade_id, subject_id")
-          .eq("id", teacher.teacherId)
-          .single();
-
-        if (teacherDbData) {
-          if (teacherDbData.grade_id) {
-            const { data: gradeData } = await supabase
-              .from("grades")
-              .select("grade_name")
-              .eq("id", teacherDbData.grade_id)
-              .single();
-            setTeacherGradeName(gradeData?.grade_name || "");
-          }
-          
-          if (teacherDbData.subject_id) {
-            const { data: subjectData } = await supabase
-              .from("subjects")
-              .select("subject_name")
-              .eq("id", teacherDbData.subject_id)
-              .single();
-            setTeacherSubjectName(subjectData?.subject_name || "");
-          }
-        }
-
-        // Fetch grades and subjects
-        const [gradesResult, subjectsResult] = await Promise.all([
+        // Load grades and subjects
+        const [gradesRes, subjectsRes] = await Promise.all([
           supabase.from("grades").select("id, grade_name"),
-          supabase.from("subjects").select("id, subject_name")
+          supabase.from("subjects").select("id, subject_name"),
         ]);
+        setGrades(gradesRes.data || []);
+        setSubjects(subjectsRes.data || []);
+        
+        setTeacherGradeName(gradesRes.data?.find(g => g.id === examData.grade_id)?.grade_name || "");
+        setTeacherSubjectName(subjectsRes.data?.find(s => s.id === examData.subject_id)?.subject_name || "");
 
-        setGrades(gradesResult.data || []);
-        setSubjects(subjectsResult.data || []);
-
-        // Fetch questions
-        const { data: questionsData, error: questionsError } = await supabase
+        // Load questions
+        const { data: questionsData } = await supabase
           .from("questions")
           .select("*")
           .eq("exam_id", examId)
           .order("id");
+        
+        if (questionsData) {
+          const processedQuestions: Question[] = questionsData.map((q, index) => {
+            const { passage, passageHtml, question } = parseQuestionText(q.question_text);
+            
+            // Determine question type
+            let type = "mcq";
+            if (q.question_type === "matching") type = "matching";
+            else if (q.question_type === "fill_blank") type = "blank";
+            else if (q.question_type === "true_false") type = "tf";
+            else if (passageHtml) type = "passage";
 
-        if (questionsError) {
-          toast.error("❌ Failed to load questions");
-          return;
-        }
-
-        const processedQuestions: Question[] = questionsData.map((q, index) => {
-          let options: Array<{ text: string; image: string | null }> = [];
-          let correctAnswer = 0;
-          
-          // Parse question text using helper function
-          const { passage, passageHtml, question } = parseQuestionText(q.question_text);
-          
-          // Determine question type based on content
-          let type = "mcq";
-          if (passageHtml) {
-            type = "passage";
-          } else if (q.question_type === "true_false") {
-            type = "tf";
-          }
-          
-          // Parse options
-          if (q.options) {
-            try {
+            // Parse options
+            let options: Array<{ text: string; image: string | null }> = [];
+            let correctAnswer = 0;
+            
+            if (q.options) {
               const parsed = typeof q.options === 'string' ? JSON.parse(q.options) : q.options;
-              if (parsed.options && parsed.correct_option_id !== undefined) {
-                options = parsed.options.map((text: string, idx: number) => ({ 
-                  text, 
-                  image: parsed.option_images ? parsed.option_images[idx] || null : null 
+              if (parsed.options) {
+                options = parsed.options.map((text: string, idx: number) => ({
+                  text,
+                  image: parsed.option_images?.[idx] || null
                 }));
-                correctAnswer = parsed.correct_option_id;
+                correctAnswer = q.correct_option_id || 0;
               }
-            } catch (e) {
-              console.error("Error parsing options:", e);
             }
-          }
 
-          return {
-            id: q.id,
-            type: type,
-            question: question,
-            passage: passage,
-            passageHtml: passageHtml,
-            options: options.length > 0 ? options : Array(4).fill({ text: "", image: null }),
-            correctAnswer: correctAnswer,
-            points: q.marks || 1,
-            questionImage: q.image_url || null,
-            createdOrder: index + 1, // Preserve database order
-          };
-        });
+            // Parse metadata for matching and blank questions
+            let matchingPairs: MatchingPair[] = [];
+            let matchingInstructions = q.question_text || "";
+            let blanks: BlankField[] = [];
+            
+            if (q.metadata) {
+              const meta = typeof q.metadata === 'string' ? JSON.parse(q.metadata) : q.metadata;
+              
+              if (type === "matching") {
+                if (meta.pairs) {
+                  matchingPairs = meta.pairs.map((pair: any) => ({
+                    sideA: pair.sideA || "",
+                    sideB: pair.sideB || "",
+                    correctMatch: pair.correctMatch || null,
+                  }));
+                }
+              } else if (type === "blank") {
+                if (meta.blanks) {
+                  blanks = meta.blanks.map((blank: any, idx: number) => ({
+                    id: blank.id || `blank_${Date.now()}_${idx}`,
+                    correctAnswer: blank.correctAnswer || "",
+                  }));
+                }
+              }
+            }
 
-        setQuestions(processedQuestions);
-        setQuestionCounter(processedQuestions.length > 0 ? processedQuestions.length + 1 : 1);
+            // Ensure matching pairs array has at least 4 items
+            while (matchingPairs.length < 4) {
+              matchingPairs.push({
+                sideA: "",
+                sideB: "",
+                correctMatch: null,
+              });
+            }
 
+            return {
+              id: q.id,
+              type,
+              question,
+              passage,
+              passageHtml,
+              options: options.length ? options : Array(4).fill({ text: "", image: null }),
+              correctAnswer,
+              points: q.marks || 1,
+              questionImage: q.image_url || null,
+              createdOrder: index + 1,
+              matchingPairs,
+              matchingInstructions,
+              blanks,
+            };
+          });
+          
+          setQuestions(processedQuestions);
+          setQuestionCounter(processedQuestions.length + 1);
+        }
       } catch (error) {
-        console.error("Error fetching exam data:", error);
-        toast.error("❌ Failed to load exam data. Please try again.");
-        router.push("/teacher/exams");
+        console.error("Error loading exam:", error);
+        toast.error("❌ Failed to load exam data.");
       } finally {
         setLoading(false);
       }
     };
-
+    
     fetchData();
   }, [examId, router]);
 
+  // Handle question type change
   useEffect(() => {
     let updatedOptions: Array<{ text: string; image: string | null }> = [];
     let updatedCorrect = newQuestion.correctAnswer;
-
+    let updatedMatchingPairs = newQuestion.matchingPairs;
+    let updatedBlanks = newQuestion.blanks;
+    
     switch (newQuestion.type) {
       case "tf":
         updatedOptions = [
@@ -694,26 +1393,51 @@ export default function EditExamPage() {
         break;
       case "mcq":
       case "passage":
-        if (newQuestion.options.length < 4) {
-          updatedOptions = Array(4).fill(null).map(() => ({ text: "", image: null }));
-        } else {
-          updatedOptions = newQuestion.options;
+        updatedOptions =
+          newQuestion.options.length < 4
+            ? Array(4)
+                .fill(null)
+                .map(() => ({ text: "", image: null }))
+            : newQuestion.options;
+        break;
+      case "matching":
+        updatedOptions = [];
+        updatedCorrect = 0;
+        if (!updatedMatchingPairs || updatedMatchingPairs.length === 0) {
+          updatedMatchingPairs = Array.from({ length: 4 }, () => ({
+            sideA: "",
+            sideB: "",
+            correctMatch: null,
+          }));
+        }
+        break;
+      case "blank":
+        updatedOptions = [];
+        updatedCorrect = 0;
+        if (!updatedBlanks || updatedBlanks.length === 0) {
+          updatedBlanks = [];
         }
         break;
       default:
         updatedOptions = newQuestion.options;
         break;
     }
-
-    setNewQuestion(prev => ({
+    
+    setNewQuestion((prev) => ({
       ...prev,
       options: updatedOptions,
       correctAnswer: updatedCorrect,
+      matchingPairs: updatedMatchingPairs,
+      blanks: updatedBlanks,
     }));
   }, [newQuestion.type]);
 
+  // --- Handlers ---
+
   const handleQuestionChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setNewQuestion({ ...newQuestion, question: e.target.value });
+    if (questionTextareaRef.current)
+      setBlankCursorPos(questionTextareaRef.current.selectionStart);
   };
 
   const openImageModal = (type: string) => {
@@ -722,84 +1446,206 @@ export default function EditExamPage() {
   };
 
   const handleImageUpload = (imageUrl: string) => {
-    if (imageUploadType === "question") {
+    if (imageUploadType === "question")
       setNewQuestion({ ...newQuestion, questionImage: imageUrl });
-    } else if (imageUploadType && imageUploadType.startsWith("option-")) {
+    else if (imageUploadType && imageUploadType.startsWith("option-")) {
       const idx = parseInt(imageUploadType.split("-")[1]);
-      const newOptions = [...newQuestion.options];
-      newOptions[idx].image = imageUrl;
+      const newOptions = newQuestion.options.map((opt, i) =>
+        i === idx ? { ...opt, image: imageUrl } : opt
+      );
       setNewQuestion({ ...newQuestion, options: newOptions });
     }
   };
 
   const clearImage = (type: string) => {
-    if (type === "question") {
+    if (type === "question")
       setNewQuestion({ ...newQuestion, questionImage: null });
-    } else if (type && type.startsWith("option-")) {
+    else if (type && type.startsWith("option-")) {
       const idx = parseInt(type.split("-")[1]);
-      const newOptions = [...newQuestion.options];
-      newOptions[idx].image = null;
+      const newOptions = newQuestion.options.map((opt, i) =>
+        i === idx ? { ...opt, image: null } : opt
+      );
       setNewQuestion({ ...newQuestion, options: newOptions });
     }
     setImageHover(null);
-    toast.success("🗑️ Image removed!");
   };
 
   const handleOptionChange = (index: number, value: string) => {
     if (newQuestion.type === "tf") return;
-    const newOptions = [...newQuestion.options];
-    newOptions[index].text = value;
+    const newOptions = newQuestion.options.map((opt, i) =>
+      i === index ? { ...opt, text: value } : opt
+    );
     setNewQuestion({ ...newQuestion, options: newOptions });
   };
 
   const addOption = () => {
     if (newQuestion.type === "tf") return;
-    setNewQuestion({ ...newQuestion, options: [...newQuestion.options, { text: "", image: null }] });
+    setNewQuestion({
+      ...newQuestion,
+      options: [...newQuestion.options, { text: "", image: null }],
+    });
   };
 
   const removeOption = (index: number) => {
     if (newQuestion.type === "tf" || newQuestion.options.length <= 2) return;
     const newOptions = newQuestion.options.filter((_, i) => i !== index);
-    setNewQuestion({ 
-      ...newQuestion, 
+    setNewQuestion({
+      ...newQuestion,
       options: newOptions,
-      correctAnswer: newQuestion.correctAnswer >= newOptions.length ? 0 : newQuestion.correctAnswer
+      correctAnswer:
+        newQuestion.correctAnswer >= newOptions.length
+          ? 0
+          : newQuestion.correctAnswer,
     });
   };
 
-  const isAddQuestionValid = () => {
-    if (newQuestion.type === "passage" && newQuestion.passage.trim() === "") {
-      return false;
-    }
-    return newQuestion.question.trim() !== "" && 
-           newQuestion.options.every(opt => opt.text.trim() !== "") && 
-           newQuestion.options.length >= 2 &&
-           newQuestion.correctAnswer >= 0;
+  // Blank question handlers
+  const handleAddBlank = () => {
+    if (!questionTextareaRef.current) return;
+    const cursorPos =
+      blankCursorPos !== null
+        ? blankCursorPos
+        : questionTextareaRef.current.selectionStart;
+    const blankId = `blank_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const newQuestionText =
+      newQuestion.question.slice(0, cursorPos) +
+      `[BLANK:${blankId}]` +
+      newQuestion.question.slice(cursorPos);
+    setNewQuestion((prev) => ({
+      ...prev,
+      question: newQuestionText,
+      blanks: [
+        ...(prev.blanks || []),
+        {
+          id: blankId,
+          correctAnswer: "",
+          placeholder: "Enter correct answer...",
+        },
+      ],
+    }));
   };
 
+  const updateBlankAnswer = (blankId: string, answer: string) => {
+    setNewQuestion((prev) => ({
+      ...prev,
+      blanks: (prev.blanks || []).map((blank) =>
+        blank.id === blankId ? { ...blank, correctAnswer: answer } : blank
+      ),
+    }));
+  };
+
+  const removeBlank = (blankId: string) => {
+    setNewQuestion((prev) => ({
+      ...prev,
+      question: prev.question.replace(`[BLANK:${blankId}]`, ""),
+      blanks: (prev.blanks || []).filter((blank) => blank.id !== blankId),
+    }));
+  };
+
+  // Matching question handlers
+  const updateMatchingInstructions = (instructions: string) =>
+    setNewQuestion((prev) => ({ ...prev, matchingInstructions: instructions }));
+
+  const updateMatchingPair = (
+    index: number,
+    field: "sideA" | "sideB",
+    value: string
+  ) => {
+    setNewQuestion((prev) => {
+      const newPairs = [...(prev.matchingPairs || [])];
+      if (!newPairs[index])
+        newPairs[index] = {
+          sideA: "",
+          sideB: "",
+          correctMatch: null,
+        };
+      newPairs[index] = { ...newPairs[index], [field]: value };
+      return { ...prev, matchingPairs: newPairs };
+    });
+  };
+
+  const updateMatchingCorrectAnswer = (index: number, answer: string) => {
+    setNewQuestion((prev) => {
+      const newPairs = [...(prev.matchingPairs || [])];
+      if (!newPairs[index]) return prev;
+      newPairs[index] = { ...newPairs[index], correctMatch: answer };
+      return { ...prev, matchingPairs: newPairs };
+    });
+  };
+
+  const addMatchingPair = () =>
+    setNewQuestion((prev) => ({
+      ...prev,
+      matchingPairs: [
+        ...(prev.matchingPairs || []),
+        { sideA: "", sideB: "", correctMatch: null },
+      ],
+    }));
+
+  const removeMatchingPair = (index: number) => {
+    setNewQuestion((prev) => {
+      const newPairs = [...(prev.matchingPairs || [])];
+      newPairs.splice(index, 1);
+      return { ...prev, matchingPairs: newPairs };
+    });
+  };
+
+  // Question validation
+  const isAddQuestionValid = () => {
+    if (newQuestion.type === "passage" && newQuestion.passage.trim() === "")
+      return false;
+    if (newQuestion.type === "matching") {
+      const pairs = newQuestion.matchingPairs || [];
+      const validPairs = pairs.filter(p => p.sideA.trim() !== "" && p.sideB.trim() !== "");
+      return (
+        validPairs.length >= 2 &&
+        validPairs.every((pair) => pair.correctMatch && pair.correctMatch.trim() !== "")
+      );
+    }
+    if (newQuestion.type === "blank")
+      return (
+        newQuestion.question.trim() !== "" &&
+        (newQuestion.blanks || []).length > 0 &&
+        (newQuestion.blanks || []).every(
+          (blank) => blank.correctAnswer.trim() !== ""
+        )
+      );
+    return (
+      newQuestion.question.trim() !== "" &&
+      newQuestion.options.every((opt) => opt.text.trim() !== "") &&
+      newQuestion.options.length >= 2 &&
+      newQuestion.correctAnswer >= 0
+    );
+  };
+
+  // Add or update question
   const addOrUpdateQuestion = () => {
     if (!isAddQuestionValid()) {
       toast.error("❌ Please fill all required fields");
       return;
     }
+
+    let questionToAdd = { 
+      ...newQuestion,
+      createdOrder: editingIndex === -1 ? questionCounter : newQuestion.createdOrder
+    };
+    
+    // Filter out empty matching pairs
+    if (questionToAdd.type === "matching" && questionToAdd.matchingPairs) {
+      questionToAdd.matchingPairs = questionToAdd.matchingPairs.filter(
+        pair => pair.sideA.trim() !== "" && pair.sideB.trim() !== ""
+      );
+    }
     
     if (editingIndex === -1) {
-      // Add new question with order tracking
-      const newQ: Question = { 
-        ...newQuestion, 
-        id: Date.now(),
-        createdOrder: questionCounter // Use current counter
-      };
-      setQuestions([...questions, newQ]);
-      setQuestionCounter(questionCounter + 1); // Increment counter
-      toast.success(`✅ Question ${questionCounter} added successfully!`);
+      setQuestions([...questions, { ...questionToAdd, id: Date.now() }]);
+      setQuestionCounter(prev => prev + 1);
+      toast.success("✅ Question added successfully!");
     } else {
-      // Update existing question - preserve order
       const updated = [...questions];
-      updated[editingIndex] = { 
-        ...newQuestion, 
+      updated[editingIndex] = {
+        ...questionToAdd,
         id: updated[editingIndex].id,
-        createdOrder: updated[editingIndex].createdOrder // Keep original order
       };
       setQuestions(updated);
       setEditingIndex(-1);
@@ -810,206 +1656,223 @@ export default function EditExamPage() {
 
   const resetNewQuestion = () => {
     setNewQuestion({
+      id: 0,
       question: "",
       passage: "",
       passageHtml: "",
       questionImage: null,
       type: "mcq",
       points: 1,
-      options: [{ text: "", image: null }, { text: "", image: null }, { text: "", image: null }, { text: "", image: null }],
+      options: [
+        { text: "", image: null },
+        { text: "", image: null },
+        { text: "", image: null },
+        { text: "", image: null },
+      ],
       correctAnswer: 0,
+      createdOrder: 0,
+      matchingPairs: Array.from({ length: 4 }, () => ({
+        sideA: "",
+        sideB: "",
+        correctMatch: null,
+      })),
+      matchingInstructions: "",
+      blanks: [],
     });
-    passageEditor?.commands.setContent('');
+    passageEditor?.commands.setContent("");
     setOptionPreview([]);
   };
 
   const editQuestion = (index: number) => {
     const q = questions[index];
     setNewQuestion({ ...q });
-    passageEditor?.commands.setContent(q.passageHtml || '');
+    passageEditor?.commands.setContent(q.passageHtml || "");
     setEditingIndex(index);
     setIsSidebarOpen(false);
-    toast.info(`📝 Editing question ${q.createdOrder}...`);
   };
 
   const deleteQuestion = (index: number) => {
-    const deletedOrder = questions[index].createdOrder;
     setQuestions(questions.filter((_, i) => i !== index));
-    
-    // Reorder remaining questions
-    const reorderedQuestions = questions
-      .filter((_, i) => i !== index)
-      .map((q, idx) => ({
-        ...q,
-        createdOrder: idx + 1
-      }));
-    
-    setQuestions(reorderedQuestions);
-    setQuestionCounter(reorderedQuestions.length + 1);
-    toast.error(`🗑️ Question ${deletedOrder} deleted!`);
+    toast.success("❌ Question deleted");
   };
 
-  const isStep1Valid = () => {
-    return examTitle.trim() !== "" && examGrade !== "" && examSubject !== "" && examTime > 0;
-  };
-
-  const isStep2Valid = () => {
-    return questions.length > 0;
-  };
+  // Step validation
+  const isStep1Valid = () =>
+    examTitle.trim() !== "" &&
+    examGrade !== "" &&
+    examSubject !== "" &&
+    examTime > 0;
+  const isStep2Valid = () => questions.length > 0;
 
   const handleNext = () => {
     if (currentStep === 1 && isStep1Valid()) {
       setCurrentStep(2);
-      toast.success("✅ Information saved! Moving to questions.");
     } else if (currentStep === 2 && isStep2Valid()) {
       setCurrentStep(3);
-      toast.success("✅ Questions saved! Moving to settings.");
-    } else if (currentStep === 1 && !isStep1Valid()) {
+    } else if (currentStep === 1)
       toast.error("❌ Please fill all required fields");
-    } else if (currentStep === 2 && !isStep2Valid()) {
+    else if (currentStep === 2)
       toast.error("❌ Please add at least one question");
-    }
   };
 
   const handleBack = () => {
-    if (currentStep > 1) {
-      setCurrentStep(currentStep - 1);
-    }
+    if (currentStep > 1) setCurrentStep(currentStep - 1);
   };
 
+  // Submit updated exam
   const handleSubmit = async () => {
-    if (!teacherData) {
-      toast.error("❌ Teacher data not loaded. Please refresh the page.");
-      return;
-    }
-
-    if (questions.length === 0) {
-      toast.error("❌ Please add at least one question.");
-      return;
-    }
-
+    if (!teacherData || questions.length === 0) return;
     setSavingExam(true);
-
     try {
       const total_marks = questions.reduce((sum, q) => sum + q.points, 0);
+      
+      // Update exam data
+      const examData = {
+        title: examTitle,
+        description: examInstructions,
+        subject_id: parseInt(examSubject),
+        grade_id: parseInt(examGrade),
+        exam_date: examDate || new Date().toISOString().split("T")[0],
+        duration: examTime,
+        total_marks,
+        fullscreen_required: fullscreenRequired,
+        questions_shuffled: shuffleQuestions,
+        options_shuffled: shuffleOptions,
+        show_results: showResults,
+        updated_at: new Date().toISOString(),
+      };
 
-      // Update exam
       const { error: examError } = await supabase
         .from("exams")
-        .update({
-          title: examTitle,
-          description: examInstructions,
-          subject_id: parseInt(examSubject),
-          grade_id: parseInt(examGrade),
-          exam_date: examDate || new Date().toISOString().split("T")[0],
-          duration: examTime,
-          total_marks,
-          fullscreen_required: fullscreenRequired,
-          questions_shuffled: shuffleQuestions,
-          options_shuffled: shuffleOptions,
-          show_results: showResults,
-          updated_at: new Date().toISOString(),
-        })
+        .update(examData)
         .eq("id", examId);
+      
+      if (examError) throw examError;
 
-      if (examError) {
-        console.error("Exam update error:", examError);
-        toast.error("❌ Failed to update exam: " + examError.message);
-        return;
-      }
-
-      // Get existing questions
+      // Get existing question IDs
       const { data: existingQuestions } = await supabase
         .from("questions")
         .select("id")
         .eq("exam_id", examId);
-
-      const existingQuestionIds = existingQuestions?.map(q => q.id) || [];
-      const currentQuestionIds = questions.map(q => q.id).filter(id => id && id > 0);
-
-      // Delete removed questions
-      const questionsToDelete = existingQuestionIds.filter(id => !currentQuestionIds.includes(id));
-      if (questionsToDelete.length > 0) {
+      
+      const existingIds = existingQuestions?.map(q => q.id) || [];
+      const currentIds = questions.map(q => q.id).filter(id => id > 0 && id < 1000000000);
+      
+      // Delete questions that are no longer in the current list
+      const toDelete = existingIds.filter(id => !currentIds.includes(id));
+      if (toDelete.length > 0) {
         await supabase
           .from("questions")
           .delete()
-          .in("id", questionsToDelete);
+          .in("id", toDelete);
       }
 
-      // Update/insert questions in order
-      const questionPromises = questions.map(async (q, index) => {
-        let question_type;
+      // Update or insert questions
+      const questionPromises = questions.map(async (q) => {
+        let question_type,
+          question_text = q.question,
+          options = null,
+          metadata = null,
+          correct_option_id = q.correctAnswer,
+          marks = q.points;
+
         if (q.type === "mcq" || q.type === "passage") {
           question_type = "multiple_choice";
+          if (q.type === "passage") {
+            question_text = `[PASSAGE_HTML]${q.passageHtml}[/PASSAGE_HTML]\n\n${q.question}`;
+          }
+          options = {
+            options: q.options.map((opt) => opt.text),
+            option_images: q.options.map((opt) => opt.image),
+          };
         } else if (q.type === "tf") {
           question_type = "true_false";
-        }
-
-        let question_text = q.question;
-        if (q.type === "passage") {
-          if (q.passageHtml) {
-            // Use HTML format for passages with rich text
-            question_text = `[PASSAGE_HTML]${q.passageHtml}[/PASSAGE_HTML]\n\n${q.question}`;
-          } else if (q.passage) {
-            // Use plain text format
-            question_text = q.passage + "\n\n" + q.question;
-          }
-        }
-
-        let options = null;
-        if (question_type === "multiple_choice" || question_type === "true_false") {
           options = {
-            options: q.options.map(opt => opt.text),
-            correct_option_id: q.correctAnswer,
-            option_images: q.options.map(opt => opt.image)
+            options: q.options.map((opt) => opt.text),
+            option_images: q.options.map((opt) => opt.image),
           };
+        } else if (q.type === "matching") {
+          question_type = "matching";
+          question_text = q.matchingInstructions || "";
+
+          // Calculate points per correct match
+          const totalPairs = q.matchingPairs?.length || 0;
+          const pointsPerMatch = totalPairs > 0 ? q.points / totalPairs : 0;
+
+          metadata = {
+            pairs:
+              q.matchingPairs?.map((p) => ({
+                sideA: p.sideA,
+                sideB: p.sideB,
+                correctMatch: p.correctMatch,
+                points: pointsPerMatch,
+              })) || [],
+            sideA_labeled: (q.matchingPairs || []).map((_, idx) =>
+              (idx + 1).toString()
+            ),
+            sideB_labeled: (q.matchingPairs || []).map((_, idx) =>
+              String.fromCharCode(65 + idx)
+            ),
+            totalPairs: totalPairs,
+            pointsPerMatch: pointsPerMatch,
+            totalPoints: q.points,
+          };
+          correct_option_id = 0;
+        } else if (q.type === "blank") {
+          question_type = "fill_blank";
+          question_text = q.question;
+
+          // Calculate points per blank
+          const totalBlanks = (q.blanks || []).length;
+          const pointsPerBlank = totalBlanks > 0 ? q.points / totalBlanks : 0;
+
+          metadata = {
+            blanks: (q.blanks || []).map((blank) => ({
+              id: blank.id,
+              correctAnswer: blank.correctAnswer,
+              placeholder: blank.placeholder || "Type answer...",
+              points: pointsPerBlank,
+            })),
+            original_text: q.question,
+            totalBlanks: totalBlanks,
+            pointsPerBlank: pointsPerBlank,
+            totalPoints: q.points,
+          };
+          correct_option_id = 0;
         }
 
-        if (q.id > 0 && existingQuestionIds.includes(q.id)) {
-          // Update existing
-          return supabase.from("questions").update({
-            question_text,
-            question_type,
-            marks: q.points,
-            options: options ? JSON.stringify(options) : null,
-            correct_option_id: q.correctAnswer,
-            image_url: q.questionImage || null,
-            updated_at: new Date().toISOString(),
-          }).eq("id", q.id);
+        const questionData = {
+          exam_id: examId,
+          question_text,
+          question_type,
+          marks,
+          options: options ? JSON.stringify(options) : null,
+          metadata: metadata ? JSON.stringify(metadata) : null,
+          correct_option_id,
+          image_url: q.questionImage || null,
+          updated_at: new Date().toISOString(),
+        };
+
+        if (q.id > 0 && q.id < 1000000000) {
+          // Update existing question
+          return supabase
+            .from("questions")
+            .update(questionData)
+            .eq("id", q.id);
         } else {
-          // Insert new
-          return supabase.from("questions").insert({
-            exam_id: examId,
-            question_text,
-            question_type,
-            marks: q.points,
-            options: options ? JSON.stringify(options) : null,
-            correct_option_id: q.correctAnswer,
-            image_url: q.questionImage || null,
-          });
+          // Insert new question
+          return supabase
+            .from("questions")
+            .insert(questionData);
         }
       });
 
-      const questionResults = await Promise.allSettled(questionPromises);
-      
-      const errors = questionResults.filter(
-        (result): result is PromiseRejectedResult => result.status === 'rejected'
-      );
-      
-      if (errors.length > 0) {
-        console.error("Some questions failed to save:", errors);
-        toast.warning(`⚠️ ${errors.length} questions had issues, but exam was updated.`);
-      } else {
-        toast.success("✅ Exam updated successfully!");
-      }
-
-      setTimeout(() => {
-        router.push("/teacher/exams");
-      }, 1500);
-
-    } catch (error) {
+      await Promise.all(questionPromises);
+      toast.success("✅ Exam updated successfully!");
+      setTimeout(() => router.push("/teacher/exams"), 1500);
+    } catch (error: any) {
       console.error("Error updating exam:", error);
-      toast.error("❌ Failed to update exam. Please try again.");
+      toast.error("❌ Failed to update exam: " + error.message);
     } finally {
       setSavingExam(false);
     }
@@ -1017,22 +1880,52 @@ export default function EditExamPage() {
 
   const StepIndicator = () => (
     <div className="flex justify-between items-center mb-6">
-      <div className={`flex items-center ${currentStep >= 1 ? 'text-primary' : 'text-muted-foreground'}`}>
-        <div className={`w-8 h-8 rounded-full flex items-center justify-center ${currentStep === 1 ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}>
+      <div
+        className={`flex items-center ${
+          currentStep >= 1 ? "text-primary" : "text-muted-foreground"
+        }`}
+      >
+        <div
+          className={`w-8 h-8 rounded-full flex items-center justify-center ${
+            currentStep === 1
+              ? "bg-primary text-primary-foreground"
+              : "bg-muted"
+          }`}
+        >
           1
         </div>
         <span className="ml-2 hidden sm:inline font-medium">Information</span>
       </div>
       <ChevronRight className="h-4 w-4 text-muted-foreground" />
-      <div className={`flex items-center ${currentStep >= 2 ? 'text-primary' : 'text-muted-foreground'}`}>
-        <div className={`w-8 h-8 rounded-full flex items-center justify-center ${currentStep === 2 ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}>
+      <div
+        className={`flex items-center ${
+          currentStep >= 2 ? "text-primary" : "text-muted-foreground"
+        }`}
+      >
+        <div
+          className={`w-8 h-8 rounded-full flex items-center justify-center ${
+            currentStep === 2
+              ? "bg-primary text-primary-foreground"
+              : "bg-muted"
+          }`}
+        >
           2
         </div>
         <span className="ml-2 hidden sm:inline font-medium">Questions</span>
       </div>
       <ChevronRight className="h-4 w-4 text-muted-foreground" />
-      <div className={`flex items-center ${currentStep >= 3 ? 'text-primary' : 'text-muted-foreground'}`}>
-        <div className={`w-8 h-8 rounded-full flex items-center justify-center ${currentStep === 3 ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}>
+      <div
+        className={`flex items-center ${
+          currentStep >= 3 ? "text-primary" : "text-muted-foreground"
+        }`}
+      >
+        <div
+          className={`w-8 h-8 rounded-full flex items-center justify-center ${
+            currentStep === 3
+              ? "bg-primary text-primary-foreground"
+              : "bg-muted"
+          }`}
+        >
           3
         </div>
         <span className="ml-2 hidden sm:inline font-medium">Settings</span>
@@ -1040,45 +1933,59 @@ export default function EditExamPage() {
     </div>
   );
 
-  const QuestionBankCard = ({ q, idx, onEdit, onDelete }: { 
-    q: Question; 
-    idx: number; 
-    onEdit: (index: number) => void; 
+  const QuestionBankCard = ({
+    q,
+    idx,
+    onEdit,
+    onDelete,
+  }: {
+    q: Question;
+    idx: number;
+    onEdit: (index: number) => void;
     onDelete: (index: number) => void;
   }) => {
     const [hovered, setHovered] = useState(false);
-
+    const getQuestionTypeBadge = (type: string) => {
+      switch (type) {
+        case "matching":
+          return (
+            <span className="text-blue-600 bg-blue-100 px-1.5 py-0.5 rounded text-[10px] mr-1">
+              Matching
+            </span>
+          );
+        case "blank":
+          return (
+            <span className="text-purple-600 bg-purple-100 px-1.5 py-0.5 rounded text-[10px] mr-1">
+              Fill Blank
+            </span>
+          );
+        case "passage":
+          return (
+            <span className="text-primary bg-primary/10 px-1.5 py-0.5 rounded text-[10px] mr-1">
+              Passage
+            </span>
+          );
+        default:
+          return null;
+      }
+    };
     return (
       <Card
-        className="w-full flex flex-row items-center justify-between px-3 py-3 hover:bg-muted/50 transition cursor-pointer border"
+        className="w-full h-14 flex flex-row items-center justify-between px-3 hover:bg-muted/50 transition cursor-pointer border"
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
       >
-        <div className="flex flex-1 items-center gap-3 min-w-0">
-          <div className="flex items-center justify-center w-7 h-7 rounded-full bg-primary/10 text-primary font-semibold flex-shrink-0">
-            {q.createdOrder}
+        <div className="flex flex-1 items-center gap-2 min-w-0">
+          <div className="flex items-center gap-2">
+            <Eye className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+            <span className="font-medium text-xs text-muted-foreground shrink-0">
+              {idx + 1}.
+            </span>
           </div>
-          <div className="flex flex-col min-w-0">
-            <p className="text-sm font-medium truncate">
-              {q.type === "passage" && (
-                <span className="text-primary bg-primary/10 px-1.5 py-0.5 rounded text-[10px] mr-1">
-                  Passage
-                </span>
-              )}
-              {q.question.length > 35 ? `${q.question.substring(0, 35)}...` : q.question}
-            </p>
-            <div className="flex items-center gap-2 mt-1">
-              <span className="text-xs text-muted-foreground">{q.type.toUpperCase()}</span>
-              <span className="text-xs bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded font-medium">
-                {q.points} point{q.points !== 1 ? 's' : ''}
-              </span>
-              {q.questionImage && (
-                <span className="text-xs bg-green-100 text-green-800 px-1.5 py-0.5 rounded font-medium flex items-center gap-1">
-                  <ImageIcon className="h-3 w-3" /> Image
-                </span>
-              )}
-            </div>
-          </div>
+          <p className="text-xs font-medium truncate">
+            {getQuestionTypeBadge(q.type)}
+            {q.question.substring(0, 40)}...
+          </p>
         </div>
         <div
           className={`flex items-center gap-1 shrink-0 ml-2 transition-opacity duration-200 ${
@@ -1088,39 +1995,48 @@ export default function EditExamPage() {
           <Button
             variant="ghost"
             size="sm"
-            onClick={(e) => { e.stopPropagation(); onEdit(idx); }}
-            className="h-7 w-7 p-0 hover:bg-muted"
+            onClick={(e) => {
+              e.stopPropagation();
+              onEdit(idx);
+            }}
+            className="h-6 w-6 p-0 hover:bg-muted"
           >
-            <Edit className="h-3.5 w-3.5" />
+            <Edit className="h-3 w-3" />
           </Button>
           <Button
             variant="ghost"
             size="sm"
-            onClick={(e) => { e.stopPropagation(); onDelete(idx); }}
-            className="h-7 w-7 p-0 text-destructive hover:bg-destructive/10"
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete(idx);
+            }}
+            className="h-6 w-6 p-0 text-destructive hover:bg-destructive/10"
           >
-            <Trash className="h-3.5 w-3.5" />
+            <Trash className="h-3 w-3" />
           </Button>
         </div>
       </Card>
     );
   };
 
-  const ImagePreview = ({ src, onDelete, type, className = "" }: { 
-    src: string; 
-    onDelete: (type: string) => void; 
-    type: string; 
-    className?: string;
+  const ImagePreview = ({
+    src,
+    onDelete,
+    type,
+  }: {
+    src: string;
+    onDelete: (type: string) => void;
+    type: string;
   }) => (
-    <div 
-      className={`relative inline-block ${className}`}
+    <div
+      className="relative inline-block mt-2"
       onMouseEnter={() => setImageHover(type)}
       onMouseLeave={() => setImageHover(null)}
     >
-      <img 
-        src={src || "/placeholder.svg"} 
-        alt="Preview" 
-        className="max-w-full h-20 w-auto object-cover rounded border shadow-sm" 
+      <img
+        src={src || "/placeholder.svg"}
+        alt="Preview"
+        className="max-w-full h-20 w-auto object-cover rounded border shadow-sm"
       />
       {imageHover === type && (
         <Button
@@ -1129,13 +2045,35 @@ export default function EditExamPage() {
           onClick={() => onDelete(type)}
           className="absolute -top-2 -right-2 h-6 w-6 p-0 rounded-full shadow-md"
         >
-          <XIcon className="h-3 w-3" />
+          <X className="h-3 w-3" />
         </Button>
       )}
     </div>
   );
 
-  if (loading) {
+  const renderQuestionWithBlanks = (
+    questionText: string,
+    blanks: BlankField[] = []
+  ) => {
+    if (!questionText) return null;
+    const parts = questionText.split(/(\[BLANK:[^\]]+\])/g);
+    return parts.map((part, index) => {
+      const blankMatch = part.match(/\[BLANK:([^\]]+)\]/);
+      if (blankMatch) {
+        const blank = blanks.find((b) => b.id === blankMatch[1]);
+        return blank ? (
+          <span key={index} className="inline-flex items-center mx-1">
+            <span className="px-2 py-1 bg-yellow-100 border border-yellow-300 rounded text-sm">
+              {renderWithMath(blank.correctAnswer || "______")}
+            </span>
+          </span>
+        ) : null;
+      }
+      return <span key={index}>{renderWithMath(part)}</span>;
+    });
+  };
+
+  if (loading)
     return (
       <div className="flex flex-col w-full items-center p-4 bg-background min-h-screen">
         <div className="flex flex-col justify-center items-center h-64 gap-4">
@@ -1147,7 +2085,6 @@ export default function EditExamPage() {
         </div>
       </div>
     );
-  }
 
   return (
     <>
@@ -1156,67 +2093,60 @@ export default function EditExamPage() {
         isOpen={showImageModal}
         onClose={() => setShowImageModal(false)}
         onUpload={handleImageUpload}
-        title={imageUploadType === "question" ? "Upload Question Image" : `Upload Option Image`}
+        title={
+          imageUploadType === "question"
+            ? "Upload Question Image"
+            : `Upload Option Image`
+        }
       />
       <div className="flex flex-col w-full items-center p-4 bg-background min-h-screen">
         {currentStep === 2 && (
           <Sheet open={isSidebarOpen} onOpenChange={setIsSidebarOpen}>
             <SheetTrigger asChild>
-              <Button 
-                variant="outline" 
-                className="fixed top-4 left-4 z-50 shadow-md" 
+              <Button
+                variant="outline"
+                className="fixed top-4 left-4 z-50 shadow-md"
                 size="sm"
               >
                 <Menu className="h-4 w-4 mr-2" />
                 Questions ({questions.length})
               </Button>
             </SheetTrigger>
-            <SheetContent side="left" className="w-96 p-0">
-              <SheetHeader className="px-6 py-4 border-b">
-                <SheetTitle className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Eye className="h-5 w-5" />
-                    Question Bank
-                  </div>
-                  <div className="text-sm font-medium text-primary bg-primary/10 px-2.5 py-1 rounded-full">
-                    {questions.length} Questions
-                  </div>
+            <SheetContent side="left" className="w-80 p-0">
+              <SheetHeader className="px-4 py-4 border-b">
+                <SheetTitle className="flex items-center gap-2">
+                  <Eye className="h-5 w-5" /> Question Bank ({questions.length})
                 </SheetTitle>
               </SheetHeader>
-              <div className="p-4 space-y-3 overflow-y-auto max-h-[calc(100vh-120px)]">
+              <div className="p-4 space-y-2 overflow-y-auto max-h-[calc(100vh-100px)]">
                 {questions.length === 0 ? (
-                  <div className="text-center py-10 text-muted-foreground">
-                    <div className="mx-auto w-16 h-16 rounded-full bg-muted flex items-center justify-center mb-4">
-                      <Eye className="h-8 w-8 text-muted-foreground/70" />
-                    </div>
+                  <div className="text-center py-8 text-muted-foreground">
                     <p className="font-medium mb-2">No questions yet</p>
                     <p className="text-sm">Add questions in the main panel</p>
                   </div>
                 ) : (
-                  questions
-                    .sort((a, b) => a.createdOrder - b.createdOrder) // Sort by creation order
-                    .map((q, idx) => (
-                      <QuestionBankCard
-                        key={q.id}
-                        q={q}
-                        idx={idx}
-                        onEdit={editQuestion}
-                        onDelete={deleteQuestion}
-                      />
-                    ))
+                  questions.map((q, idx) => (
+                    <QuestionBankCard
+                      key={q.id}
+                      q={q}
+                      idx={idx}
+                      onEdit={editQuestion}
+                      onDelete={deleteQuestion}
+                    />
+                  ))
                 )}
               </div>
             </SheetContent>
           </Sheet>
         )}
 
-        <Card className="w-full max-w-4xl shadow-lg">
+        <Card className="w-full max-w-7xl shadow-lg">
           <CardHeader className="text-center pb-4">
             <CardTitle className="text-2xl font-bold mb-2">
               Edit Exam
             </CardTitle>
             <p className="text-muted-foreground text-base mb-2">
-              Update your exam information
+              Update your exam information, questions, and settings
             </p>
             {teacherData && (
               <div className="flex items-center justify-center gap-2">
@@ -1229,349 +2159,832 @@ export default function EditExamPage() {
           </CardHeader>
           <CardContent className="space-y-6 p-6">
             <StepIndicator />
-
             {currentStep === 1 && (
               <div className="space-y-4">
                 <div>
                   <Label htmlFor="id" className="flex items-center gap-1">
                     Exam ID
-                    <span className="text-xs text-muted-foreground">(Auto-generated)</span>
+                    <span className="text-xs text-muted-foreground">
+                      (Auto-generated)
+                    </span>
                   </Label>
                   <div className="mt-1 p-3 border rounded-md bg-muted/30 font-mono font-medium">
                     {examCode}
                   </div>
                 </div>
                 <div>
-                  <Label htmlFor="title" className="required">Exam Title</Label>
-                  <Input 
-                    id="title" 
-                    value={examTitle} 
-                    onChange={(e) => setExamTitle(e.target.value)} 
+                  <Label htmlFor="title" className="required">
+                    Exam Title
+                  </Label>
+                  <Input
+                    id="title"
+                    value={examTitle}
+                    onChange={(e) => setExamTitle(e.target.value)}
                     className="mt-1"
                     placeholder="e.g., Mid-term Mathematics Exam"
                   />
                 </div>
-                <div>
-                  <Label htmlFor="grade">Grade</Label>
-                  <div className="mt-1 p-3 border rounded-md bg-muted/50">
-                    <p className="font-medium">{teacherGradeName || grades.find(g => g.id.toString() === examGrade)?.grade_name || "Loading..."}</p>
-                    <p className="text-xs text-muted-foreground mt-1">Auto-selected based on your assignment</p>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="grade">Grade</Label>
+                    <div className="mt-1 p-3 border rounded-md bg-muted/50">
+                      <p className="font-medium">
+                        {teacherGradeName || "Not assigned"}
+                      </p>
+                    </div>
+                  </div>
+                  <div>
+                    <Label htmlFor="subject">Subject</Label>
+                    <div className="mt-1 p-3 border rounded-md bg-muted/50">
+                      <p className="font-medium">
+                        {teacherSubjectName || "Not assigned"}
+                      </p>
+                    </div>
                   </div>
                 </div>
                 <div>
-                  <Label htmlFor="subject">Subject</Label>
-                  <div className="mt-1 p-3 border rounded-md bg-muted/50">
-                    <p className="font-medium">{teacherSubjectName || subjects.find(s => s.id.toString() === examSubject)?.subject_name || "Loading..."}</p>
-                    <p className="text-xs text-muted-foreground mt-1">Auto-selected based on your assignment</p>
-                  </div>
+                  <Label htmlFor="date">Exam Date</Label>
+                  <Input
+                    id="date"
+                    type="date"
+                    value={examDate}
+                    onChange={(e) => setExamDate(e.target.value)}
+                    className="mt-1"
+                  />
                 </div>
                 <div>
                   <Label htmlFor="instructions">Exam Instructions</Label>
-                  <textarea 
-                    id="instructions" 
-                    value={examInstructions} 
-                    onChange={(e) => setExamInstructions(e.target.value)} 
+                  <textarea
+                    id="instructions"
+                    value={examInstructions}
+                    onChange={(e) => setExamInstructions(e.target.value)}
                     className="mt-1 w-full min-h-[100px] max-h-[200px] overflow-y-auto p-3 border rounded-md resize-none bg-background"
                     placeholder="Enter exam instructions for students..."
                   />
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="date">Exam Date</Label>
-                    <Input 
-                      id="date" 
-                      type="date" 
-                      value={examDate} 
-                      onChange={(e) => setExamDate(e.target.value)} 
-                      className="mt-1"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="time" className="required">Time Limit (minutes)</Label>
-                    <Input 
-                      id="time" 
-                      type="number" 
-                      value={examTime} 
-                      onChange={(e) => setExamTime(parseInt(e.target.value) || 0)} 
-                      className="mt-1"
-                      min="1"
-                    />
-                  </div>
+                <div>
+                  <Label htmlFor="time" className="required">
+                    Time Limit (minutes)
+                  </Label>
+                  <Input
+                    id="time"
+                    type="number"
+                    value={examTime}
+                    onChange={(e) => setExamTime(parseInt(e.target.value) || 0)}
+                    className="mt-1"
+                    min="1"
+                  />
                 </div>
               </div>
             )}
 
             {currentStep === 2 && (
-              <div className="space-y-6">
+              <div className="space-y-4">
                 <div className="flex justify-between items-center">
-                  <div>
-                    <h3 className="font-bold text-xl flex items-center gap-2">
-                      {editingIndex === -1 ? "Add Question" : "Edit Question"}
-                    </h3>
-                    <p className="text-sm text-muted-foreground">
-                      {editingIndex === -1 
-                        ? `Next question will be #${questionCounter}`
-                        : `Editing question #${questions[editingIndex]?.createdOrder || 1}`}
-                    </p>
-                  </div>
+                  <h3 className="font-bold text-xl flex items-center gap-2">
+                    {editingIndex === -1 ? "Add Question" : "Edit Question"}
+                  </h3>
                   <div className="flex items-center gap-2">
                     <Label className="text-sm">Live Preview</Label>
-                    <Switch checked={showPreview} onCheckedChange={setShowPreview} />
-                  </div>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="question-type">Question Type</Label>
-                    <Select 
-                      value={newQuestion.type} 
-                      onValueChange={(value) => {
-                        setNewQuestion({ 
-                          ...newQuestion, 
-                          type: value 
-                        });
-                      }}
-                    >
-                      <SelectTrigger className="mt-1">
-                        <SelectValue placeholder="Select type" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {questionTypes.map((type) => (
-                          <SelectItem key={type.value} value={type.value}>{type.label}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label htmlFor="points">Points</Label>
-                    <Input 
-                      id="points" 
-                      type="number" 
-                      value={newQuestion.points} 
-                      onChange={(e) => setNewQuestion({ ...newQuestion, points: parseInt(e.target.value) || 1 })} 
-                      className="mt-1"
-                      min="1"
+                    <Switch
+                      checked={showPreview}
+                      onCheckedChange={setShowPreview}
                     />
                   </div>
                 </div>
-                
-                {/* Rich text editor for passage */}
+                <div>
+                  <Label htmlFor="question-type">Question Type</Label>
+                  <Select
+                    value={newQuestion.type}
+                    onValueChange={(value) =>
+                      setNewQuestion({ ...newQuestion, type: value })
+                    }
+                  >
+                    <SelectTrigger className="mt-1">
+                      <SelectValue placeholder="Select type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {questionTypes.map((type) => (
+                        <SelectItem key={type.value} value={type.value}>
+                          {type.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <Label htmlFor="points">Points</Label>
+                  <Input
+                    id="points"
+                    type="number"
+                    value={newQuestion.points}
+                    onChange={(e) =>
+                      setNewQuestion({
+                        ...newQuestion,
+                        points: parseInt(e.target.value) || 1,
+                      })
+                    }
+                    className="mt-1"
+                    min="1"
+                  />
+                </div>
+
                 {newQuestion.type === "passage" && (
                   <div>
-                    <Label>Passage/Paragraph (Rich Text)</Label>
+                    <Label>Passage/Paragraph (Enhanced Rich Text Editor)</Label>
                     <div className="mt-1 border rounded-md overflow-hidden shadow-sm">
                       <EditorToolbar editor={passageEditor} />
-                      <EditorContent 
-                        editor={passageEditor} 
-                        className="prose prose-sm max-w-none p-4 min-h-[150px] max-h-[300px] overflow-y-auto focus:outline-none [&_.ProseMirror]:outline-none [&_.ProseMirror]:min-h-[120px] [&_.ProseMirror]:bg-white"
-                      />
+                      {mounted && passageEditor ? (
+                        <EditorContent
+                          editor={passageEditor}
+                          className="min-h-[250px] max-h-[500px] overflow-y-auto focus:outline-none"
+                        />
+                      ) : (
+                        <div className="min-h-[250px] p-4 flex items-center justify-center text-muted-foreground">
+                          Loading editor...
+                        </div>
+                      )}
+                      <style jsx global>{`
+                        .ProseMirror {
+                          min-height: 200px;
+                          padding: 1rem;
+                          outline: none;
+                          font-family: system-ui, -apple-system, sans-serif;
+                        }
+                        
+                        .ProseMirror p {
+                          margin-bottom: 0.75rem;
+                          line-height: 1.6;
+                        }
+                        
+                        .ProseMirror h2 {
+                          font-size: 1.5rem;
+                          font-weight: bold;
+                          margin-top: 1.5rem;
+                          margin-bottom: 0.75rem;
+                          color: #1f2937;
+                        }
+                        
+                        .ProseMirror h3 {
+                          font-size: 1.25rem;
+                          font-weight: bold;
+                          margin-top: 1.25rem;
+                          margin-bottom: 0.5rem;
+                          color: #374151;
+                        }
+                        
+                        .ProseMirror h4 {
+                          font-size: 1.125rem;
+                          font-weight: bold;
+                          margin-top: 1rem;
+                          margin-bottom: 0.5rem;
+                          color: #4b5563;
+                        }
+                        
+                        .ProseMirror blockquote {
+                          border-left: 3px solid #e5e7eb;
+                          padding-left: 1rem;
+                          margin: 1rem 0;
+                          color: #6b7280;
+                          font-style: italic;
+                        }
+                        
+                        .ProseMirror ul, .ProseMirror ol {
+                          padding-left: 1.5rem;
+                          margin: 0.75rem 0;
+                        }
+                        
+                        .ProseMirror ul {
+                          list-style-type: disc;
+                        }
+                        
+                        .ProseMirror ol {
+                          list-style-type: decimal;
+                        }
+                        
+                        .ProseMirror li {
+                          margin: 0.25rem 0;
+                        }
+                        
+                        .code-block {
+                          background-color: #1e1e1e;
+                          color: #d4d4d4;
+                          font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+                          font-size: 0.875rem;
+                          padding: 1rem;
+                          border-radius: 0.375rem;
+                          margin: 0.75rem 0;
+                          overflow-x: auto;
+                        }
+                        
+                        .code-block code {
+                          color: #d4d4d4;
+                        }
+                        
+                        .ProseMirror sub {
+                          vertical-align: sub;
+                          font-size: smaller;
+                        }
+                        
+                        .ProseMirror sup {
+                          vertical-align: super;
+                          font-size: smaller;
+                        }
+                        
+                        .ProseMirror mark {
+                          background-color: var(--highlight-color, #FFFF00);
+                          padding: 0.1em 0.2em;
+                          border-radius: 0.2em;
+                        }
+                        
+                        .ProseMirror a {
+                          color: #3b82f6;
+                          text-decoration: underline;
+                        }
+                        
+                        .ProseMirror a:hover {
+                          color: #1d4ed8;
+                        }
+                        
+                        .ProseMirror .katex {
+                          font-size: 1.1em;
+                        }
+                        
+                        .ProseMirror .katex-display {
+                          margin: 1em 0;
+                          overflow-x: auto;
+                          overflow-y: hidden;
+                        }
+                      `}</style>
                     </div>
                     {showPreview && newQuestion.passageHtml && (
                       <div className="mt-2 p-3 bg-muted/30 rounded-md border">
-                        <p className="text-sm font-medium mb-2">Passage Preview:</p>
-                        <div 
-                          className="prose prose-sm max-w-none bg-white p-2 rounded"
-                          dangerouslySetInnerHTML={{ __html: newQuestion.passageHtml }}
+                        <p className="text-sm font-medium mb-2">
+                          Passage Preview:
+                        </p>
+                        <div
+                          className="prose prose-sm max-w-none bg-white p-2 rounded max-h-[300px] overflow-y-auto"
+                          dangerouslySetInnerHTML={{
+                            __html: newQuestion.passageHtml,
+                          }}
                         />
                       </div>
                     )}
                   </div>
                 )}
-                
-                <div>
-                  <Label htmlFor="question" className="required">Question Text</Label>
-                  <p className="text-xs text-muted-foreground mb-1">
-                    Supports KaTeX: $inline$ or $$block$$ math notation
-                  </p>
-                  <textarea 
-                    id="question" 
-                    value={newQuestion.question} 
-                    onChange={handleQuestionChange} 
-                    className="mt-1 w-full min-h-[100px] max-h-[200px] overflow-y-auto p-3 border rounded-md resize-none bg-background"
-                    placeholder="Enter your question here..."
-                  />
-                  {showPreview && newQuestion.question && (
-                    <div className="mt-2 p-3 bg-muted/30 rounded-md border">
-                      <p className="text-sm font-medium mb-1">Preview:</p>
-                      <div className="whitespace-pre-wrap">{renderWithMath(newQuestion.question)}</div>
-                    </div>
-                  )}
-                </div>
-                <div>
-                  <Label>Question Image (Optional)</Label>
-                  <div className="flex flex-col gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => openImageModal("question")}
-                      className="mt-1 w-fit gap-2"
-                    >
-                      <ImageIcon className="h-4 w-4" />
-                      {newQuestion.questionImage ? "Change Image" : "Upload Image"}
-                    </Button>
-                    {newQuestion.questionImage && (
-                      <div className="mt-1">
-                        <ImagePreview 
-                          src={newQuestion.questionImage || "/placeholder.svg"} 
-                          onDelete={clearImage} 
-                          type="question"
-                          className="mt-2"
-                        />
-                      </div>
-                    )}
-                  </div>
-                </div>
-                {newQuestion.type !== "short" && (
-                  <div className="space-y-3">
-                    <div className="flex justify-between items-center">
-                      <Label className="required">Options</Label>
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
-                        onClick={addOption} 
-                        disabled={newQuestion.type === "tf"}
-                        className="gap-1"
+
+                {newQuestion.type === "matching" && (
+                  <div className="space-y-6">
+                    {/* Instructions Section */}
+                    <div>
+                      <Label
+                        htmlFor="matching-instructions"
+                        className="text-sm font-semibold text-gray-700"
                       >
-                        <Plus className="h-3.5 w-3.5" />
-                        Add Option
-                      </Button>
-                    </div>
-                    {newQuestion.options.map((opt, idx) => (
-                      <div key={idx} className="space-y-2 p-3 border rounded-md bg-white">
-                        <div className="flex items-center gap-2">
-                          <div className="flex items-center gap-2">
-                            <div className="min-w-8 h-8 flex items-center justify-center rounded-full bg-primary/10 text-primary font-semibold flex-shrink-0">
-                              {String.fromCharCode(65 + idx)}
+                        Instructions for Matching
+                      </Label>
+                      <textarea
+                        id="matching-instructions"
+                        value={newQuestion.matchingInstructions || ""}
+                        onChange={(e) =>
+                          updateMatchingInstructions(e.target.value)
+                        }
+                        className="mt-1 w-full min-h-[100px] max-h-[200px] overflow-y-auto p-3 border rounded-md resize-none bg-background"
+                        placeholder="e.g., Match the items in Column A with their correct descriptions in Column B"
+                      />
+                      {newQuestion.matchingInstructions &&
+                        newQuestion.matchingInstructions.includes("$") && (
+                          <div className="mt-2 p-2 bg-muted/20 rounded text-xs">
+                            <div className="font-medium text-xs mb-1">
+                              KaTeX Preview:
                             </div>
-                            <span className="text-xs text-muted-foreground">Option {String.fromCharCode(65 + idx)}</span>
+                            {renderWithMath(newQuestion.matchingInstructions)}
                           </div>
-                          <div className="relative flex-1">
-                            <Input 
-                              placeholder={`Enter option ${String.fromCharCode(65 + idx)} text`} 
-                              value={opt.text} 
-                              onChange={(e) => handleOptionChange(idx, e.target.value)} 
-                              disabled={newQuestion.type === "tf"}
-                              className="pr-10"
-                            />
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => openImageModal(`option-${idx}`)}
-                              className="absolute right-1 top-1/2 transform -translate-y-1/2 h-6 w-6 p-0"
-                            >
-                              <ImageIcon className="h-4 w-4" />
-                            </Button>
-                          </div>
-                          {newQuestion.options.length > 2 && newQuestion.type !== "tf" && (
-                            <Button 
-                              variant="ghost" 
-                              size="sm" 
-                              onClick={() => removeOption(idx)} 
-                              className="text-destructive flex-shrink-0 hover:bg-destructive/10"
-                            >
-                              <Trash className="h-4 w-4" />
-                            </Button>
-                          )}
+                        )}
+                    </div>
+
+                    {/* Matching Pairs Editor */}
+                    <div>
+                      <div className="flex justify-between items-center mb-4">
+                        <Label className="text-lg font-bold text-gray-800">
+                          Matching Pairs
+                        </Label>
+                        <Button
+                          variant="default"
+                          size="sm"
+                          onClick={addMatchingPair}
+                          className="bg-gray-800 hover:bg-gray-700 text-white shadow-sm gap-2"
+                        >
+                          <Plus className="h-4 w-4" />
+                          Add New Pair
+                        </Button>
+                      </div>
+
+                      {/* Header Titles */}
+                      <div className="grid grid-cols-2 gap-0 border-x border-t rounded-t-lg bg-gray-50 overflow-hidden">
+                        <div className="p-3 text-center border-r font-bold text-gray-700 uppercase tracking-wider text-xs">
+                          Column A (Numbered)
                         </div>
-                        {opt.image && (
-                          <div className="ml-10">
-                            <ImagePreview 
-                              src={opt.image || "/placeholder.svg"} 
-                              onDelete={clearImage} 
-                              type={`option-${idx}`}
+                        <div className="p-3 text-center font-bold text-gray-700 uppercase tracking-wider text-xs">
+                          Column B (Lettered)
+                        </div>
+                      </div>
+
+                      {/* Input Rows */}
+                      <div className="border rounded-b-lg divide-y bg-white">
+                        {newQuestion.matchingPairs?.map((pair, idx) => (
+                          <div
+                            key={idx}
+                            className="grid grid-cols-2 gap-0 group relative"
+                          >
+                            {/* Column A Side */}
+                            <div className="p-4 border-r relative flex items-center gap-3">
+                              <div className="flex items-center gap-2 flex-shrink-0">
+                                {/* Row Number */}
+                                <div className="w-7 h-7 rounded-full bg-blue-100 text-blue-700 font-bold flex items-center justify-center text-sm">
+                                  {idx + 1}
+                                </div>
+                              </div>
+                              <div className="flex-1">
+                                <UnderlinedMatchingInput
+                                  value={pair.sideA}
+                                  onChange={(value) =>
+                                    updateMatchingPair(idx, "sideA", value)
+                                  }
+                                  placeholder="Enter question/term"
+                                  showKaTeXPreview={true}
+                                />
+                              </div>
+                            </div>
+
+                            {/* Column B Side */}
+                            <div className="p-4 flex items-center gap-3 relative">
+                              {/* Letter Label */}
+                              <div className="w-7 h-7 rounded-full bg-emerald-100 text-emerald-700 font-bold flex items-center justify-center text-sm flex-shrink-0">
+                                {String.fromCharCode(65 + idx)}
+                              </div>
+                              <div className="flex-1">
+                                <UnderlinedMatchingInput
+                                  value={pair.sideB}
+                                  onChange={(value) =>
+                                    updateMatchingPair(idx, "sideB", value)
+                                  }
+                                  placeholder="Enter answer/definition"
+                                  showKaTeXPreview={true}
+                                />
+                              </div>
+
+                              {/* Delete Button */}
+                              {newQuestion.matchingPairs!.length > 2 && (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => removeMatchingPair(idx)}
+                                  className="h-8 w-8 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-full transition-colors"
+                                >
+                                  <Trash className="h-4 w-4" />
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Preview Section */}
+                    {showPreview &&
+                      newQuestion.matchingPairs &&
+                      newQuestion.matchingPairs.some(
+                        (p) => p.sideA || p.sideB
+                      ) && (
+                        <div className="mt-8 pt-6 border-t">
+                          <div className="flex items-center gap-2 mb-4 text-blue-800">
+                            <Eye className="h-5 w-5" />
+                            <p className="font-bold">Student View Preview</p>
+                          </div>
+                          <div className="bg-slate-50 p-4 rounded-xl border-2 border-dashed border-slate-200">
+                            <MatchingPreview
+                              pairs={newQuestion.matchingPairs || []}
+                              instructions={newQuestion.matchingInstructions}
+                              onCorrectAnswerChange={
+                                updateMatchingCorrectAnswer
+                              }
+                              pointsPerMatch={
+                                newQuestion.matchingPairs?.length > 0
+                                  ? newQuestion.points /
+                                    newQuestion.matchingPairs.length
+                                  : 0
+                              }
+                            />
+                          </div>
+                        </div>
+                      )}
+                  </div>
+                )}
+
+                {newQuestion.type === "blank" && (
+                  <div className="space-y-4">
+                    <div>
+                      <div className="flex justify-between items-center mb-2">
+                        <Label htmlFor="question" className="required">
+                          Question Text with Blanks
+                        </Label>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleAddBlank}
+                          className="gap-1"
+                        >
+                          <Plus className="h-3.5 w-3.5" />
+                          Add Blank
+                        </Button>
+                      </div>
+                      <p className="text-xs text-muted-foreground mb-1">
+                        Click where you want to add a blank, then click "Add
+                        Blank". Supports KaTeX: $inline$ or $$block$$ math
+                        notation
+                      </p>
+                      <textarea
+                        ref={questionTextareaRef}
+                        id="question"
+                        value={newQuestion.question}
+                        onChange={handleQuestionChange}
+                        onClick={() => {
+                          if (questionTextareaRef.current)
+                            setBlankCursorPos(
+                              questionTextareaRef.current.selectionStart
+                            );
+                        }}
+                        onSelect={() => {
+                          if (questionTextareaRef.current)
+                            setBlankCursorPos(
+                              questionTextareaRef.current.selectionStart
+                            );
+                        }}
+                        className="mt-1 w-full min-h-[100px] max-h-[200px] overflow-y-auto p-3 border rounded-md resize-none bg-background"
+                        placeholder="Enter your question here. Click to position cursor, then click 'Add Blank' to insert a blank space at that position."
+                      />
+                      {(newQuestion.blanks || []).length > 0 && (
+                        <div className="mt-3">
+                          <Label>
+                            Blank Spaces ({newQuestion.blanks?.length || 0})
+                          </Label>
+                          <div className="mt-2 space-y-2">
+                            {(newQuestion.blanks || []).map((blank, idx) => (
+                              <div
+                                key={blank.id}
+                                className="flex items-center gap-2 p-2 border rounded bg-white"
+                              >
+                                <div className="w-6 h-6 rounded-full bg-yellow-100 text-yellow-700 font-bold flex items-center justify-center flex-shrink-0">
+                                  {idx + 1}
+                                </div>
+                                <div className="flex-1">
+                                  <Input
+                                    placeholder="Enter correct answer for this blank"
+                                    value={blank.correctAnswer}
+                                    onChange={(e) =>
+                                      updateBlankAnswer(
+                                        blank.id,
+                                        e.target.value
+                                      )
+                                    }
+                                  />
+                                  {blank.correctAnswer &&
+                                    blank.correctAnswer.includes("$") && (
+                                      <div className="mt-1 p-1 bg-muted/10 rounded text-xs">
+                                        <div className="font-medium text-xs mb-0.5">
+                                          KaTeX Preview:
+                                        </div>
+                                        {renderWithMath(blank.correctAnswer)}
+                                      </div>
+                                    )}
+                                </div>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => removeBlank(blank.id)}
+                                  className="text-destructive hover:bg-destructive/10 flex-shrink-0"
+                                >
+                                  <Trash className="h-3 w-3" />
+                                </Button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {showPreview && newQuestion.question && (
+                        <div className="mt-4">
+                          <p className="text-sm font-medium mb-2 flex items-center gap-2">
+                            <Eye className="h-4 w-4" />
+                            Blank Space Preview
+                          </p>
+                          <div className="p-4 bg-muted/30 rounded-md border">
+                            <div className="mb-3">
+                              <p className="text-sm font-medium mb-1">
+                                Teacher View (with correct answers):
+                              </p>
+                              <div className="p-3 bg-white rounded border">
+                                {renderQuestionWithBlanks(
+                                  newQuestion.question,
+                                  newQuestion.blanks || []
+                                )}
+                              </div>
+                            </div>
+                            <div>
+                              <p className="text-sm font-medium mb-1">
+                                Student View (with input fields):
+                              </p>
+                              <div className="p-3 bg-white rounded border">
+                                {newQuestion.question
+                                  .split(/(\[BLANK:[^\]]+\])/g)
+                                  .map((part, index) => {
+                                    const blankMatch =
+                                      part.match(/\[BLANK:([^\]]+)\]/);
+                                    const blankId = blankMatch ? blankMatch[1] : null;
+                                    const blank = blankId 
+                                      ? (newQuestion.blanks || []).find(b => b.id === blankId)
+                                      : null;
+                                    
+                                    return blankMatch ? (
+                                      <span
+                                        key={index}
+                                        className="inline-flex items-center mx-1"
+                                      >
+                                        <BlankPreviewInput
+                                          value=""
+                                          onChange={() => {}}
+                                          pointsPerBlank={
+                                            newQuestion.blanks && newQuestion.blanks.length > 0
+                                              ? newQuestion.points / newQuestion.blanks.length
+                                              : 0
+                                          }
+                                        />
+                                      </span>
+                                    ) : (
+                                      <span key={index}>{renderWithMath(part)}</span>
+                                    );
+                                  })}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {!["matching", "blank"].includes(newQuestion.type) && (
+                  <>
+                    <div>
+                      <Label htmlFor="question" className="required">
+                        Question Text
+                      </Label>
+                      <p className="text-xs text-muted-foreground mb-1">
+                        Supports KaTeX: $inline$ or $$block$$ math notation
+                      </p>
+                      <textarea
+                        id="question"
+                        value={newQuestion.question}
+                        onChange={handleQuestionChange}
+                        className="mt-1 w-full min-h-[100px] max-h-[200px] overflow-y-auto p-3 border rounded-md resize-none bg-background"
+                        placeholder="Enter your question here..."
+                      />
+                      {showPreview && newQuestion.question && (
+                        <div className="mt-2 p-3 bg-muted/30 rounded-md border">
+                          <p className="text-sm font-medium mb-1">Preview:</p>
+                          <div className="whitespace-pre-wrap">
+                            {renderWithMath(newQuestion.question)}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                      <Label>Question Image (Optional)</Label>
+                      <div className="flex flex-col gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => openImageModal("question")}
+                          className="mt-1 w-fit gap-2"
+                        >
+                          <ImageIcon className="h-4 w-4" />
+                          {newQuestion.questionImage
+                            ? "Change Image"
+                            : "Upload Image"}
+                        </Button>
+                        {newQuestion.questionImage && (
+                          <div className="mt-1">
+                            <ImagePreview
+                              src={
+                                newQuestion.questionImage || "/placeholder.svg"
+                              }
+                              onDelete={clearImage}
+                              type="question"
                             />
                           </div>
                         )}
                       </div>
-                    ))}
-                    
-                    {/* Option Preview Section - Bottom after all options */}
-                    {showPreview && optionPreview.some(opt => opt.trim() !== "") && (
-                      <div className="mt-4 p-3 bg-muted/30 rounded-md border">
-                        <p className="text-sm font-medium mb-2 flex items-center gap-2">
-                          <Eye className="h-4 w-4" />
-                          Options Preview
-                        </p>
-                        <div className="space-y-2">
+                    </div>
+                    {newQuestion.type !== "short" &&
+                      newQuestion.type !== "tf" &&
+                      newQuestion.type !== "matching" &&
+                      newQuestion.type !== "blank" && (
+                        <div className="space-y-3">
+                          <div className="flex justify-between items-center">
+                            <Label className="required">Options</Label>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={addOption}
+                              disabled={newQuestion.type === "tf"}
+                              className="gap-1"
+                            >
+                              <Plus className="h-3.5 w-3.5" />
+                              Add Option
+                            </Button>
+                          </div>
                           {newQuestion.options.map((opt, idx) => (
-                            opt.text.trim() && (
-                              <div key={idx} className="flex items-start gap-3 p-2 bg-white rounded border">
-                                <div className="flex items-center justify-center w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-medium flex-shrink-0 mt-0.5">
+                            <div
+                              key={idx}
+                              className="space-y-2 p-3 border rounded-md bg-white"
+                            >
+                              <div className="flex items-center gap-2">
+                                {/* A, B, C... Label */}
+                                <div className="min-w-8 h-8 flex items-center justify-center rounded-full bg-primary/10 text-primary font-semibold flex-shrink-0">
                                   {String.fromCharCode(65 + idx)}
                                 </div>
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-sm font-medium">{opt.text}</span>
-                                    {newQuestion.correctAnswer === idx && (
-                                      <span className="text-xs bg-green-100 text-green-800 px-2 py-0.5 rounded font-medium">
-                                        ✓ Correct Answer
-                                      </span>
+
+                                {/* Input Field */}
+                                <div className="flex-1">
+                                  <UnderlinedOptionInput
+                                    value={opt.text}
+                                    onChange={(value) =>
+                                      handleOptionChange(idx, value)
+                                    }
+                                    placeholder={`Enter option ${String.fromCharCode(
+                                      65 + idx
+                                    )} text`}
+                                    showKaTeXPreview={true}
+                                  />
+                                </div>
+
+                                {/* Action Buttons (Image & Delete) */}
+                                <div className="flex items-center gap-1">
+                                  {/* Image Upload Button */}
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() =>
+                                      openImageModal(`option-${idx}`)
+                                    }
+                                    className="h-9 w-9 p-0 flex-shrink-0"
+                                  >
+                                    <ImageIcon className="h-4 w-4 text-muted-foreground" />
+                                  </Button>
+
+                                  {/* Delete Button */}
+                                  {newQuestion.options.length > 2 &&
+                                    newQuestion.type !== "tf" && (
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => removeOption(idx)}
+                                        className="text-destructive h-9 w-9 p-0 flex-shrink-0 hover:bg-destructive/10"
+                                      >
+                                        <Trash className="h-4 w-4" />
+                                      </Button>
                                     )}
-                                  </div>
-                                  {opt.image && (
-                                    <div className="mt-2">
-                                      <img 
-                                        src={opt.image || "/placeholder.svg"} 
-                                        alt={`Option ${String.fromCharCode(65 + idx)}`}
-                                        className="max-w-32 h-auto object-cover rounded border shadow-sm"
-                                      />
-                                    </div>
+                                </div>
+                              </div>
+
+                              {/* Image Preview Area */}
+                              {opt.image && (
+                                <div className="ml-10">
+                                  <ImagePreview
+                                    src={opt.image || "/placeholder.svg"}
+                                    onDelete={clearImage}
+                                    type={`option-${idx}`}
+                                  />
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                          {showPreview &&
+                            optionPreview.some((opt) => opt.trim() !== "") && (
+                              <div className="mt-4 p-3 bg-muted/30 rounded-md border">
+                                <p className="text-sm font-medium mb-2 flex items-center gap-2">
+                                  <Eye className="h-4 w-4" />
+                                  Options Preview
+                                </p>
+                                <div className="space-y-2">
+                                  {newQuestion.options.map(
+                                    (opt, idx) =>
+                                      opt.text.trim() && (
+                                        <div
+                                          key={idx}
+                                          className="flex items-start gap-3 p-2 bg-white rounded border"
+                                        >
+                                          <div className="flex items-center justify-center w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-medium flex-shrink-0 mt-0.5">
+                                            {String.fromCharCode(65 + idx)}
+                                          </div>
+                                          <div className="flex-1 min-w-0">
+                                            <div className="flex items-center gap-2">
+                                              <div className="text-sm font-medium">
+                                                {renderWithMath(opt.text)}
+                                              </div>
+                                              {newQuestion.correctAnswer ===
+                                                idx && (
+                                                <span className="text-xs bg-green-100 text-green-800 px-2 py-0.5 rounded font-medium">
+                                                  ✓ Correct Answer
+                                                </span>
+                                              )}
+                                            </div>
+                                            {opt.image && (
+                                              <div className="mt-2">
+                                                <img
+                                                  src={
+                                                    opt.image ||
+                                                    "/placeholder.svg"
+                                                  }
+                                                  alt={`Option ${String.fromCharCode(
+                                                    65 + idx
+                                                  )}`}
+                                                  className="max-w-32 h-auto object-cover rounded border shadow-sm"
+                                                />
+                                              </div>
+                                            )}
+                                          </div>
+                                        </div>
+                                      )
                                   )}
                                 </div>
                               </div>
-                            )
-                          ))}
+                            )}
                         </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-                {newQuestion.type !== "short" && (
-                  <div>
-                    <Label className="required">Correct Answer</Label>
-                    <RadioGroup 
-                      value={newQuestion.correctAnswer.toString()} 
-                      onValueChange={(val) => setNewQuestion({ ...newQuestion, correctAnswer: parseInt(val) })} 
-                      className="flex flex-wrap gap-3 mt-2"
-                    >
-                      {newQuestion.options.map((_, idx) => (
-                        <div key={idx} className="flex items-center space-x-2">
-                          <RadioGroupItem value={idx.toString()} id={`correct-${idx}`} className="sr-only" />
-                          <Label 
-                            htmlFor={`correct-${idx}`} 
-                            className={`cursor-pointer px-4 py-2 rounded-lg border-2 transition-all ${
-                              newQuestion.correctAnswer === idx 
-                                ? "border-primary bg-primary/10 text-primary font-medium" 
-                                : "border-muted bg-white hover:border-primary/30"
-                            }`}
+                      )}
+                    {newQuestion.type !== "short" &&
+                      newQuestion.type !== "matching" &&
+                      newQuestion.type !== "blank" && (
+                        <div>
+                          <Label className="required">Correct Answer</Label>
+                          <RadioGroup
+                            value={newQuestion.correctAnswer.toString()}
+                            onValueChange={(val) =>
+                              setNewQuestion({
+                                ...newQuestion,
+                                correctAnswer: parseInt(val),
+                              })
+                            }
+                            className="flex flex-wrap gap-3 mt-2"
                           >
-                            {String.fromCharCode(65 + idx)}
-                          </Label>
+                            {newQuestion.options.map((_, idx) => (
+                              <div
+                                key={idx}
+                                className="flex items-center space-x-2"
+                              >
+                                <RadioGroupItem
+                                  value={idx.toString()}
+                                  id={`correct-${idx}`}
+                                  className="sr-only"
+                                />
+                                <Label
+                                  htmlFor={`correct-${idx}`}
+                                  className={`cursor-pointer px-4 py-2 rounded-lg border-2 transition-all ${
+                                    newQuestion.correctAnswer === idx
+                                      ? "border-primary bg-primary/10 text-primary font-medium"
+                                      : "border-muted bg-white hover:border-primary/30"
+                                  }`}
+                                >
+                                  {newQuestion.type === "tf"
+                                    ? newQuestion.options[idx].text
+                                    : String.fromCharCode(65 + idx)}
+                                </Label>
+                              </div>
+                            ))}
+                          </RadioGroup>
                         </div>
-                      ))}
-                    </RadioGroup>
-                  </div>
+                      )}
+                  </>
                 )}
-                <div className="flex gap-3 pt-4">
-                  <Button 
-                    onClick={addOrUpdateQuestion} 
+                <div className="flex gap-3">
+                  <Button
+                    onClick={addOrUpdateQuestion}
                     disabled={!isAddQuestionValid()}
-                    className="disabled:opacity-50 disabled:cursor-not-allowed gap-2 flex-1"
-                    size="lg"
+                    className="disabled:opacity-50 disabled:cursor-not-allowed gap-2"
                   >
-                    <Plus className="h-5 w-5" /> 
-                    {editingIndex === -1 ? `Add Question ${questionCounter}` : "Update Question"}
+                    <Plus className="h-4 w-4" />
+                    {editingIndex === -1 ? "Add Question" : "Update Question"}
                   </Button>
                   {editingIndex !== -1 && (
-                    <Button 
-                      variant="outline" 
+                    <Button
+                      variant="outline"
                       onClick={() => {
                         setEditingIndex(-1);
                         resetNewQuestion();
-                        toast.info("✏️ Edit cancelled");
                       }}
-                      className="flex-1"
                     >
                       Cancel Edit
                     </Button>
@@ -1584,34 +2997,64 @@ export default function EditExamPage() {
               <div className="space-y-6">
                 <div className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/20 transition-colors">
                   <div className="space-y-1">
-                    <Label className="font-medium text-base">Shuffle Questions</Label>
-                    <p className="text-sm text-muted-foreground">Randomize the order of questions for each student</p>
+                    <Label className="font-medium text-base">
+                      Shuffle Questions
+                    </Label>
+                    <p className="text-sm text-muted-foreground">
+                      Randomize the order of questions for each student
+                    </p>
                   </div>
-                  <Switch checked={shuffleQuestions} onCheckedChange={setShuffleQuestions} />
+                  <Switch
+                    checked={shuffleQuestions}
+                    onCheckedChange={setShuffleQuestions}
+                  />
                 </div>
                 <div className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/20 transition-colors">
                   <div className="space-y-1">
-                    <Label className="font-medium text-base">Shuffle Options</Label>
-                    <p className="text-sm text-muted-foreground">Randomize the order of options for each question</p>
+                    <Label className="font-medium text-base">
+                      Shuffle Options
+                    </Label>
+                    <p className="text-sm text-muted-foreground">
+                      Randomize the order of options for each question
+                    </p>
                   </div>
-                  <Switch checked={shuffleOptions} onCheckedChange={setShuffleOptions} />
+                  <Switch
+                    checked={shuffleOptions}
+                    onCheckedChange={setShuffleOptions}
+                  />
                 </div>
                 <div className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/20 transition-colors">
                   <div className="space-y-1">
-                    <Label className="font-medium text-base">Require Fullscreen</Label>
-                    <p className="text-sm text-muted-foreground">Students must take the exam in fullscreen mode</p>
+                    <Label className="font-medium text-base">
+                      Require Fullscreen
+                    </Label>
+                    <p className="text-sm text-muted-foreground">
+                      Students must take the exam in fullscreen mode
+                    </p>
                   </div>
-                  <Switch checked={fullscreenRequired} onCheckedChange={setFullscreenRequired} />
+                  <Switch
+                    checked={fullscreenRequired}
+                    onCheckedChange={setFullscreenRequired}
+                  />
                 </div>
                 <div className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/20 transition-colors">
                   <div className="space-y-1">
-                    <Label className="font-medium text-base">Show Results at the End</Label>
-                    <p className="text-sm text-muted-foreground">Show results to students after submitting exam</p>
+                    <Label className="font-medium text-base">
+                      Show Results
+                    </Label>
+                    <p className="text-sm text-muted-foreground">
+                      Show results to students after submitting exam
+                    </p>
                   </div>
-                  <Switch checked={showResults} onCheckedChange={setShowResults} />
+                  <Switch
+                    checked={showResults}
+                    onCheckedChange={setShowResults}
+                  />
                 </div>
                 <div className="bg-primary/5 p-5 rounded-lg border border-primary/20">
-                  <h4 className="font-bold text-lg mb-3 text-primary">Exam Summary</h4>
+                  <h4 className="font-bold text-lg mb-3 text-primary">
+                    Exam Summary
+                  </h4>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <div className="flex justify-between">
@@ -1620,7 +3063,25 @@ export default function EditExamPage() {
                       </div>
                       <div className="flex justify-between">
                         <span className="font-medium">Total Points:</span>
-                        <span className="font-bold">{questions.reduce((sum, q) => sum + q.points, 0)}</span>
+                        <span className="font-bold">
+                          {questions.reduce((sum, q) => sum + q.points, 0)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="font-medium">Question Types:</span>
+                        <div className="flex gap-1">
+                          {Array.from(
+                            new Set(questions.map((q) => q.type))
+                          ).map((type) => (
+                            <span
+                              key={type}
+                              className="text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded"
+                            >
+                              {type}:{" "}
+                              {questions.filter((q) => q.type === type).length}
+                            </span>
+                          ))}
+                        </div>
                       </div>
                     </div>
                     <div className="space-y-2">
@@ -1629,21 +3090,40 @@ export default function EditExamPage() {
                         <span className="font-bold">{examTime} minutes</span>
                       </div>
                       <div className="flex justify-between">
+                        <span className="font-medium">Exam ID:</span>
+                        <code className="font-mono font-bold bg-primary/10 px-2 py-1 rounded">
+                          {examCode}
+                        </code>
+                      </div>
+                      <div className="flex justify-between">
                         <span className="font-medium">Exam Date:</span>
                         <span className="font-bold">{examDate || "Not set"}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="font-medium">Teacher:</span>
+                        <span className="font-bold">
+                          {teacherData?.fullName}
+                        </span>
                       </div>
                     </div>
                   </div>
                   <div className="mt-4 pt-4 border-t border-primary/20">
                     <div className="flex flex-wrap gap-2">
                       <div className="text-xs px-2 py-1 bg-primary/10 text-primary rounded">
-                        {shuffleQuestions ? "Questions Shuffled" : "Fixed Order"}
+                        {shuffleQuestions
+                          ? "Questions Shuffled"
+                          : "Fixed Order"}
                       </div>
                       <div className="text-xs px-2 py-1 bg-primary/10 text-primary rounded">
-                        {fullscreenRequired ? "Fullscreen Required" : "Fullscreen Optional"}
+                        {fullscreenRequired
+                          ? "Fullscreen Required"
+                          : "Fullscreen Optional"}
                       </div>
                       <div className="text-xs px-2 py-1 bg-primary/10 text-primary rounded">
                         {showResults ? "Results Visible" : "Results Hidden"}
+                      </div>
+                      <div className="text-xs px-2 py-1 bg-primary/10 text-primary rounded">
+                        {shuffleOptions ? "Options Shuffled" : "Options Fixed"}
                       </div>
                     </div>
                   </div>
@@ -1654,8 +3134,8 @@ export default function EditExamPage() {
             <div className="flex flex-col sm:flex-row justify-between gap-3 pt-4 border-t">
               <div className="flex gap-3">
                 {currentStep > 1 && (
-                  <Button 
-                    variant="outline" 
+                  <Button
+                    variant="outline"
                     onClick={handleBack}
                     className="gap-2"
                   >
@@ -1665,17 +3145,19 @@ export default function EditExamPage() {
                 )}
               </div>
               {currentStep < 3 ? (
-                <Button 
-                  onClick={handleNext} 
+                <Button
+                  onClick={handleNext}
                   className="gap-2"
-                  disabled={currentStep === 1 ? !isStep1Valid() : !isStep2Valid()}
+                  disabled={
+                    currentStep === 1 ? !isStep1Valid() : !isStep2Valid()
+                  }
                 >
                   <ChevronRight className="h-4 w-4" />
                   Next Step
                 </Button>
               ) : (
-                <Button 
-                  onClick={handleSubmit} 
+                <Button
+                  onClick={handleSubmit}
                   disabled={savingExam || questions.length === 0}
                   className="gap-2 bg-green-600 hover:bg-green-700"
                   size="lg"

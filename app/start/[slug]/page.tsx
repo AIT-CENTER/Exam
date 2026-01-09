@@ -1,14 +1,22 @@
-"use client"
+"use client";
 
-import { useState, useEffect, useMemo, useRef } from "react"
-import { useRouter, useParams, useSearchParams } from 'next/navigation'
-import { cn } from "@/lib/utils"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
-import { Label } from "@/components/ui/label"
-import { Separator } from "@/components/ui/separator"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { useState, useEffect, useMemo, useRef } from "react";
+import { useRouter, useParams, useSearchParams } from "next/navigation";
+import { cn } from "@/lib/utils";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -18,53 +26,59 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
+} from "@/components/ui/alert-dialog";
 import {
   Sheet,
   SheetContent,
   SheetHeader,
   SheetTitle,
-} from "@/components/ui/sheet"
+} from "@/components/ui/sheet";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog"
-import { toast } from "sonner"
-import { 
-  Clock, 
-  Flag, 
-  ChevronRight, 
-  ChevronLeft, 
-  Send, 
-  PanelLeftOpen, 
-  PanelLeftClose, 
-  CheckCircle2, 
-  HelpCircle, 
-  Maximize, 
-  AlertTriangle, 
-  Ban, 
-  Award, 
-  Target, 
-  BarChart, 
-  BookOpen, 
-  Minimize2, 
+} from "@/components/ui/dialog";
+import { toast } from "sonner";
+import {
+  Clock,
+  Flag,
+  ChevronRight,
+  ChevronLeft,
+  Send,
+  PanelLeftOpen,
+  PanelLeftClose,
+  CheckCircle2,
+  HelpCircle,
+  Maximize,
+  AlertTriangle,
+  Ban,
+  Award,
+  Target,
+  BarChart,
+  BookOpen,
+  Minimize2,
   Maximize2,
   Check,
   Eye,
   EyeOff,
   Image as ImageIcon,
   Loader2,
-  MessageSquare,
   FileText,
-  MoreHorizontal,
-  MoreVertical
-} from 'lucide-react'
-import { supabase } from "@/lib/supabaseClient"
+  Link2,
+  AlertCircle,
+  X,
+  BookText,
+  ScrollText,
+  ChevronUp,
+  ChevronDown,
+} from "lucide-react";
+import { supabase } from "@/lib/supabaseClient";
 import { InlineMath, BlockMath } from "react-katex";
 import "katex/dist/katex.min.css";
+
+// --- Utility Functions ---
 
 function Spinner({ className, ...props }: React.ComponentProps<"svg">) {
   return (
@@ -78,40 +92,321 @@ function Spinner({ className, ...props }: React.ComponentProps<"svg">) {
 }
 
 const formatTime = (seconds: number) => {
-  const minutes = Math.floor(seconds / 60)
-  const secs = Math.floor(seconds % 60)
-  return `${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")}`
-}
+  const minutes = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+};
 
 const renderWithMath = (text: string) => {
   if (!text) return null;
-  const parts = text.split(/(\$\$[^$]+\$\$|\$[^$]+\$)/g);
+
+  const parts = text.split(/(\$\$[\s\S]*?\$\$|\$[\s\S]*?\$)/g);
+
   return parts.map((part, index) => {
     if (part.startsWith("$$") && part.endsWith("$$")) {
-      return <BlockMath key={index} math={part.slice(2, -2)} />;
+      const mathContent = part.slice(2, -2);
+      return <BlockMath key={index} math={mathContent} />;
     } else if (part.startsWith("$") && part.endsWith("$")) {
-      return <InlineMath key={index} math={part.slice(1, -1)} />;
+      const mathContent = part.slice(1, -1);
+      return <InlineMath key={index} math={mathContent} />;
     } else {
-      return <span key={index}>{part}</span>;
+      const lines = part.split("\n");
+      return (
+        <span key={index} style={{ whiteSpace: "pre-wrap" }}>
+          {lines.map((line, lineIndex) => (
+            <span key={lineIndex}>
+              {lineIndex > 0 && <br />}
+              {line}
+            </span>
+          ))}
+        </span>
+      );
     }
   });
 };
 
 const parseQuestionText = (text: string) => {
-  const passageMatch = text.match(/\[PASSAGE_HTML\]([\s\S]*?)\[\/PASSAGE_HTML\]/)
-  if (passageMatch) {
-    const passageHtml = passageMatch[1]
-    const questionText = text.replace(/\[PASSAGE_HTML\][\s\S]*?\[\/PASSAGE_HTML\]\n*/, "").trim()
-    return { passageHtml, questionText, hasPassage: true }
-  }
-  return { passageHtml: "", questionText: text, hasPassage: false }
-}
+  if (!text) return { passageHtml: "", questionText: "", hasPassage: false };
 
-const truncateText = (text: string, maxLength: number = 200) => {
-  if (!text) return '';
-  if (text.length <= maxLength) return text;
-  return text.substring(0, maxLength) + '...';
-}
+  const passageMatch = text.match(
+    /\[PASSAGE_HTML\]([\s\S]*?)\[\/PASSAGE_HTML\]/
+  );
+  if (passageMatch) {
+    const passageHtml = passageMatch[1].trim();
+    const questionText = text
+      .replace(/\[PASSAGE_HTML\][\s\S]*?\[\/PASSAGE_HTML\]\n*/, "")
+      .trim();
+    return { passageHtml, questionText, hasPassage: true };
+  }
+  return { passageHtml: "", questionText: text, hasPassage: false };
+};
+
+// Improved seeded shuffle function with better randomness
+const seededShuffle = <T,>(array: T[], seed: string): T[] => {
+  const shuffled = [...array];
+  let hash = 0;
+
+  // Create a more complex hash from the seed
+  for (let i = 0; i < seed.length; i++) {
+    hash = (hash << 5) - hash + seed.charCodeAt(i);
+    hash = hash ^ hash;
+    hash = hash & 0x7fffffff; // Ensure positive
+  }
+
+  // Seeded pseudo-random function (improved)
+  let seedValue = hash;
+  const seededRandom = () => {
+    seedValue = (seedValue * 9301 + 49297) % 233280;
+    return seedValue / 233280;
+  };
+
+  // Fisher-Yates shuffle with seeded random
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(seededRandom() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+
+  return shuffled;
+};
+
+// Shuffle MCQ/TF/Passage options
+const shuffleOptionsWithSeed = (
+  options: any[],
+  seed: string,
+  correctOptionId: number
+) => {
+  const shuffledOptions = seededShuffle([...options], seed);
+
+  // Find the new position of the correct answer
+  const originalCorrectOption = options[correctOptionId];
+  const newCorrectIndex = shuffledOptions.findIndex(
+    (opt) =>
+      opt.id === originalCorrectOption?.id ||
+      opt.text === originalCorrectOption?.text
+  );
+
+  return {
+    shuffledOptions,
+    newCorrectIndex: newCorrectIndex >= 0 ? newCorrectIndex : 0,
+  };
+};
+
+// Shuffle Matching pairs (Column B)
+const shuffleMatchingPairsWithSeed = (pairs: any[], seed: string) => {
+  if (!pairs || pairs.length === 0) return [];
+
+  const shuffledPairs = [...pairs];
+
+  // Extract Column B items with their indices
+  const columnBItems = shuffledPairs.map((pair, idx) => ({
+    sideB: pair.sideB,
+    correctMatch: pair.correctMatch,
+    originalIndex: idx,
+  }));
+
+  // Shuffle Column B
+  const shuffledColumnB = seededShuffle(columnBItems, seed);
+
+  // Create a mapping of old positions to new positions
+  const positionMap: Record<string, string> = {};
+  columnBItems.forEach((item, oldIdx) => {
+    const newIdx = shuffledColumnB.findIndex(
+      (shuffled) => shuffled.sideB === item.sideB
+    );
+    if (newIdx >= 0) {
+      const oldLetter = String.fromCharCode(65 + oldIdx);
+      const newLetter = String.fromCharCode(65 + newIdx);
+      positionMap[oldLetter] = newLetter;
+    }
+  });
+
+  // Update pairs with shuffled Column B and mapped correctMatch
+  return shuffledPairs.map((pair, idx) => ({
+    ...pair,
+    sideB: shuffledColumnB[idx].sideB,
+    correctMatch: positionMap[pair.correctMatch] || pair.correctMatch,
+  }));
+};
+
+// --- Custom Components ---
+
+const UnderlinedBlankInput = ({
+  value,
+  onChange,
+  placeholder = "Type answer...",
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+}) => {
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (inputRef.current && value) {
+      const tempSpan = document.createElement("span");
+      tempSpan.style.visibility = "hidden";
+      tempSpan.style.position = "absolute";
+      tempSpan.style.font = window.getComputedStyle(inputRef.current).font;
+      tempSpan.textContent = value;
+      document.body.appendChild(tempSpan);
+      const width = Math.max(tempSpan.offsetWidth + 16, 80);
+      tempSpan.remove();
+      inputRef.current.style.width = `${Math.min(width, 300)}px`;
+    }
+  }, [value]);
+
+  return (
+    <div className="relative inline-block align-middle">
+      <input
+        ref={inputRef}
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="border-0 border-b-2 border-dashed border-primary bg-transparent text-left font-medium text-gray-800 px-2 py-1 outline-none transition-all min-w-[150px] max-w-[500px]"
+        style={{ width: "150px" }}
+      />
+    </div>
+  );
+};
+
+const MatchingAnswerInput = ({
+  value,
+  onChange,
+  disabled = false,
+  maxLetters = 26,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  disabled?: boolean;
+  maxLetters?: number;
+}) => {
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    let newValue = e.target.value.toUpperCase();
+
+    const validLetters = Array.from({ length: maxLetters }, (_, i) =>
+      String.fromCharCode(65 + i)
+    );
+
+    newValue = newValue
+      .split("")
+      .filter((char) => validLetters.includes(char))
+      .join("")
+      .slice(0, 1);
+
+    onChange(newValue);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    const validKeys = Array.from({ length: maxLetters }, (_, i) =>
+      String.fromCharCode(65 + i).toLowerCase()
+    );
+
+    if (
+      !validKeys.includes(e.key.toLowerCase()) &&
+      e.key !== "Backspace" &&
+      e.key !== "Delete" &&
+      e.key !== "ArrowLeft" &&
+      e.key !== "ArrowRight" &&
+      e.key !== "Tab" &&
+      e.key !== "Enter"
+    ) {
+      e.preventDefault();
+    }
+  };
+
+  useEffect(() => {
+    if (inputRef.current) {
+      const width = value ? Math.max(28, value.length * 14 + 16) : 44;
+      inputRef.current.style.width = `${width}px`;
+    }
+  }, [value]);
+
+  return (
+    <div className="relative inline-flex items-center">
+      <input
+        ref={inputRef}
+        type="text"
+        value={value || ""}
+        onChange={handleChange}
+        onKeyDown={handleKeyDown}
+        disabled={disabled}
+        className="px-1 py-1 text-center text-base font-medium border-0 border-b-2 border border-gray-600 focus:border-blue-600 focus:outline-none bg-transparent min-w-[44px] max-w-[60px]"
+        maxLength={1}
+        style={{ width: "44px" }}
+      />
+    </div>
+  );
+};
+
+// Modern Passage Display Component
+const ModernPassageDisplay = ({
+  passageHtml,
+  isExpanded = false,
+  onToggle,
+}: {
+  passageHtml: string;
+  isExpanded: boolean;
+  onToggle: () => void;
+}) => {
+  if (!passageHtml) return null;
+
+  return (
+    <div className="mb-4">
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2">
+          <BookText className="h-5 w-5 text-blue-600" />
+          <h3 className="font-semibold text-gray-700">Reading Passage</h3>
+        </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onToggle}
+          className="text-blue-600 hover:text-blue-800 hover:bg-blue-50"
+        >
+          {isExpanded ? (
+            <>
+              <ChevronUp className="h-4 w-4 mr-1" />
+              Collapse
+            </>
+          ) : (
+            <>
+              <ChevronDown className="h-4 w-4 mr-1" />
+              Expand
+            </>
+          )}
+        </Button>
+      </div>
+
+      <div
+        className={cn(
+          "bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-100 rounded-xl p-4 transition-all duration-300",
+          isExpanded
+            ? "max-h-[500px] overflow-y-auto"
+            : "max-h-[200px] overflow-hidden"
+        )}
+      >
+        <div
+          className="prose prose-lg max-w-none p-3 bg-white/70 rounded-lg backdrop-blur-sm"
+          dangerouslySetInnerHTML={{ __html: passageHtml }}
+        />
+      </div>
+
+      {!isExpanded && (
+        <div className="mt-2 text-center">
+          <div className="inline-flex items-center gap-1 text-sm text-blue-600 bg-blue-50 px-3 py-1 rounded-full">
+            <ScrollText className="h-3 w-3" />
+            Click "Expand" to read full passage
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// --- Modals ---
 
 function FullscreenWarningModal({ onRetry }: { onRetry: () => void }) {
   return (
@@ -120,296 +415,22 @@ function FullscreenWarningModal({ onRetry }: { onRetry: () => void }) {
         <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
           <Maximize className="h-8 w-8 text-red-600" />
         </div>
-        <h2 className="text-2xl font-bold text-gray-900 mb-4">Fullscreen Required</h2>
+        <h2 className="text-2xl font-bold text-gray-900 mb-4">
+          Fullscreen Required
+        </h2>
         <p className="text-gray-600 mb-6">
-          You must return to fullscreen mode to continue the exam. 
-          The exam cannot be taken outside of fullscreen mode.
+          Exam setting requires fullscreen mode. Please enter fullscreen to
+          continue.
         </p>
-        <Button onClick={onRetry} className="w-full bg-red-600 hover:bg-red-700 text-lg py-3">
+        <Button
+          onClick={onRetry}
+          className="w-full bg-red-600 hover:bg-red-700 text-lg py-3"
+        >
           Return to Fullscreen
         </Button>
-        <p className="text-sm text-gray-500 mt-4">
-          Click the button above to return to fullscreen mode
-        </p>
       </div>
     </div>
-  )
-}
-
-function ExamAlreadyInProgressModal({ existingSession, onResume, onCancel }: { existingSession: any, onResume: () => void, onCancel: () => void }) {
-  return (
-    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
-      <div className="bg-white rounded-2xl p-8 max-w-md mx-4 text-center">
-        <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-4">
-          <AlertTriangle className="h-8 w-8 text-amber-600" />
-        </div>
-        <h2 className="text-2xl font-bold text-gray-900 mb-4">Exam Already in Progress</h2>
-        <p className="text-gray-600 mb-6">
-          You already have an active exam session. You can only take one exam at a time.
-          Would you like to resume your previous session?
-        </p>
-        <div className="space-y-3">
-          <Button onClick={onResume} className="w-full bg-blue-600 hover:bg-blue-700 text-lg py-3">
-            Resume Previous Exam
-          </Button>
-          <Button onClick={onCancel} variant="outline" className="w-full text-lg py-3">
-            Cancel
-          </Button>
-        </div>
-        <p className="text-sm text-gray-500 mt-4">
-          Note: You cannot start a new exam while another one is in progress
-        </p>
-      </div>
-    </div>
-  )
-}
-
-function ExamInstructions({
-  examData,
-  onStartExam,
-  isLoading,
-  isResuming,
-}: {
-  examData: any
-  onStartExam: () => void
-  isLoading: boolean
-  isResuming: boolean
-}) {
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-50 p-4">
-        <Card className="w-full max-w-2xl shadow-lg">
-          <CardContent className="p-12 text-center">
-            <Spinner className="h-12 w-12 mx-auto mb-4 text-blue-600" />
-            <p className="text-gray-600">Loading exam details...</p>
-          </CardContent>
-        </Card>
-      </div>
-    )
-  }
-
-  return (
-    <div className="flex items-center justify-center min-h-screen bg-gray-50 p-4">
-      <Card className="w-full max-w-2xl shadow-lg">
-        <CardHeader className="text-center">
-          <CardTitle className="text-3xl font-bold">{examData?.title || "Exam"}</CardTitle>
-          <p className="text-gray-600 pt-1">
-            {isResuming
-              ? "You are resuming your exam. Please read the instructions carefully."
-              : "Please read the instructions carefully before you begin."}
-          </p>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-center">
-            <div className="p-4 bg-gray-100 rounded-lg border">
-              <p className="text-sm font-medium text-gray-600">Duration</p>
-              <p className="text-2xl font-bold">{examData?.duration || 60} Minutes</p>
-            </div>
-            <div className="p-4 bg-gray-100 rounded-lg border">
-              <p className="text-sm font-medium text-gray-600">Total Questions</p>
-              <p className="text-2xl font-bold">{examData?.questionCount || 0}</p>
-            </div>
-          </div>
-          {examData?.description && (
-            <div>
-              <h3 className="font-semibold text-lg mb-2">Instructions:</h3>
-              <div className="text-gray-600 bg-amber-50 p-4 rounded-md border border-amber-200 whitespace-pre-wrap">
-                {examData.description}
-              </div>
-            </div>
-          )}
-          <div className="bg-red-50 p-4 rounded-md border border-red-200">
-            <h4 className="font-semibold text-red-900 mb-2">Important Security Measures:</h4>
-            <ul className="text-red-800 text-sm space-y-1">
-              <li>• <strong>Fullscreen is required</strong> throughout the exam</li>
-              <li>• <strong>Screenshots are completely blocked</strong></li>
-              <li>• <strong>Right-click is disabled</strong> during the exam</li>
-              <li>• Multiple violation attempts may result in exam termination</li>
-              <li>• The exam will auto-submit when time runs out</li>
-            </ul>
-          </div>
-        </CardContent>
-        <div className="p-6 border-t">
-          <Button size="lg" className="w-full text-lg bg-blue-600 hover:bg-blue-700" onClick={onStartExam}>
-            {isResuming ? "Resume Exam" : "Start Exam"} <ChevronRight className="h-5 w-5 ml-2" />
-          </Button>
-        </div>
-      </Card>
-    </div>
-  )
-}
-
-function ExamResultsView({ 
-  examData, 
-  studentInfo, 
-  results, 
-  questions,
-  answers 
-}: { 
-  examData: any
-  studentInfo: any
-  results: any
-  questions: any[]
-  answers: any[]
-}) {
-  const router = useRouter()
-  
-  if (!results) {
-    return (
-      <div className="min-h-screen bg-gray-50 p-4 sm:p-6 md:p-10 flex items-center justify-center">
-        <Card className="w-full max-w-2xl shadow-lg">
-          <CardContent className="p-12 text-center">
-            <Spinner className="h-12 w-12 mx-auto mb-4 text-blue-600" />
-            <p className="text-gray-600">Loading your results...</p>
-          </CardContent>
-        </Card>
-      </div>
-    )
-  }
-
-  const totalQuestions = questions.length
-  const correctAnswers = answers.filter((answer, index) => {
-    const question = questions[index]
-    return question && question.correct_answer_index === answer
-  }).length
-
-  const percentage = Math.round((correctAnswers / totalQuestions) * 100)
-  const totalMarksObtained = results.total_marks_obtained || 0
-  const totalPossibleMarks = examData?.total_marks || totalQuestions
-
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4 sm:p-6 md:p-10">
-      <Card className="w-full max-w-4xl mx-auto shadow-2xl border-0">
-        <CardHeader className="text-center bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-t-lg py-8">
-          <div className="flex justify-center mb-4">
-            <Award className="h-16 w-16 text-yellow-300" />
-          </div>
-          <CardTitle className="text-3xl font-bold">Exam Results</CardTitle>
-          <p className="text-blue-100 pt-2">Your exam has been evaluated successfully</p>
-        </CardHeader>
-        
-        <CardContent className="p-8 space-y-8">
-          {/* Student and Exam Info */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="bg-white rounded-lg p-6 border shadow-sm">
-              <h3 className="font-semibold text-lg mb-4 flex items-center gap-2">
-                <Target className="h-5 w-5 text-blue-600" />
-                Student Information
-              </h3>
-              <div className="space-y-3">
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Name:</span>
-                  <span className="font-semibold">{studentInfo?.name}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Student ID:</span>
-                  <span className="font-semibold">{studentInfo?.student_id}</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-lg p-6 border shadow-sm">
-              <h3 className="font-semibold text-lg mb-4 flex items-center gap-2">
-                <BarChart className="h-5 w-5 text-green-600" />
-                Exam Summary
-              </h3>
-              <div className="space-y-3">
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Exam:</span>
-                  <span className="font-semibold">{examData?.title}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Total Questions:</span>
-                  <span className="font-semibold">{totalQuestions}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Performance Metrics */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="bg-white rounded-lg p-4 text-center border shadow-sm">
-              <div className="text-2xl font-bold text-blue-600">{correctAnswers}</div>
-              <div className="text-sm text-gray-600">Correct</div>
-            </div>
-            <div className="bg-white rounded-lg p-4 text-center border shadow-sm">
-              <div className="text-2xl font-bold text-red-600">{totalQuestions - correctAnswers}</div>
-              <div className="text-sm text-gray-600">Incorrect</div>
-            </div>
-            <div className="bg-white rounded-lg p-4 text-center border shadow-sm">
-              <div className="text-2xl font-bold text-green-600">{percentage}%</div>
-              <div className="text-sm text-gray-600">Score</div>
-            </div>
-            <div className="bg-white rounded-lg p-4 text-center border shadow-sm">
-              <div className="text-2xl font-bold text-purple-600">
-                {totalMarksObtained}/{totalPossibleMarks}
-              </div>
-              <div className="text-sm text-gray-600">Marks</div>
-            </div>
-          </div>
-        </CardContent>
-        
-        <div className="p-6 border-t bg-gray-50 rounded-b-lg text-center">
-          <div className="space-x-4">
-            <Button onClick={() => router.push("/")} className="bg-blue-600 hover:bg-blue-700">
-              Return to Home
-            </Button>
-          </div>
-          <p className="text-gray-500 text-sm mt-4">
-            Results are final and have been recorded in the system.
-          </p>
-        </div>
-      </Card>
-    </div>
-  )
-}
-
-function ExamResultsDisabledView() {
-  const router = useRouter()
-  
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4 sm:p-6 md:p-10 flex items-center justify-center">
-      <Card className="w-full max-w-2xl shadow-2xl border-0">
-        <CardHeader className="text-center bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-t-lg py-8">
-          <div className="flex justify-center mb-4">
-            <Award className="h-16 w-16 text-yellow-300" />
-          </div>
-          <CardTitle className="text-3xl font-bold">Exam Submitted Successfully</CardTitle>
-          <p className="text-blue-100 pt-2">Your exam has been submitted and recorded</p>
-        </CardHeader>
-        
-        <CardContent className="p-8 text-center">
-          <div className="w-24 h-24 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
-            <CheckCircle2 className="h-12 w-12 text-green-600" />
-          </div>
-          
-          <h3 className="text-2xl font-bold text-gray-900 mb-4">Thank You!</h3>
-          <p className="text-gray-600 mb-6">
-            Your exam has been successfully submitted. Results will be available when released by your instructor.
-          </p>
-          
-          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
-            <p className="text-yellow-800 font-medium">
-              <AlertTriangle className="h-5 w-5 inline-block mr-2" />
-              Results are currently not available for viewing.
-            </p>
-            <p className="text-yellow-700 text-sm mt-2">
-              Your instructor will notify you when results are ready to be viewed.
-            </p>
-          </div>
-        </CardContent>
-        
-        <div className="p-6 border-t bg-gray-50 rounded-b-lg text-center">
-          <Button onClick={() => router.push("/")} className="bg-blue-600 hover:bg-blue-700 px-8">
-            Return to Home
-          </Button>
-          <p className="text-gray-500 text-sm mt-4">
-            You can close this window now.
-          </p>
-        </div>
-      </Card>
-    </div>
-  )
+  );
 }
 
 function ExamTerminatedModal({ onClose }: { onClose: () => void }) {
@@ -419,1273 +440,1242 @@ function ExamTerminatedModal({ onClose }: { onClose: () => void }) {
         <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
           <Ban className="h-8 w-8 text-red-600" />
         </div>
-        <h2 className="text-2xl font-bold text-gray-900 mb-4">Exam Terminated</h2>
+        <h2 className="text-2xl font-bold text-gray-900 mb-4">
+          Exam Terminated
+        </h2>
         <p className="text-gray-600 mb-6">
-          Your exam has been terminated due to multiple security violation attempts. 
-          Please contact your teacher for further instructions.
+          Exam terminated due to security violations.
         </p>
-        <Button onClick={onClose} className="w-full bg-red-600 hover:bg-red-700 text-lg py-3">
+        <Button
+          onClick={onClose}
+          className="w-full bg-red-600 hover:bg-red-700"
+        >
           Return to Home
         </Button>
       </div>
     </div>
-  )
+  );
 }
 
-function PassageModal({ 
-  isOpen, 
-  onClose, 
+// Updated Passage Modal with modern design
+function PassageModal({
+  isOpen,
+  onClose,
   passageHtml,
   questionNumber,
 }: {
-  isOpen: boolean
-  onClose: () => void
-  passageHtml: string
-  questionNumber: number
+  isOpen: boolean;
+  onClose: () => void;
+  passageHtml: string;
+  questionNumber: number;
 }) {
-  const [fontSize, setFontSize] = useState(16)
-
-  const increaseFontSize = () => {
-    setFontSize(prev => Math.min(prev + 2, 24))
-  }
-
-  const decreaseFontSize = () => {
-    setFontSize(prev => Math.max(prev - 2, 12))
-  }
-
-  const resetFontSize = () => {
-    setFontSize(16)
-  }
-
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[900px] max-w-[95vw] h-[80vh] flex flex-col">
-        <DialogHeader>
-          <div className="flex justify-between items-center">
-            <div>
-              <DialogTitle className="flex items-center gap-2">
-                <BookOpen className="h-5 w-5" />
-                Passage for Question {questionNumber}
-              </DialogTitle>
-              <DialogDescription>
-                Read the passage carefully before answering the question.
-              </DialogDescription>
+      <DialogContent className="sm:max-w-[900px] max-w-[95vw] h-[85vh] flex flex-col p-0 overflow-hidden">
+        <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white p-6">
+          <DialogHeader className="text-white">
+            <div className="flex items-center gap-3">
+              <BookText className="h-6 w-6" />
+              <div>
+                <DialogTitle className="text-xl">Reading Passage</DialogTitle>
+                <DialogDescription className="text-blue-100">
+                  For Question {questionNumber}
+                </DialogDescription>
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={decreaseFontSize}
-                disabled={fontSize <= 12}
-                className="h-8 w-8 p-0"
-              >
-                <Minimize2 className="h-3 w-3" />
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={resetFontSize}
-                className="h-8 px-2 text-xs"
-              >
-                {fontSize}px
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={increaseFontSize}
-                disabled={fontSize >= 24}
-                className="h-8 w-8 p-0"
-              >
-                <Maximize2 className="h-3 w-3" />
-              </Button>
+          </DialogHeader>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-6">
+          <div className="max-w-4xl mx-auto">
+            <div className="bg-white rounded-xl shadow-lg p-8 border border-gray-200">
+              <div
+                className="prose prose-lg max-w-none"
+                dangerouslySetInnerHTML={{ __html: passageHtml }}
+              />
             </div>
           </div>
-        </DialogHeader>
-        <div className="flex-1 overflow-y-auto p-4 bg-gray-50 rounded-lg border">
-          <div 
-            className="prose max-w-none p-4 bg-white rounded-lg"
-            style={{ fontSize: `${fontSize}px`, lineHeight: 1.6 }}
-            dangerouslySetInnerHTML={{ __html: passageHtml }}
-          />
         </div>
-        <div className="flex justify-end pt-4 border-t">
-          <Button onClick={onClose}>
-            Close Passage
-          </Button>
-        </div>
-      </DialogContent>
-    </Dialog>
-  )
-}
 
-function FullQuestionModal({ 
-  isOpen, 
-  onClose, 
-  questionText,
-  questionNumber,
-  totalQuestions
-}: {
-  isOpen: boolean
-  onClose: () => void
-  questionText: string
-  questionNumber: number
-  totalQuestions: number
-}) {
-  const [fontSize, setFontSize] = useState(16)
-
-  const increaseFontSize = () => {
-    setFontSize(prev => Math.min(prev + 2, 24))
-  }
-
-  const decreaseFontSize = () => {
-    setFontSize(prev => Math.max(prev - 2, 12))
-  }
-
-  const resetFontSize = () => {
-    setFontSize(16)
-  }
-
-  return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[900px] max-w-[95vw] h-[80vh] flex flex-col">
-        <DialogHeader>
-          <div className="flex justify-between items-center">
-            <div>
-              <DialogTitle className="flex items-center gap-2">
-                <FileText className="h-5 w-5" />
-                Full Question {questionNumber} of {totalQuestions}
-              </DialogTitle>
-              <DialogDescription>
-                Read the full question text below
-              </DialogDescription>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={decreaseFontSize}
-                disabled={fontSize <= 12}
-                className="h-8 w-8 p-0"
-              >
-                <Minimize2 className="h-3 w-3" />
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={resetFontSize}
-                className="h-8 px-2 text-xs"
-              >
-                {fontSize}px
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={increaseFontSize}
-                disabled={fontSize >= 24}
-                className="h-8 w-8 p-0"
-              >
-                <Maximize2 className="h-3 w-3" />
-              </Button>
-            </div>
-          </div>
-        </DialogHeader>
-        <div className="flex-1 overflow-y-auto p-4 bg-gray-50 rounded-lg border">
-          <div 
-            className="prose max-w-none p-4 bg-white rounded-lg"
-            style={{ fontSize: `${fontSize}px`, lineHeight: 1.6 }}
+        <div className="border-t p-4 bg-gray-50 flex justify-end">
+          <Button
+            onClick={onClose}
+            className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
           >
-            {renderWithMath(questionText)}
-          </div>
-        </div>
-        <div className="flex justify-end pt-4 border-t">
-          <Button onClick={onClose}>
-            Close
+            Return to Question
           </Button>
         </div>
       </DialogContent>
     </Dialog>
-  )
+  );
 }
 
-const generateShuffleOrder = (array: any[], sessionId: string, type: "questions" | "options") => {
-  let seed = 0
-  for (let i = 0; i < sessionId.length; i++) {
-    seed += sessionId.charCodeAt(i)
-  }
-
-  const shuffled = [...array]
-  const random = () => {
-    const x = Math.sin(seed++) * 10000
-    return x - Math.floor(x)
-  }
-
-  for (let i = shuffled.length - 1; i > 0; i--) {
-    const j = Math.floor(random() * (i + 1))
-    ;[shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]
-  }
-  return shuffled
-}
-
-const checkExistingActiveSessions = async (studentId: string, examId: string) => {
-  try {
-    const { data: activeSessions, error } = await supabase
-      .from("exam_sessions")
-      .select("*")
-      .eq("student_id", studentId)
-      .eq("status", "in_progress")
-      .neq("exam_id", examId)
-
-    if (error) {
-      console.error("Error checking active sessions:", error)
-      return null
-    }
-
-    return activeSessions && activeSessions.length > 0 ? activeSessions[0] : null
-  } catch (err) {
-    console.error("Error checking active sessions:", err)
-    return null
-  }
-}
+// --- Main Component ---
 
 export default function ExamTakingPage() {
-  const router = useRouter()
-  const params = useParams()
-  const searchParams = useSearchParams()
+  const router = useRouter();
+  const searchParams = useSearchParams();
 
-  const [examStatus, setExamStatus] = useState<"loading" | "instructions" | "in-progress" | "completed" | "terminated" | "results">("loading")
-  const [examData, setExamData] = useState<any>(null)
-  const [studentInfo, setStudentInfo] = useState<any>(null)
-  const [sessionId, setSessionId] = useState<string | null>(null)
-  const [questions, setQuestions] = useState<any[]>([])
-  const [originalQuestions, setOriginalQuestions] = useState<any[]>([])
-  const [isResuming, setIsResuming] = useState(false)
-  const [showAlreadyInProgressModal, setShowAlreadyInProgressModal] = useState(false)
-  const [existingActiveSession, setExistingActiveSession] = useState<any>(null)
-  const [examResults, setExamResults] = useState<any>(null)
-  const [showResults, setShowResults] = useState(true)
+  // State
+  const [examStatus, setExamStatus] = useState<
+    "loading" | "instructions" | "in-progress" | "completed" | "terminated"
+  >("loading");
+  const [examData, setExamData] = useState<any>(null);
+  const [studentInfo, setStudentInfo] = useState<any>(null);
+  const [questions, setQuestions] = useState<any[]>([]);
+  const [answers, setAnswers] = useState<any[]>([]);
+  const [flaggedQuestions, setFlaggedQuestions] = useState(
+    () => new Set<number>()
+  );
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
 
-  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0)
-  const [answers, setAnswers] = useState<(number | null)[]>([])
-  const [flaggedQuestions, setFlaggedQuestions] = useState(() => new Set<number>())
-  const [timeLeft, setTimeLeft] = useState(0)
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false)
-  const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false)
-  const [showFullscreenWarning, setShowFullscreenWarning] = useState(false)
-  const [violationCount, setViolationCount] = useState(0)
-  const [showPassageModal, setShowPassageModal] = useState(false)
-  const [showFullQuestionModal, setShowFullQuestionModal] = useState(false)
-  const [currentPassageHtml, setCurrentPassageHtml] = useState("")
-  const [isTimerVisible, setIsTimerVisible] = useState(true)
-  const [windowWidth, setWindowWidth] = useState(0)
-  const [isFullscreenActive, setIsFullscreenActive] = useState(false)
+  // Timer States
+  const [timeLeft, setTimeLeft] = useState(0);
+  const timeLeftRef = useRef(0);
 
-  const examDurationRef = useRef<number>(0)
-  const timerIntervalRef = useRef<NodeJS.Timeout | null>(null)
-  const timeSyncIntervalRef = useRef<NodeJS.Timeout | null>(null)
-  const autoSubmitTriggeredRef = useRef<boolean>(false)
-  const lastFullscreenCheckRef = useRef<number>(0)
-  const violationTimerRef = useRef<NodeJS.Timeout | null>(null)
-  const fullscreenAttemptRef = useRef<boolean>(false)
-  const MAX_VIOLATIONS = 3
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submissionResult, setSubmissionResult] = useState<any>(null);
 
-  // Track window width for responsive design
+  // UI State
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [showPassageModal, setShowPassageModal] = useState(false);
+  const [showFullQuestionModal, setShowFullQuestionModal] = useState(false);
+  const [currentPassageHtml, setCurrentPassageHtml] = useState("");
+  const [isTimerVisible, setIsTimerVisible] = useState(true);
+  const [showFullscreenWarning, setShowFullscreenWarning] = useState(false);
+  const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
+  const [isFullscreenActive, setIsFullscreenActive] = useState(false);
+  const [windowWidth, setWindowWidth] = useState(0);
+  const [passageExpanded, setPassageExpanded] = useState(false);
+
+  // Refs
+  const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const timeSyncIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const sessionCheckIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const examDurationRef = useRef<number>(0);
+  const autoSubmitTriggeredRef = useRef<boolean>(false);
+  const lastFullscreenCheckRef = useRef<number>(0);
+
+  // Refs to track latest state for timer callback
+  const questionsRef = useRef<any[]>([]);
+  const answersRef = useRef<any[]>([]);
+  const examDataRef = useRef<any>(null);
+  const studentInfoRef = useRef<any>(null);
+  const sessionIdRef = useRef<string | null>(null);
+
+  // Keep refs updated with latest state
   useEffect(() => {
-    const handleResize = () => {
-      const newWidth = window.innerWidth
-      setWindowWidth(newWidth)
-    }
-    
-    // Initial width
-    setWindowWidth(window.innerWidth)
-    
-    window.addEventListener('resize', handleResize)
-    
-    return () => {
-      window.removeEventListener('resize', handleResize)
-    }
-  }, [])
+    questionsRef.current = questions;
+    answersRef.current = answers;
+    examDataRef.current = examData;
+    studentInfoRef.current = studentInfo;
+    sessionIdRef.current = sessionId;
+  }, [questions, answers, examData, studentInfo, sessionId]);
 
-  // Automatic fullscreen when exam starts
+  // Initialization
   useEffect(() => {
-    const enterFullscreen = async () => {
-      try {
-        const elem = document.documentElement
-        if (elem.requestFullscreen && !document.fullscreenElement && examStatus === "in-progress") {
-          await elem.requestFullscreen()
-          setIsFullscreenActive(true)
-          fullscreenAttemptRef.current = true
-          console.log("Automatic fullscreen activated")
-        }
-      } catch (err) {
-        console.warn("Fullscreen request failed:", err)
-        fullscreenAttemptRef.current = false
-      }
-    }
+    setWindowWidth(window.innerWidth);
+    const handleResize = () => setWindowWidth(window.innerWidth);
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
 
-    if (examStatus === "in-progress" && !fullscreenAttemptRef.current) {
-      // Delay slightly to ensure DOM is ready
-      setTimeout(() => {
-        enterFullscreen()
-      }, 300)
-    }
-  }, [examStatus])
+  // Keep ref updated
+  useEffect(() => {
+    timeLeftRef.current = timeLeft;
+  }, [timeLeft]);
 
-  // Load exam data
+  // --- Load Data with Shuffling and Randomization ---
   useEffect(() => {
     const loadExamData = async () => {
       try {
-        const studentId = searchParams.get('student')
-        const examCode = searchParams.get('exam')
-        const sessionIdParam = searchParams.get('session')
-        
+        const studentId = searchParams.get("student");
+        const examCode = searchParams.get("exam");
+
         if (!studentId || !examCode) {
-          toast.error("Invalid exam access. Please check your URL.")
-          router.push("/")
-          return
+          toast.error("Invalid URL");
+          router.push("/");
+          return;
         }
 
-        // Check for existing active sessions
-        const { data: activeSessionsCheck } = await supabase
-          .from("exam_sessions")
-          .select("*")
-          .eq("student_id", studentId)
-          .eq("status", "in_progress")
-
-        if (activeSessionsCheck && activeSessionsCheck.length > 0) {
-          const activeSession = activeSessionsCheck[0]
-          // Don't block if it's the same exam
-          const { data: examCheck } = await supabase
-            .from("exams")
-            .select("*")
-            .eq("exam_code", examCode)
-            .single()
-
-          if (examCheck && activeSession.exam_id !== examCheck.id) {
-            setExistingActiveSession(activeSession)
-            setShowAlreadyInProgressModal(true)
-            setExamStatus("loading")
-            return
-          }
-        }
-
-        const { data: student, error: studentError } = await supabase
+        // Get student info
+        const { data: student } = await supabase
           .from("students")
           .select("*")
           .eq("student_id", studentId)
-          .single()
+          .single();
 
-        if (studentError || !student) {
-          toast.error("Student not found. Please check your Student ID.")
-          router.push("/")
-          return
+        if (!student) {
+          toast.error("Student not found");
+          return;
         }
-        setStudentInfo(student)
+        setStudentInfo(student);
+        studentInfoRef.current = student;
 
-        const { data: exam, error: examError } = await supabase
+        // Get exam data WITH ALL SETTINGS
+        const { data: exam } = await supabase
           .from("exams")
           .select("*")
           .eq("exam_code", examCode)
-          .single()
+          .single();
 
-        if (examError || !exam) {
-          toast.error("Exam not found. Please check your Exam ID.")
-          router.push("/")
-          return
+        if (!exam) {
+          toast.error("Exam not found");
+          return;
         }
 
-        // Check if results are enabled
-        setShowResults(exam.show_results !== false)
+        // Check if exam is active
+        if (!exam.exam_active) {
+          toast.error("This exam is no longer active");
+          router.push("/");
+          return;
+        }
 
-        examDurationRef.current = exam.duration * 60
+        setExamData(exam);
+        examDataRef.current = exam;
+        examDurationRef.current = exam.duration * 60;
 
-        const { data: questionsData, error: questionsError } = await supabase
+        // Fetch Questions
+        const { data: qData } = await supabase
           .from("questions")
           .select("*")
           .eq("exam_id", exam.id)
-          .order("id")
+          .order("id");
 
-        if (questionsError || !questionsData || questionsData.length === 0) {
-          toast.error("No questions found for this exam")
-          return
+        if (!qData || qData.length === 0) {
+          toast.error("No questions found");
+          return;
         }
 
-        const processedQuestions = questionsData.map((q) => {
-          let options: any[] = []
-          let correctAnswerIndex: number | null = null
+        // Process questions
+        const processedQuestions = qData.map((q, originalIndex) => {
+          const { passageHtml, questionText, hasPassage } = parseQuestionText(
+            q.question_text
+          );
 
-          const { passageHtml, questionText, hasPassage } = parseQuestionText(q.question_text)
+          // Determine question type
+          let type = "mcq";
+          if (q.question_type === "matching") type = "matching";
+          else if (q.question_type === "fill_blank") type = "blank";
+          else if (q.question_type === "true_false") type = "tf";
+          else if (passageHtml) type = "passage";
+
+          // Parse options for MCQ/TF/Passage
+          let options: any[] = [];
+          let correct_option_id = q.correct_option_id || 0;
 
           if (q.options) {
             try {
-              const parsedOptions = typeof q.options === 'string' ? JSON.parse(q.options) : q.options
-            
-              if (parsedOptions && Array.isArray(parsedOptions.options)) {
-                const optionImages = parsedOptions.option_images || []
-                options = parsedOptions.options.map((text: string, index: number) => ({
-                  id: index,
-                  text: text,
-                  image: optionImages[index] || null,
-                  is_correct: index === parsedOptions.correct_option_id,
-                }))
-                correctAnswerIndex = parsedOptions.correct_option_id
-              } else if (Array.isArray(parsedOptions)) {
-                options = parsedOptions.map((opt: any, index: number) => {
-                  const isCorrect = opt.correct || false
-                  if (isCorrect) correctAnswerIndex = index
-                  return {
-                    id: index,
-                    text: opt.text || `Option ${String.fromCharCode(65 + index)}`,
-                    is_correct: isCorrect,
-                    image: opt.image || null,
-                  }
-                })
+              const parsed =
+                typeof q.options === "string"
+                  ? JSON.parse(q.options)
+                  : q.options;
+              if (parsed && parsed.options) {
+                options = parsed.options.map((text: string, i: number) => ({
+                  id: i,
+                  text,
+                  image: parsed.option_images?.[i] || null,
+                }));
               }
             } catch (e) {
-              console.error("Error parsing options:", e)
+              console.error("Error parsing options:", e);
             }
           }
 
-          // Default options if none found
-          if (options.length === 0) {
-            options = ["Option A", "Option B", "Option C", "Option D"].map((text, index) => ({
-              id: index,
-              text,
-              is_correct: false,
-              image: null,
-            }))
+          // Parse metadata for matching and blank questions
+          let matchingPairs: any[] = [];
+          let matchingInstructions = "";
+          let blanks: any[] = [];
+          let rawMetadata: any = null;
+
+          if (q.metadata) {
+            try {
+              rawMetadata =
+                typeof q.metadata === "string"
+                  ? JSON.parse(q.metadata)
+                  : q.metadata;
+
+              if (type === "matching") {
+                matchingPairs = rawMetadata.pairs || [];
+                matchingInstructions = rawMetadata.instructions || "";
+
+                // Ensure each pair has correctMatch
+                matchingPairs = matchingPairs.map((pair: any, idx: number) => ({
+                  ...pair,
+                  correctMatch:
+                    pair.correctMatch || String.fromCharCode(65 + idx),
+                }));
+              } else if (type === "blank") {
+                blanks = rawMetadata.blanks || [];
+                blanks = blanks.map((blank: any) => ({
+                  ...blank,
+                  correctAnswer: blank.correctAnswer || blank.answer || "",
+                }));
+              }
+            } catch (e) {
+              console.error("Error parsing metadata:", e);
+            }
           }
 
           return {
             ...q,
+            type,
             question_text: questionText,
             passage_html: passageHtml,
             has_passage: hasPassage,
-            options: options,
-            correct_answer_index: correctAnswerIndex
-          }
-        })
+            options,
+            blanks,
+            matchingPairs,
+            matchingInstructions,
+            raw_metadata: rawMetadata,
+            marks: q.marks || 1,
+            correct_option_id,
+            original_index: originalIndex,
+          };
+        });
 
-        let existingSession = null
-        let currentSessionId = sessionIdParam
+        // Create unique seed for this student-exam combination
+        const shuffleSeed = `${student.id}-${exam.id}-${exam.exam_code}-${Date.now()}`;
+        let finalQuestions = processedQuestions;
 
-        if (sessionIdParam) {
-          const { data: session } = await supabase
-            .from("exam_sessions")
-            .select("*")
-            .eq("id", sessionIdParam)
-            .single()
-
-          if (session) {
-            existingSession = session
-            currentSessionId = session.id
-            setSessionId(session.id)
-          }
+        // SHUFFLE QUESTIONS if enabled in exam settings
+        if (exam.questions_shuffled) {
+          finalQuestions = seededShuffle(processedQuestions, shuffleSeed);
         }
 
-        let questionsToUse = processedQuestions
-        setOriginalQuestions(processedQuestions)
+        // RANDOMIZE OPTIONS if enabled in exam settings
+        if (exam.options_shuffled) {
+          finalQuestions = finalQuestions.map((q) => {
+            if (
+              (q.type === "mcq" || q.type === "tf" || q.type === "passage") &&
+              q.options.length > 0
+            ) {
+              const optionSeed = shuffleSeed + q.id;
+              const { shuffledOptions, newCorrectIndex } =
+                shuffleOptionsWithSeed(
+                  q.options,
+                  optionSeed,
+                  q.correct_option_id
+                );
 
-        if (currentSessionId && exam.questions_shuffled) {
-          questionsToUse = generateShuffleOrder(processedQuestions, currentSessionId, "questions")
-        }
-
-        // Apply option shuffling if enabled
-        if (currentSessionId && exam.options_shuffled) {
-          questionsToUse = questionsToUse.map((question) => {
-            if (question.options && question.options.length > 0) {
-              const shuffledOptions = generateShuffleOrder(question.options, `${currentSessionId}-${question.id}`, "options")
-              
-              // Find new correct answer index after shuffling
-              const newCorrectIndex = shuffledOptions.findIndex((opt: any) => opt.is_correct)
-              
               return {
-                ...question,
+                ...q,
                 options: shuffledOptions,
-                correct_answer_index: newCorrectIndex >= 0 ? newCorrectIndex : question.correct_answer_index
-              }
+                correct_option_id: newCorrectIndex,
+              };
             }
-            return question
-          })
+            return q;
+          });
         }
 
-        let initialExamStatus: "loading" | "instructions" | "in-progress" | "completed" | "results" = "instructions"
-        let isResumingSession = false
+        // SHUFFLE MATCHING PAIRS if enabled
+        if (exam.options_shuffled) {
+          finalQuestions = finalQuestions.map((q) => {
+            if (
+              q.type === "matching" &&
+              q.matchingPairs &&
+              q.matchingPairs.length > 0
+            ) {
+              const pairSeed = shuffleSeed + q.id + "-matching";
+              const shuffledPairs = shuffleMatchingPairsWithSeed(
+                q.matchingPairs,
+                pairSeed
+              );
 
-        if (existingSession) {
-          if (existingSession.status === "in_progress") {
-            isResumingSession = true
-            setIsResuming(true)
-            initialExamStatus = "in-progress"
-            
-            const remaining = Math.max(0, existingSession.time_remaining || examDurationRef.current)
-            setTimeLeft(remaining)
-
-            const { data: savedAnswers } = await supabase
-              .from("student_answers")
-              .select("*")
-              .eq("session_id", existingSession.id)
-
-            if (savedAnswers) {
-              const restoredAnswers = new Array(questionsToUse.length).fill(null)
-              const restoredFlags = new Set<number>()
-              
-              savedAnswers.forEach((sa: any) => {
-                const qIndex = questionsToUse.findIndex(q => q.id === sa.question_id)
-                if (qIndex > -1) {
-                  restoredAnswers[qIndex] = sa.selected_option_id
-                  if (sa.is_flagged) {
-                    restoredFlags.add(qIndex)
-                  }
-                }
-              })
-              
-              setAnswers(restoredAnswers)
-              setFlaggedQuestions(restoredFlags)
+              return {
+                ...q,
+                matchingPairs: shuffledPairs,
+              };
             }
-          } else if (existingSession.status === "submitted") {
-            // Check if results should be shown
-            if (exam.show_results !== false) {
-              const { data: results } = await supabase
-                .from("results")
-                .select("*")
-                .eq("exam_id", exam.id)
-                .eq("student_id", student.id)
-                .single()
+            return q;
+          });
+        }
 
-              if (results) {
-                setExamResults(results)
-                setExamStatus("results")
-                return
+        setQuestions(finalQuestions);
+        questionsRef.current = finalQuestions;
+
+        // Initialize answers structure
+        const initialAnswers = finalQuestions.map((q) => {
+          if (q.type === "matching") {
+            return Array(q.matchingPairs?.length || 0).fill(null);
+          } else if (q.type === "blank") {
+            const answerObj: Record<string, string> = {};
+            q.blanks?.forEach((blank: any) => {
+              answerObj[blank.id] = "";
+            });
+            return answerObj;
+          }
+          return null;
+        });
+
+        setAnswers(initialAnswers);
+        answersRef.current = initialAnswers;
+
+        // Check for existing session
+        const { data: activeSessions } = await supabase
+          .from("exam_sessions")
+          .select("*")
+          .eq("student_id", student.id)
+          .eq("exam_id", exam.id)
+          .eq("status", "in_progress");
+
+        const activeSession =
+          activeSessions && activeSessions.length > 0
+            ? activeSessions[0]
+            : null;
+
+        if (activeSession) {
+          // Check if session is already submitted
+          if (activeSession.status === "submitted") {
+            toast.error("You have already submitted this exam");
+            router.push("/");
+            return;
+          }
+
+          // Resume existing session
+          setSessionId(activeSession.id);
+          sessionIdRef.current = activeSession.id;
+          const remaining =
+            activeSession.time_remaining !== null
+              ? activeSession.time_remaining
+              : examDurationRef.current;
+          setTimeLeft(remaining);
+          timeLeftRef.current = remaining;
+
+          // Load saved answers
+          const { data: savedAnswers } = await supabase
+            .from("student_answers")
+            .select("*")
+            .eq("session_id", activeSession.id);
+
+          if (savedAnswers) {
+            const restoredAnswers = [...initialAnswers];
+            const restoredFlags = new Set<number>();
+
+            savedAnswers.forEach((sa: any) => {
+              const idx = finalQuestions.findIndex(
+                (q) => q.id === sa.question_id
+              );
+              if (idx > -1) {
+                try {
+                  if (sa.answer_text) {
+                    const parsed = JSON.parse(sa.answer_text);
+
+                    if (finalQuestions[idx].type === "matching") {
+                      if (
+                        typeof parsed === "object" &&
+                        !Array.isArray(parsed)
+                      ) {
+                        const pairCount =
+                          finalQuestions[idx].matchingPairs?.length || 0;
+                        const answerArray = Array(pairCount).fill(null);
+                        Object.entries(parsed).forEach(([key, value]) => {
+                          const index = parseInt(key);
+                          if (
+                            !isNaN(index) &&
+                            index >= 0 &&
+                            index < pairCount
+                          ) {
+                            answerArray[index] = value;
+                          }
+                        });
+                        restoredAnswers[idx] = answerArray;
+                      } else {
+                        restoredAnswers[idx] = parsed;
+                      }
+                    } else {
+                      restoredAnswers[idx] = parsed;
+                    }
+                  } else {
+                    restoredAnswers[idx] = sa.selected_option_id;
+                  }
+                } catch {
+                  restoredAnswers[idx] =
+                    sa.answer_text || sa.selected_option_id;
+                }
+                if (sa.is_flagged) restoredFlags.add(idx);
               }
-            } else {
-              setExamStatus("completed")
-              return
+            });
+            setAnswers(restoredAnswers);
+            answersRef.current = restoredAnswers;
+            setFlaggedQuestions(restoredFlags);
+          }
+
+          setExamStatus("in-progress");
+
+          // Enter fullscreen if required
+          if (exam.fullscreen_required) {
+            try {
+              await document.documentElement.requestFullscreen();
+            } catch (err) {
+              console.log("Fullscreen request failed:", err);
             }
           }
         } else {
-          setAnswers(new Array(questionsToUse.length).fill(null))
-          setTimeLeft(examDurationRef.current)
+          // Check if exam was already submitted
+          const { data: existingResult } = await supabase
+            .from("results")
+            .select("*")
+            .eq("student_id", student.id)
+            .eq("exam_id", exam.id)
+            .single();
+
+          if (existingResult) {
+            toast.error("You have already completed this exam");
+            router.push("/");
+            return;
+          }
+
+          // New session - show instructions
+          setExamStatus("instructions");
         }
-
-        setExamData({ 
-          ...exam, 
-          questionCount: processedQuestions.length,
-          title: exam.title,
-          duration: exam.duration,
-          description: exam.description,
-          total_marks: exam.total_marks,
-          options_shuffled: exam.options_shuffled,
-          questions_shuffled: exam.questions_shuffled,
-          show_results: exam.show_results
-        })
-        setQuestions(questionsToUse)
-        setExamStatus(initialExamStatus)
-
       } catch (err) {
-        console.error("Error loading exam:", err)
-        toast.error("Failed to load exam. Please try again.")
-        router.push("/")
+        console.error("Error loading exam data:", err);
+        toast.error("Error loading exam");
       }
-    }
+    };
 
-    loadExamData()
-  }, [router, searchParams])
+    loadExamData();
+  }, [searchParams, router]);
 
-  // Timer - Working properly with real-time countdown
-  useEffect(() => {
-    if (examStatus === "in-progress") {
-      if (timerIntervalRef.current) {
-        clearInterval(timerIntervalRef.current)
+  // --- Calculate Score Function ---
+  const calculateScore = (questions: any[], answers: any[]) => {
+    let totalMarks = 0;
+    let correctCount = 0;
+    let questionResults: any[] = [];
+
+    questions.forEach((q, i) => {
+      const studentAns = answers[i];
+      const marksPerQuestion = q.marks || 1;
+      let earnedMarks = 0;
+      let isFullyCorrect = false;
+
+      if (studentAns !== null && studentAns !== undefined) {
+        if (q.type === "mcq" || q.type === "tf" || q.type === "passage") {
+          if (studentAns === q.correct_option_id) {
+            earnedMarks = marksPerQuestion;
+            correctCount++;
+            isFullyCorrect = true;
+          }
+        } else if (q.type === "matching") {
+          const correctPairs = q.matchingPairs || q.raw_metadata?.pairs || [];
+          if (correctPairs.length === 0) {
+            questionResults.push({ questionIndex: i, earnedMarks: 0 });
+            return;
+          }
+
+          let correctMatches = 0;
+          const studentAnswers = Array.isArray(studentAns) ? studentAns : [];
+          const marksPerMatch = marksPerQuestion / correctPairs.length;
+
+          correctPairs.forEach((pair: any, idx: number) => {
+            const studentAnswer = studentAnswers[idx];
+            const correctAnswer = pair.correctMatch;
+
+            if (
+              studentAnswer &&
+              correctAnswer &&
+              studentAnswer.toString().toUpperCase() ===
+                correctAnswer.toString().toUpperCase()
+            ) {
+              correctMatches++;
+              earnedMarks += marksPerMatch;
+            }
+          });
+
+          earnedMarks = Math.round(earnedMarks * 100) / 100;
+
+          if (correctMatches === correctPairs.length) {
+            correctCount++;
+            isFullyCorrect = true;
+          }
+        } else if (q.type === "blank") {
+          const correctBlanks = q.blanks || q.raw_metadata?.blanks || [];
+          if (correctBlanks.length === 0) {
+            questionResults.push({ questionIndex: i, earnedMarks: 0 });
+            return;
+          }
+
+          let correctBlanksCount = 0;
+          const studentAnswers = studentAns as Record<string, string>;
+          const marksPerBlank = marksPerQuestion / correctBlanks.length;
+
+          correctBlanks.forEach((blank: any) => {
+            const studentVal = studentAnswers[blank.id]?.trim();
+            const correctVal = blank.correctAnswer?.trim();
+
+            if (
+              studentVal &&
+              correctVal &&
+              studentVal.toLowerCase() === correctVal.toLowerCase()
+            ) {
+              correctBlanksCount++;
+              earnedMarks += marksPerBlank;
+            }
+          });
+
+          earnedMarks = Math.round(earnedMarks * 100) / 100;
+
+          if (correctBlanksCount === correctBlanks.length) {
+            correctCount++;
+            isFullyCorrect = true;
+          }
+        }
+      }
+
+      totalMarks += earnedMarks;
+      questionResults.push({
+        questionIndex: i,
+        earnedMarks,
+        isFullyCorrect,
+      });
+    });
+
+    totalMarks = Math.round(totalMarks * 100) / 100;
+
+    const totalPossibleMarks = questions.reduce((sum, q) => {
+      return sum + (q.marks || 1);
+    }, 0);
+
+    const percent = Math.round((totalMarks / totalPossibleMarks) * 100) || 0;
+
+    return {
+      totalMarks,
+      totalPossibleMarks,
+      percent,
+      correctCount,
+      totalQuestions: questions.length,
+      timeSpent: examDurationRef.current - timeLeft,
+      questionResults,
+    };
+  };
+
+  // --- Submit Function (used by both manual and auto-submit) ---
+  const submitExam = async (isAutoSubmit = false) => {
+    if (isSubmitting) return;
+    
+    setIsSubmitting(true);
+    try {
+      // Get current data from refs to ensure we have latest
+      const currentQuestions = questionsRef.current;
+      const currentAnswers = answersRef.current;
+      const currentExamData = examDataRef.current;
+      const currentStudentInfo = studentInfoRef.current;
+      const currentSessionId = sessionIdRef.current;
+
+      if (!currentQuestions || !currentAnswers || !currentExamData || !currentStudentInfo || !currentSessionId) {
+        console.error("Missing data for submission");
+        toast.error("Cannot submit: missing exam data");
+        return;
+      }
+
+      // Calculate score using current data
+      const result = calculateScore(currentQuestions, currentAnswers);
+      
+      if (isAutoSubmit) {
+        console.log("Auto-submitting with score:", result.totalMarks);
       }
       
-      timerIntervalRef.current = setInterval(() => {
-        setTimeLeft((prev) => {
-          if (prev <= 1) {
-            if (!autoSubmitTriggeredRef.current) {
-              autoSubmitTriggeredRef.current = true
-              handleFinalSubmit()
-            }
-            return 0
-          }
-          return prev - 1
+      setSubmissionResult(result);
+
+      // Update Session
+      const { error: sessionError } = await supabase
+        .from("exam_sessions")
+        .update({
+          status: "submitted",
+          submitted_at: new Date().toISOString(),
+          time_remaining: 0,
+          score: result.totalMarks,
         })
-      }, 1000)
-    }
+        .eq("id", currentSessionId);
 
-    return () => {
-      if (timerIntervalRef.current) {
-        clearInterval(timerIntervalRef.current)
-        timerIntervalRef.current = null
+      if (sessionError) {
+        console.error("Error updating session:", sessionError);
+        throw sessionError;
       }
-    }
-  }, [examStatus])
 
-  // Time sync to database every 15 seconds - REAL WORKING VERSION
+      // Save Results (NO GRADE COLUMN)
+      const { error: resultError } = await supabase.from("results").upsert(
+        {
+          exam_id: currentExamData.id,
+          student_id: currentStudentInfo.id,
+          teacher_id: currentExamData.created_by,
+          total_marks_obtained: result.totalMarks,
+          comments: `Auto-graded: ${result.correctCount}/${result.totalQuestions} questions correct, ${result.totalMarks}/${result.totalPossibleMarks} total points (${result.percent}%)`,
+          submission_time: new Date().toISOString(),
+        },
+        { onConflict: "exam_id,student_id" }
+      );
+
+      if (resultError) {
+        console.error("Error saving results:", resultError);
+        throw resultError;
+      }
+
+      // Update question answers with correctness
+      const updatePromises = result.questionResults.map(async (questionResult) => {
+        const q = currentQuestions[questionResult.questionIndex];
+        const studentAns = currentAnswers[questionResult.questionIndex];
+
+        if (currentSessionId) {
+          let isCorrect = false;
+
+          if (q.type === "mcq" || q.type === "tf" || q.type === "passage") {
+            isCorrect = studentAns === q.correct_option_id;
+          } else if (q.type === "matching") {
+            isCorrect = questionResult.isFullyCorrect;
+          } else if (q.type === "blank") {
+            isCorrect = questionResult.isFullyCorrect;
+          }
+
+          return supabase
+            .from("student_answers")
+            .update({ is_correct: isCorrect })
+            .eq("session_id", currentSessionId)
+            .eq("question_id", q.id);
+        }
+      });
+
+      await Promise.all(updatePromises);
+
+      // Update local state
+      setExamStatus("completed");
+
+      // Exit fullscreen if active
+      if (document.fullscreenElement) {
+        try {
+          await document.exitFullscreen();
+        } catch (err) {
+          console.log("Fullscreen exit failed:", err);
+        }
+      }
+
+      if (isAutoSubmit) {
+        toast.info("Exam auto-submitted due to time expiration");
+      } else {
+        toast.success("Exam submitted successfully!");
+      }
+      
+      console.log("Submission successful. Score:", result.totalMarks);
+    } catch (e) {
+      console.error("Error submitting exam:", e);
+      toast.error("Submit failed");
+      // Don't set status to completed if submission failed
+      setExamStatus("in-progress");
+    } finally {
+      setIsSubmitting(false);
+      autoSubmitTriggeredRef.current = false;
+    }
+  };
+
+  // --- Timer & Sync ---
   useEffect(() => {
     if (examStatus === "in-progress" && sessionId) {
-      if (timeSyncIntervalRef.current) {
-        clearInterval(timeSyncIntervalRef.current)
-      }
-      
-      const syncTimeToDatabase = async () => {
-        try {
-          const now = new Date().toISOString()
+      // Start timer
+      timerIntervalRef.current = setInterval(() => {
+        setTimeLeft((prev) => {
+          const newValue = Math.max(0, prev - 1);
           
-          // Update time remaining in database
-          const { error: updateError } = await supabase
+          // Check for auto-submit when time reaches 0
+          if (newValue === 0 && !autoSubmitTriggeredRef.current) {
+            autoSubmitTriggeredRef.current = true;
+            
+            // Clear the timer interval immediately
+            if (timerIntervalRef.current) {
+              clearInterval(timerIntervalRef.current);
+              timerIntervalRef.current = null;
+            }
+            
+            // Auto-submit with current data
+            console.log("Time's up! Auto-submitting...");
+            submitExam(true);
+          }
+          
+          return newValue;
+        });
+      }, 1000);
+
+      // Sync time every 5 seconds
+      timeSyncIntervalRef.current = setInterval(async () => {
+        const current = timeLeftRef.current;
+        if (current > 0 && sessionId) {
+          await supabase
             .from("exam_sessions")
             .update({
-              time_remaining: timeLeft,
-              last_activity_at: now,
-              updated_at: now
+              time_remaining: current,
+              last_activity_at: new Date().toISOString(),
             })
+            .eq("id", sessionId);
+        }
+      }, 5000);
+
+      // Check session status every 10 seconds
+      sessionCheckIntervalRef.current = setInterval(async () => {
+        if (sessionId) {
+          const { data: session } = await supabase
+            .from("exam_sessions")
+            .select("status")
             .eq("id", sessionId)
+            .single();
 
-          if (updateError) {
-            console.error("Error syncing time to database:", updateError)
+          if (session && session.status === "submitted") {
+            // Exam was submitted externally
+            toast.error("Exam has been submitted");
+            handleExternalSubmission();
           }
-        } catch (error) {
-          console.error("Error in time sync:", error)
         }
-      }
-
-      // Initial sync
-      syncTimeToDatabase()
-      
-      // Set up interval for every 15 seconds
-      timeSyncIntervalRef.current = setInterval(syncTimeToDatabase, 15000)
-
-      return () => {
-        if (timeSyncIntervalRef.current) {
-          clearInterval(timeSyncIntervalRef.current)
-          timeSyncIntervalRef.current = null
-        }
-      }
-    }
-  }, [examStatus, sessionId, timeLeft])
-
-  // Security measures - Enhanced screenshot blocking
-  useEffect(() => {
-    let styleElement: HTMLStyleElement | null = null
-
-    const handleContextMenu = (e: MouseEvent) => {
-      if (examStatus === "in-progress") {
-        e.preventDefault()
-        handleSecurityViolation()
-        return false
-      }
-    }
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (examStatus === "in-progress") {
-        const blockedShortcuts = [
-          e.key === 'PrintScreen',
-          e.key === 'Snapshot',
-          e.ctrlKey && e.key === 'p',
-          e.metaKey && e.shiftKey && (e.key === '3' || e.key === '4'),
-          e.ctrlKey && e.shiftKey && e.key === 's',
-          e.altKey && e.key === 'PrintScreen',
-          e.key === 'F12',
-          e.ctrlKey && e.shiftKey && e.key === 'i',
-          e.ctrlKey && e.shiftKey && e.key === 'j',
-          e.ctrlKey && e.shiftKey && e.key === 'c',
-          e.ctrlKey && e.key === 'u',
-          e.ctrlKey && e.key === 's',
-          e.metaKey && e.key === 'p',
-          e.metaKey && e.key === 'PrintScreen',
-          e.altKey && e.key === 'PrintScreen',
-          // Block Windows + PrtScn
-          e.key === 'PrintScreen' && (e.ctrlKey || e.metaKey || e.altKey),
-          // Block Alt + PrtScn
-          e.altKey && e.key === 'PrintScreen',
-        ]
-
-        if (blockedShortcuts.some((condition) => condition)) {
-          e.preventDefault()
-          e.stopPropagation()
-          handleSecurityViolation()
-          return false
-        }
-      }
-    }
-
-    const addProtectiveStyles = () => {
-      const protectiveCSS = `
-        * {
-          -webkit-user-select: none !important;
-          -moz-user-select: none !important;
-          -ms-user-select: none !important;
-          user-select: none !important;
-          -webkit-user-drag: none !important;
-          -webkit-touch-callout: none !important;
-        }
-        
-        img, .question-content, .options-container, .card, .radio-group {
-          pointer-events: none !important;
-          -webkit-user-select: none !important;
-          -webkit-user-drag: none !important;
-          -webkit-touch-callout: none !important;
-        }
-        
-        body {
-          cursor: default !important;
-        }
-        
-        /* Prevent screenshot visual feedback */
-        ::selection {
-          background: transparent !important;
-        }
-        
-        /* Make content non-selectable */
-        * {
-          -webkit-tap-highlight-color: transparent !important;
-        }
-      `
-
-      styleElement = document.createElement('style')
-      styleElement.id = 'exam-protection-styles'
-      styleElement.textContent = protectiveCSS
-      document.head.appendChild(styleElement)
-    }
-
-    const removeProtectiveStyles = () => {
-      if (styleElement) {
-        styleElement.remove()
-        styleElement = null
-      }
-    }
-
-    // Additional screenshot blocking
-    const preventScreenshot = () => {
-      // Add overlay div to prevent screenshots
-      const overlay = document.createElement('div')
-      overlay.id = 'screenshot-blocker'
-      overlay.style.cssText = `
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        z-index: 999999;
-        pointer-events: none;
-        background: transparent;
-        display: none;
-      `
-      document.body.appendChild(overlay)
-      
-      // Add event listeners for screenshot attempts
-      const showBlocker = () => {
-        overlay.style.display = 'block'
-        setTimeout(() => {
-          overlay.style.display = 'none'
-        }, 100)
-      }
-      
-      // Listen for potential screenshot shortcuts
-      document.addEventListener('keydown', (e) => {
-        if (e.key === 'PrintScreen' || e.key === 'Snapshot' || 
-            (e.ctrlKey && e.key === 'p') || 
-            (e.metaKey && e.shiftKey && (e.key === '3' || e.key === '4'))) {
-          showBlocker()
-        }
-      })
-    }
-
-    if (examStatus === "in-progress") {
-      addProtectiveStyles()
-      document.addEventListener('contextmenu', handleContextMenu)
-      document.addEventListener('keydown', handleKeyDown, true)
-      preventScreenshot()
-
-      return () => {
-        document.removeEventListener('contextmenu', handleContextMenu)
-        document.removeEventListener('keydown', handleKeyDown, true)
-        removeProtectiveStyles()
-        const blocker = document.getElementById('screenshot-blocker')
-        if (blocker) blocker.remove()
-      }
+      }, 10000);
     }
 
     return () => {
-      removeProtectiveStyles()
-      const blocker = document.getElementById('screenshot-blocker')
-      if (blocker) blocker.remove()
-    }
-  }, [examStatus])
+      if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+      if (timeSyncIntervalRef.current)
+        clearInterval(timeSyncIntervalRef.current);
+      if (sessionCheckIntervalRef.current)
+        clearInterval(sessionCheckIntervalRef.current);
+    };
+  }, [examStatus, sessionId]);
 
-  // Fullscreen monitoring - SILENT
+  // --- Fullscreen Check ---
   useEffect(() => {
-    const handleFullscreenChange = () => {
-      const isFullscreen = !!document.fullscreenElement
-      setIsFullscreenActive(isFullscreen)
-      const now = Date.now()
-      
-      if (now - lastFullscreenCheckRef.current > 2000) {
-        if (!isFullscreen && examStatus === "in-progress") {
-          handleSecurityViolation()
-          setShowFullscreenWarning(true)
-        } else {
-          setShowFullscreenWarning(false)
-        }
-        lastFullscreenCheckRef.current = now
-      }
-    }
-
     const checkFullscreen = () => {
-      const isFullscreen = !!document.fullscreenElement
-      setIsFullscreenActive(isFullscreen)
-      const now = Date.now()
-      
-      if (now - lastFullscreenCheckRef.current > 2000) {
-        if (!isFullscreen && examStatus === "in-progress") {
-          handleSecurityViolation()
-          setShowFullscreenWarning(true)
-        } else {
-          setShowFullscreenWarning(false)
-        }
-        lastFullscreenCheckRef.current = now
+      const isFs = !!document.fullscreenElement;
+      setIsFullscreenActive(isFs);
+      if (
+        examData?.fullscreen_required &&
+        examStatus === "in-progress" &&
+        !isFs &&
+        Date.now() - lastFullscreenCheckRef.current > 3000
+      ) {
+        setShowFullscreenWarning(true);
+        lastFullscreenCheckRef.current = Date.now();
       }
-    }
+    };
 
-    const interval = setInterval(checkFullscreen, 2000)
-    document.addEventListener('fullscreenchange', handleFullscreenChange)
+    const interval = setInterval(checkFullscreen, 2000);
+    return () => clearInterval(interval);
+  }, [examStatus, examData]);
 
-    return () => {
-      clearInterval(interval)
-      document.removeEventListener('fullscreenchange', handleFullscreenChange)
-    }
-  }, [examStatus])
-
-  const handleSecurityViolation = () => {
-    const newCount = violationCount + 1
-    setViolationCount(newCount)
-
-    if (newCount >= MAX_VIOLATIONS) {
-      terminateExam()
-    } else if (newCount === MAX_VIOLATIONS - 1) {
-      toast.error(`Final Warning: One more violation will terminate your exam!`, {
-        duration: 4000,
-      })
-    }
-
-    // Reset violation count after 30 seconds of good behavior
-    if (violationTimerRef.current) {
-      clearTimeout(violationTimerRef.current)
-    }
-    violationTimerRef.current = setTimeout(() => {
-      setViolationCount(0)
-    }, 30000)
-  }
-
-  const terminateExam = async () => {
-    if (timerIntervalRef.current) {
-      clearInterval(timerIntervalRef.current)
-      timerIntervalRef.current = null
-    }
-    
-    if (timeSyncIntervalRef.current) {
-      clearInterval(timeSyncIntervalRef.current)
-      timeSyncIntervalRef.current = null
-    }
-
-    if (sessionId) {
-      try {
-        await supabase
-          .from("exam_sessions")
-          .update({
-            status: "terminated",
-            terminated_reason: "Multiple security violations detected",
-            submitted_at: new Date().toISOString(),
-            time_remaining: 0
-          })
-          .eq("id", sessionId)
-
-        await supabase
-          .from("results")
-          .upsert({
-            exam_id: examData.id,
-            student_id: studentInfo.id,
-            teacher_id: examData.created_by,
-            total_marks_obtained: 0,
-            grade: "F",
-            comments: "Exam terminated due to security violations",
-            submission_time: new Date().toISOString()
-          })
-
-      } catch (error) {
-        console.error("Error terminating exam:", error)
-      }
-    }
-
-    if (document.fullscreenElement) {
-      document.exitFullscreen().catch(() => {})
-    }
-
-    setExamStatus("terminated")
-  }
-
-  const handleRetryFullscreen = async () => {
-    try {
-      const elem = document.documentElement
-      if (elem.requestFullscreen) {
-        await elem.requestFullscreen()
-        setShowFullscreenWarning(false)
-        setIsFullscreenActive(true)
-      }
-    } catch (err) {
-      console.warn("Fullscreen request failed:", err)
-    }
-  }
-
-  const handleResumeExistingSession = () => {
-    if (existingActiveSession) {
-      const url = `/exam/take?student=${searchParams.get('student')}&exam=${existingActiveSession.exam_id}&session=${existingActiveSession.id}`
-      router.push(url)
-    }
-  }
-
-  const handleCancelExistingSession = () => {
-    setShowAlreadyInProgressModal(false)
-    router.push("/")
-  }
-
-  const stats = useMemo(() => ({
-    answered: answers.filter((a) => a !== null).length,
-    unanswered: answers.filter((a) => a === null).length,
-    flagged: flaggedQuestions.size,
-  }), [answers, flaggedQuestions.size])
+  // --- Handlers ---
 
   const handleStartExam = async () => {
     try {
-      if (!studentInfo || !examData) {
-        toast.error("Student or exam data not loaded")
-        return
-      }
+      const { data: newSession, error } = await supabase
+        .from("exam_sessions")
+        .insert({
+          student_id: studentInfo.id,
+          exam_id: examData.id,
+          teacher_id: examData.created_by,
+          status: "in_progress",
+          time_remaining: examDurationRef.current,
+        })
+        .select()
+        .single();
 
-      const existingActiveSession = await checkExistingActiveSessions(studentInfo.id, examData.id)
-      if (existingActiveSession) {
-        setExistingActiveSession(existingActiveSession)
-        setShowAlreadyInProgressModal(true)
-        return
-      }
+      if (error) throw error;
 
-      let currentSessionId = sessionId
+      setSessionId(newSession.id);
+      sessionIdRef.current = newSession.id;
+      setExamStatus("in-progress");
+      setTimeLeft(examDurationRef.current);
+      timeLeftRef.current = examDurationRef.current;
 
-      if (!currentSessionId) {
-        const { data: newSession, error } = await supabase
-          .from("exam_sessions")
-          .insert({
-            student_id: studentInfo.id,
-            exam_id: examData.id,
-            teacher_id: examData.created_by,
-            status: "in_progress",
-            time_remaining: examDurationRef.current,
-            started_at: new Date().toISOString(),
-            last_activity_at: new Date().toISOString()
-          })
-          .select()
-          .single()
-
-        if (error) {
-          if (error.code === '23505') {
-            toast.error("You already have an active exam session.")
-            return
-          }
-          throw error
+      if (examData.fullscreen_required) {
+        try {
+          await document.documentElement.requestFullscreen();
+        } catch (err) {
+          console.log("Fullscreen request failed:", err);
         }
-        currentSessionId = newSession.id
-        setSessionId(newSession.id)
-
-        // Apply shuffling with new session ID
-        if (examData.questions_shuffled && originalQuestions.length > 0) {
-          const shuffled = generateShuffleOrder(originalQuestions, newSession.id, "questions")
-
-          // Apply option shuffling if enabled
-          let finalQuestions = shuffled
-          if (examData.options_shuffled) {
-            finalQuestions = shuffled.map((question) => {
-              if (question.options && question.options.length > 0) {
-                const shuffledOptions = generateShuffleOrder(
-                  question.options,
-                  `${newSession.id}-${question.id}`,
-                  "options",
-                )
-
-                const newCorrectIndex = shuffledOptions.findIndex((opt: any) => opt.is_correct)
-
-                return {
-                  ...question,
-                  options: shuffledOptions,
-                  correct_answer_index: newCorrectIndex >= 0 ? newCorrectIndex : question.correct_answer_index,
-                }
-              }
-              return question
-            })
-          }
-
-          setQuestions(finalQuestions)
-        }
-      }
-
-      setExamStatus("in-progress")
-
-      // Automatic fullscreen without user interaction
-      try {
-        const elem = document.documentElement
-        if (elem.requestFullscreen && !document.fullscreenElement) {
-          await elem.requestFullscreen()
-          setIsFullscreenActive(true)
-        }
-      } catch (err) {
-        console.warn("Fullscreen request failed:", err)
       }
     } catch (err) {
-      console.error("Error starting exam:", err)
-      toast.error("Failed to start exam")
+      console.error("Failed to start exam:", err);
+      toast.error("Failed to start exam");
     }
-  }
+  };
 
-  const handleAnswerChange = async (optionIndex: number) => {
-    const newAnswers = [...answers]
-    newAnswers[currentQuestionIndex] = optionIndex
-    setAnswers(newAnswers)
+  const handleAnswerChange = async (val: any) => {
+    const newAnswers = [...answers];
+    newAnswers[currentQuestionIndex] = val;
+    setAnswers(newAnswers);
+    answersRef.current = newAnswers;
 
-    if (sessionId && questions[currentQuestionIndex]) {
-      try {
-        const question = questions[currentQuestionIndex]
-        const isCorrect = question.correct_answer_index === optionIndex
-        
-        await supabase
-          .from("student_answers")
-          .upsert({
-            session_id: sessionId,
-            question_id: question.id,
-            selected_option_id: optionIndex,
-            is_correct: isCorrect,
-            is_flagged: flaggedQuestions.has(currentQuestionIndex),
-            answered_at: new Date().toISOString()
-          }, {
-            onConflict: 'session_id,question_id'
-          })
-      } catch (error) {
-        console.error("Error saving answer:", error)
+    if (sessionId) {
+      const q = questions[currentQuestionIndex];
+      const payload: any = {
+        session_id: sessionId,
+        question_id: q.id,
+        answered_at: new Date().toISOString(),
+      };
+
+      if (q.type === "mcq" || q.type === "tf" || q.type === "passage") {
+        payload.selected_option_id = val;
+      } else if (q.type === "matching") {
+        payload.answer_text = JSON.stringify(val);
+      } else {
+        payload.answer_text = JSON.stringify(val);
       }
+
+      await supabase
+        .from("student_answers")
+        .upsert(payload, { onConflict: "session_id,question_id" });
     }
-  }
+  };
 
   const handleToggleFlag = async () => {
-    const newFlags = new Set(flaggedQuestions)
+    const newFlags = new Set(flaggedQuestions);
     if (newFlags.has(currentQuestionIndex)) {
-      newFlags.delete(currentQuestionIndex)
+      newFlags.delete(currentQuestionIndex);
     } else {
-      newFlags.add(currentQuestionIndex)
+      newFlags.add(currentQuestionIndex);
     }
-    setFlaggedQuestions(newFlags)
+    setFlaggedQuestions(newFlags);
 
-    if (sessionId && questions[currentQuestionIndex]) {
-      const question = questions[currentQuestionIndex]
-      const currentAnswer = answers[currentQuestionIndex]
-      const isCorrect = currentAnswer !== null ? question.correct_answer_index === currentAnswer : false
-      
-      try {
-        await supabase
-          .from("student_answers")
-          .upsert({
-            session_id: sessionId,
-            question_id: question.id,
-            selected_option_id: currentAnswer,
-            is_correct: isCorrect,
-            is_flagged: newFlags.has(currentQuestionIndex)
-          }, {
-            onConflict: 'session_id,question_id'
-          })
-      } catch (error) {
-        console.error("Error saving flag:", error)
-      }
+    if (sessionId) {
+      await supabase.from("student_answers").upsert(
+        {
+          session_id: sessionId,
+          question_id: questions[currentQuestionIndex].id,
+          is_flagged: newFlags.has(currentQuestionIndex),
+        },
+        { onConflict: "session_id,question_id" }
+      );
     }
-  }
+  };
+
+  const handleExternalSubmission = async () => {
+    setIsSubmitting(true);
+    try {
+      setExamStatus("completed");
+      
+      if (document.fullscreenElement) {
+        try {
+          await document.exitFullscreen();
+        } catch (err) {
+          console.log("Fullscreen exit failed:", err);
+        }
+      }
+
+      toast.info("Exam has been submitted externally");
+    } catch (e) {
+      console.error("Error handling external submission:", e);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   const handleFinalSubmit = async () => {
-    if (isSubmitting) return
+    await submitExam(false);
+  };
 
-    if (timerIntervalRef.current) {
-      clearInterval(timerIntervalRef.current)
-      timerIntervalRef.current = null
+  const getMatchingAnswer = () => {
+    const currentAnswer = answers[currentQuestionIndex];
+    return Array.isArray(currentAnswer) ? currentAnswer : [];
+  };
+
+  const handleMatchSelect = (pairIndex: number, selectedLetter: string) => {
+    const current = [...getMatchingAnswer()];
+    while (current.length <= pairIndex) {
+      current.push(null);
     }
-    if (timeSyncIntervalRef.current) {
-      clearInterval(timeSyncIntervalRef.current)
-      timeSyncIntervalRef.current = null
-    }
+    current[pairIndex] = selectedLetter || null;
+    handleAnswerChange(current);
+  };
 
-    setIsConfirmModalOpen(false)
-    setIsSubmitting(true)
+  const getBlankAnswer = (blankId: string) => {
+    const currentAnswer = answers[currentQuestionIndex];
+    return currentAnswer && typeof currentAnswer === "object"
+      ? currentAnswer[blankId] || ""
+      : "";
+  };
 
-    try {
-      let totalMarksObtained = 0
-      let correctCount = 0
-      
-      answers.forEach((answerIndex, qIndex) => {
-        if (answerIndex !== null) {
-          const question = questions[qIndex]
-          if (question && question.correct_answer_index === answerIndex) {
-            correctCount++
-            totalMarksObtained += question.marks || 1
-          }
+  const handleBlankChange = (blankId: string, value: string) => {
+    const current = {
+      ...((answers[currentQuestionIndex] as Record<string, string>) || {}),
+    };
+    current[blankId] = value;
+    handleAnswerChange(current);
+  };
+
+  const stats = useMemo(
+    () => ({
+      answered: answers.filter((a) => {
+        if (a === null || a === undefined) return false;
+        if (Array.isArray(a)) {
+          return a.some(
+            (val) =>
+              val !== null && val !== undefined && val.toString().trim() !== ""
+          );
         }
-      })
-
-      const totalQuestions = questions.length
-      const totalPossibleMarks = examData.total_marks
-      const percentage = Math.round((correctCount / totalQuestions) * 100)
-
-      // Calculate grade based on percentage
-      let grade = 'F'
-      if (percentage >= 90) grade = 'A'
-      else if (percentage >= 80) grade = 'B'
-      else if (percentage >= 70) grade = 'C'
-      else if (percentage >= 60) grade = 'D'
-
-      if (sessionId) {
-        const { error: sessionError } = await supabase
-          .from("exam_sessions")
-          .update({
-            status: "submitted",
-            score: totalMarksObtained,
-            submitted_at: new Date().toISOString(),
-            time_remaining: 0,
-            updated_at: new Date().toISOString()
-          })
-          .eq("id", sessionId)
-
-        if (sessionError) {
-          console.error("Error updating exam session:", sessionError)
-          throw sessionError
+        if (typeof a === "object") {
+          return Object.values(a).some(
+            (val: any) =>
+              val !== null && val !== undefined && val.toString().trim() !== ""
+          );
         }
-
-        const { data: result, error: resultError } = await supabase
-          .from("results")
-          .upsert({
-            exam_id: examData.id,
-            student_id: studentInfo.id,
-            teacher_id: examData.created_by,
-            total_marks_obtained: totalMarksObtained,
-            grade: grade,
-            comments: `Scored ${totalMarksObtained} out of ${totalPossibleMarks} marks - ${correctCount} correct answers out of ${totalQuestions} questions (${percentage}%)`,
-            submission_time: new Date().toISOString()
-          }, {
-            onConflict: 'exam_id,student_id'
-          })
-          .select()
-          .single()
-
-        if (resultError) {
-          console.error("Error saving result:", resultError)
-          throw resultError
+        return a !== null && a !== undefined;
+      }).length,
+      unanswered: answers.filter((a) => {
+        if (a === null || a === undefined) return true;
+        if (Array.isArray(a)) {
+          return !a.some(
+            (val) =>
+              val !== null && val !== undefined && val.toString().trim() !== ""
+          );
         }
+        if (typeof a === "object") {
+          return !Object.values(a).some(
+            (val: any) =>
+              val !== null && val !== undefined && val.toString().trim() !== ""
+          );
+        }
+        return a === null || a === undefined;
+      }).length,
+      flagged: flaggedQuestions.size,
+    }),
+    [answers, flaggedQuestions]
+  );
 
-        setExamResults(result)
-      }
+  const currentQ = questions[currentQuestionIndex];
+  const isMobile = windowWidth < 768;
 
-      if (document.fullscreenElement) {
-        document.exitFullscreen().catch(() => {})
-      }
-
-      // Check if results should be shown
-      if (examData.show_results !== false) {
-        setExamStatus("results")
-      } else {
-        setExamStatus("completed")
-      }
-      toast.success("Exam submitted successfully!")
-
-    } catch (err) {
-      console.error("Error submitting exam:", err)
-      toast.error("Failed to submit exam. Please try again.")
-      setIsSubmitting(false)
-    }
-  }
-
-  const openPassage = (passageHtml: string) => {
-    setCurrentPassageHtml(passageHtml)
-    setShowPassageModal(true)
-  }
-
-  const toggleTimerVisibility = () => {
-    setIsTimerVisible(!isTimerVisible)
-  }
-
-  // Simple sidebar toggle function
-  const toggleSidebar = () => {
-    setIsSidebarOpen(!isSidebarOpen)
-  }
-
-  // Determine device type for responsive design
-  const getDeviceType = () => {
-    if (windowWidth < 768) return 'mobile'
-    if (windowWidth < 1024) return 'tablet'
-    return 'desktop'
-  }
-
-  const deviceType = getDeviceType()
-  const isMobile = deviceType === 'mobile'
-
-  if (showAlreadyInProgressModal) {
-    return (
-      <ExamAlreadyInProgressModal
-        existingSession={existingActiveSession}
-        onResume={handleResumeExistingSession}
-        onCancel={handleCancelExistingSession}
-      />
-    )
-  }
-
-  if (examStatus === "terminated") {
-    return <ExamTerminatedModal onClose={() => router.push("/")} />
-  }
+  // --- Render Views ---
 
   if (examStatus === "loading") {
-    return <ExamInstructions examData={{}} onStartExam={() => {}} isLoading={true} isResuming={false} />
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <Spinner className="h-10 w-10 text-blue-600" />
+        <p className="ml-3 text-gray-600">Loading exam...</p>
+      </div>
+    );
   }
 
   if (examStatus === "instructions") {
-    return <ExamInstructions examData={examData} onStartExam={handleStartExam} isLoading={false} isResuming={isResuming} />
-  }
-
-  if (examStatus === "results") {
     return (
-      <ExamResultsView 
-        examData={examData}
-        studentInfo={studentInfo}
-        results={examResults}
-        questions={questions}
-        answers={answers}
-      />
-    )
+      <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 p-4">
+        <Card className="w-full max-w-2xl shadow-xl border-0">
+          <CardHeader className="text-center bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-t-lg">
+            <CardTitle className="text-3xl font-bold">
+              {examData?.title}
+            </CardTitle>
+            <p className="text-blue-100 pt-1">
+              Read carefully before starting.
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-6 p-8">
+            <div className="grid grid-cols-2 gap-4 text-center">
+              <div className="p-4 bg-blue-50 rounded-lg border border-blue-100">
+                <p className="text-sm font-medium text-blue-600">Duration</p>
+                <p className="text-2xl font-bold text-gray-900">
+                  {examData?.duration} Min
+                </p>
+              </div>
+              <div className="p-4 bg-indigo-50 rounded-lg border border-indigo-100">
+                <p className="text-sm font-medium text-indigo-600">Questions</p>
+                <p className="text-2xl font-bold text-gray-900">
+                  {questions.length}
+                </p>
+              </div>
+            </div>
+
+            {examData?.description && (
+              <div className="text-gray-600 bg-amber-50 p-4 rounded-lg border border-amber-200">
+                <div className="flex items-center gap-2 mb-2">
+                  <AlertCircle className="h-5 w-5 text-amber-600" />
+                  <p className="font-semibold text-amber-800">Instructions</p>
+                </div>
+                <p>{examData.description}</p>
+              </div>
+            )}
+
+            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 p-4 rounded-lg">
+              <div className="flex items-center gap-2 mb-3">
+                <AlertTriangle className="h-5 w-5 text-blue-600" />
+                <p className="font-bold text-blue-800">Exam Settings:</p>
+              </div>
+              <ul className="space-y-2 text-sm text-blue-800">
+                {examData?.questions_shuffled && (
+                  <li className="flex items-center gap-2">
+                    <div className="h-2 w-2 rounded-full bg-blue-600"></div>
+                    <span>
+                      <strong>Questions are randomized</strong> - Each student
+                      gets different order
+                    </span>
+                  </li>
+                )}
+                {examData?.options_shuffled && (
+                  <li className="flex items-center gap-2">
+                    <div className="h-2 w-2 rounded-full bg-blue-600"></div>
+                    <span>
+                      <strong>Options are shuffled</strong> - Answer choices
+                      appear in different order
+                    </span>
+                  </li>
+                )}
+                {examData?.fullscreen_required && (
+                  <li className="flex items-center gap-2">
+                    <div className="h-2 w-2 rounded-full bg-blue-600"></div>
+                    <span>
+                      <strong>Fullscreen required</strong> - You must stay in
+                      fullscreen mode
+                    </span>
+                  </li>
+                )}
+                <li className="flex items-center gap-2">
+                  <div className="h-2 w-2 rounded-full bg-blue-600"></div>
+                  <span>
+                    <strong>Auto-save enabled</strong> - Answers are saved
+                    automatically
+                  </span>
+                </li>
+                {examData?.show_results && (
+                  <li className="flex items-center gap-2">
+                    <div className="h-2 w-2 rounded-full bg-green-600"></div>
+                    <span>
+                      <strong>Results will be shown</strong> - You'll see your
+                      score after submission
+                    </span>
+                  </li>
+                )}
+              </ul>
+            </div>
+
+            <Button
+              size="lg"
+              className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold py-3 text-lg"
+              onClick={handleStartExam}
+            >
+              Start Exam Now <ChevronRight className="ml-2 h-5 w-5" />
+            </Button>
+
+            <p className="text-center text-sm text-gray-500">
+              By starting the exam, you agree to follow all exam rules and
+              guidelines.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
   }
 
   if (examStatus === "completed") {
-    return <ExamResultsDisabledView />
+    // Check if we should show results based on exam setting
+    const shouldShowResults = examData?.show_results !== false;
+
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 flex items-center justify-center p-4">
+        <Card className="w-full max-w-2xl text-center shadow-2xl border-0 overflow-hidden">
+          <div className="bg-gradient-to-r from-green-600 to-emerald-600 text-white p-8">
+            <CheckCircle2 className="h-20 w-20 mx-auto mb-4" />
+            <h2 className="text-3xl font-bold mb-2">
+              Exam Submitted Successfully!
+            </h2>
+            <p className="text-green-100">
+              Your answers have been recorded and graded.
+            </p>
+          </div>
+
+          <CardContent className="p-8">
+            {shouldShowResults && submissionResult ? (
+              <div className="space-y-6">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="p-4 bg-green-50 rounded-lg border border-green-200">
+                    <p className="text-sm font-medium text-green-600">
+                      Score Obtained
+                    </p>
+                    <p className="text-2xl font-bold text-gray-900">
+                      {submissionResult.totalMarks} / {submissionResult.totalPossibleMarks}
+                    </p>
+                  </div>
+                  <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                    <p className="text-sm font-medium text-blue-600">
+                      Percentage
+                    </p>
+                    <p className="text-2xl font-bold text-gray-900">
+                      {submissionResult.percent}%
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="p-4 bg-amber-50 rounded-lg border border-amber-200">
+                    <p className="text-sm font-medium text-amber-600">
+                      Correct Answers
+                    </p>
+                    <p className="text-2xl font-bold text-gray-900">
+                      {submissionResult.correctCount} / {submissionResult.totalQuestions}
+                    </p>
+                  </div>
+                  <div className="p-4 bg-indigo-50 rounded-lg border border-indigo-200">
+                    <p className="text-sm font-medium text-indigo-600">
+                      Time Taken
+                    </p>
+                    <p className="text-2xl font-bold text-gray-900">
+                      {formatTime(submissionResult.timeSpent)}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-6 rounded-xl border border-blue-200">
+                  <div className="flex items-center justify-center gap-3 mb-4">
+                    <Award className="h-8 w-8 text-amber-600" />
+                    <h3 className="text-xl font-bold text-gray-800">
+                      Performance Summary
+                    </h3>
+                  </div>
+                  <div className="mt-4 w-full bg-gray-200 rounded-full h-4">
+                    <div 
+                      className="bg-gradient-to-r from-green-500 to-emerald-600 h-4 rounded-full transition-all duration-500"
+                      style={{ width: `${submissionResult.percent}%` }}
+                    ></div>
+                  </div>
+                  <p className="text-sm text-gray-500 mt-2">
+                    Progress: {submissionResult.percent}%
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-6 rounded-xl border border-blue-200">
+                <div className="flex items-center justify-center gap-3 mb-4">
+                  <EyeOff className="h-8 w-8 text-blue-600" />
+                  <h3 className="text-xl font-bold text-gray-800">
+                    Results Hidden
+                  </h3>
+                </div>
+                <p className="text-gray-600">
+                  Your exam has been submitted successfully. Results are not
+                  shown immediately as per the exam settings. Your teacher will
+                  notify you when results are available.
+                </p>
+              </div>
+            )}
+
+            <Button
+              onClick={() => router.push("/")}
+              className="mt-6 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 w-full py-3 text-lg"
+            >
+              Return to Home
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
   }
 
   if (showFullscreenWarning) {
-    return <FullscreenWarningModal onRetry={handleRetryFullscreen} />
-  }
-
-  if (!questions.length || !questions[currentQuestionIndex]) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <Spinner className="h-8 w-8" />
-      </div>
-    )
+      <FullscreenWarningModal
+        onRetry={() => {
+          document.documentElement.requestFullscreen();
+          setShowFullscreenWarning(false);
+        }}
+      />
+    );
   }
 
-  const currentQuestion = questions[currentQuestionIndex]
-  const shouldTruncate = currentQuestion.question_text && currentQuestion.question_text.length > 200
-  const truncatedText = shouldTruncate ? truncateText(currentQuestion.question_text, 200) : currentQuestion.question_text
-
+  // --- Main Exam UI ---
   return (
-    <div className="flex h-screen bg-gray-50 text-gray-900 select-none">
+    <div className="flex h-screen bg-gradient-to-br from-gray-50 to-blue-50 text-gray-900 select-none">
       <PassageModal
         isOpen={showPassageModal}
         onClose={() => setShowPassageModal(false)}
@@ -1693,381 +1683,628 @@ export default function ExamTakingPage() {
         questionNumber={currentQuestionIndex + 1}
       />
 
-      <FullQuestionModal
-        isOpen={showFullQuestionModal}
-        onClose={() => setShowFullQuestionModal(false)}
-        questionText={currentQuestion.question_text}
-        questionNumber={currentQuestionIndex + 1}
-        totalQuestions={questions.length}
-      />
-
-      {/* Mobile Sheet */}
-      {isMobile ? (
-        <Sheet open={isSidebarOpen} onOpenChange={setIsSidebarOpen}>
-          <SheetContent side="left" className="w-80 p-0">
-            <SheetHeader className="p-4 border-b">
-              <SheetTitle>Questions</SheetTitle>
-            </SheetHeader>
-            <div className="flex-1 overflow-y-auto p-4">
-              <div className="grid grid-cols-5 gap-2">
-                {questions.map((_, index) => {
-                  const isAnswered = answers[index] !== null
-                  const isFlagged = flaggedQuestions.has(index)
-                  const isCurrent = currentQuestionIndex === index
-                  return (
-                    <Button
-                      key={index}
-                      variant={isCurrent ? "default" : isAnswered ? "secondary" : "outline"}
-                      className={cn(
-                        "h-10 w-10 p-0 relative",
-                        isCurrent && "ring-2 ring-blue-500 ring-offset-2",
-                        !isCurrent && isAnswered && "bg-green-100 text-green-800 border-green-300"
-                      )}
-                      onClick={() => {
-                        setCurrentQuestionIndex(index)
-                        setIsSidebarOpen(false)
-                      }}
-                    >
-                      {isFlagged && <Flag className="absolute -top-1 -right-1 h-4 w-4 text-amber-500 fill-amber-500" />}
-                      {index + 1}
-                    </Button>
-                  )
-                })}
-              </div>
-            </div>
-            <div className="p-4 border-t">
-              <h3 className="text-sm font-semibold mb-3">Summary</h3>
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between items-center text-green-600">
-                  <span className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4" /> Answered</span>
-                  <span className="font-semibold">{stats.answered}</span>
-                </div>
-                <div className="flex justify-between items-center text-gray-500">
-                  <span className="flex items-center gap-2"><HelpCircle className="h-4 w-4" /> Unanswered</span>
-                  <span className="font-semibold">{stats.unanswered}</span>
-                </div>
-                <div className="flex justify-between items-center text-amber-600">
-                  <span className="flex items-center gap-2"><Flag className="h-4 w-4" /> Flagged</span>
-                  <span className="font-semibold">{stats.flagged}</span>
-                </div>
-              </div>
-            </div>
-          </SheetContent>
-        </Sheet>
-      ) : (
-        // Desktop/Tab Sidebar
-        <aside className={cn(
-          "bg-white border-r flex flex-col transition-all duration-300 ease-in-out",
-          isSidebarOpen ? "w-64 md:w-72 p-4" : "w-0 p-0 border-0 overflow-hidden"
-        )}>
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold">Questions</h3>
+      {/* Sidebar (Desktop) */}
+      {!isMobile && (
+        <aside
+          className={cn(
+            "bg-white border-r flex flex-col transition-all duration-300 ease-in-out shadow-lg",
+            isSidebarOpen ? "w-80 p-4" : "w-0 p-0 border-0 overflow-hidden"
+          )}
+        >
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="text-lg font-semibold text-gray-800">
+              Question Navigator
+            </h3>
             <Button
               variant="ghost"
               size="icon"
-              onClick={toggleSidebar}
-              className="h-8 w-8"
+              onClick={() => setIsSidebarOpen(false)}
             >
               <PanelLeftClose className="h-4 w-4" />
             </Button>
           </div>
+
           <div className="flex-1 overflow-y-auto pr-2">
-            <div className="grid grid-cols-5 gap-2 p-2">
-              {questions.map((_, index) => {
-                const isAnswered = answers[index] !== null
-                const isFlagged = flaggedQuestions.has(index)
-                const isCurrent = currentQuestionIndex === index
+            <div className="grid grid-cols-5 gap-3">
+              {questions.map((_, i) => {
+                const isAnswered =
+                  answers[i] !== null && answers[i] !== undefined;
+                const isCurrent = currentQuestionIndex === i;
+                const isFlagged = flaggedQuestions.has(i);
+
                 return (
                   <Button
-                    key={index}
-                    variant={isCurrent ? "default" : isAnswered ? "secondary" : "outline"}
+                    key={i}
+                    variant={
+                      isCurrent
+                        ? "default"
+                        : isAnswered
+                        ? "secondary"
+                        : "outline"
+                    }
                     className={cn(
-                      "h-10 w-10 p-0 relative text-sm",
-                      isCurrent && "ring-2 ring-blue-500 ring-offset-2",
-                      !isCurrent && isAnswered && "bg-green-100 text-green-800 border-green-300"
+                      "h-12 w-12 p-0 relative text-lg font-medium transition-all",
+                      isAnswered &&
+                        !isCurrent &&
+                        "bg-green-100 text-green-800 border-green-300 hover:bg-green-200",
+                      isFlagged && "border-amber-300"
                     )}
-                    onClick={() => setCurrentQuestionIndex(index)}
+                    onClick={() => setCurrentQuestionIndex(i)}
                   >
-                    {isFlagged && <Flag className="absolute -top-1 -right-1 h-3 w-3 text-amber-500 fill-amber-500" />}
-                    {index + 1}
+                    {isFlagged && (
+                      <Flag className="absolute -top-1 -right-1 h-4 w-4 text-amber-500 fill-amber-500" />
+                    )}
+                    {i + 1}
                   </Button>
-                )
+                );
               })}
             </div>
           </div>
-          <div className="mt-auto pt-4 border-t">
-            <h3 className="text-sm font-semibold mb-3">Summary</h3>
-            <div className="space-y-2 text-sm">
-              <div className="flex justify-between items-center text-green-600">
-                <span className="flex items-center gap-2"><CheckCircle2 className="h-3 w-3" /> Answered</span>
-                <span className="font-semibold">{stats.answered}</span>
-              </div>
-              <div className="flex justify-between items-center text-gray-500">
-                <span className="flex items-center gap-2"><HelpCircle className="h-3 w-3" /> Unanswered</span>
-                <span className="font-semibold">{stats.unanswered}</span>
-              </div>
-              <div className="flex justify-between items-center text-amber-600">
-                <span className="flex items-center gap-2"><Flag className="h-3 w-3" /> Flagged</span>
-                <span className="font-semibold">{stats.flagged}</span>
-              </div>
+
+          <div className="mt-auto pt-6 border-t space-y-3">
+            <div className="flex justify-between items-center text-green-600 bg-green-50 p-3 rounded-lg">
+              <span className="flex items-center gap-2 font-medium">
+                <CheckCircle2 className="h-4 w-4" /> Answered
+              </span>
+              <span className="font-bold text-lg">{stats.answered}</span>
+            </div>
+            <div className="flex justify-between items-center text-gray-600 bg-gray-50 p-3 rounded-lg">
+              <span className="flex items-center gap-2 font-medium">
+                <HelpCircle className="h-4 w-4" /> Unanswered
+              </span>
+              <span className="font-bold text-lg">{stats.unanswered}</span>
+            </div>
+            <div className="flex justify-between items-center text-amber-600 bg-amber-50 p-3 rounded-lg">
+              <span className="flex items-center gap-2 font-medium">
+                <Flag className="h-4 w-4" /> Flagged
+              </span>
+              <span className="font-bold text-lg">{stats.flagged}</span>
             </div>
           </div>
         </aside>
       )}
 
+      {/* Mobile Sheet Sidebar */}
+      {isMobile && (
+        <Sheet open={isSidebarOpen} onOpenChange={setIsSidebarOpen}>
+          <SheetContent side="left" className="w-80 p-0">
+            <SheetHeader className="p-4 border-b bg-gradient-to-r from-blue-600 to-indigo-600 text-white">
+              <SheetTitle className="text-white">Question Navigator</SheetTitle>
+            </SheetHeader>
+            <div className="flex-1 overflow-y-auto p-4">
+              <div className="grid grid-cols-5 gap-3">
+                {questions.map((_, i) => {
+                  const isAnswered =
+                    answers[i] !== null && answers[i] !== undefined;
+                  const isCurrent = currentQuestionIndex === i;
+                  const isFlagged = flaggedQuestions.has(i);
+
+                  return (
+                    <Button
+                      key={i}
+                      variant={
+                        isCurrent
+                          ? "default"
+                          : isAnswered
+                          ? "secondary"
+                          : "outline"
+                      }
+                      className={cn(
+                        "h-12 w-12 p-0 relative text-lg font-medium",
+                        isAnswered &&
+                          !isCurrent &&
+                          "bg-green-100 text-green-800 border-green-300",
+                        isFlagged && "border-amber-300"
+                      )}
+                      onClick={() => {
+                        setCurrentQuestionIndex(i);
+                        setIsSidebarOpen(false);
+                      }}
+                    >
+                      {isFlagged && (
+                        <Flag className="absolute -top-1 -right-1 h-4 w-4 text-amber-500 fill-amber-500" />
+                      )}
+                      {i + 1}
+                    </Button>
+                  );
+                })}
+              </div>
+            </div>
+          </SheetContent>
+        </Sheet>
+      )}
+
       <div className="flex-1 flex flex-col">
-        <header className="flex items-center justify-between p-3 sm:p-4 border-b bg-white sticky top-0 z-10">
-          <div className="flex items-center gap-3 sm:gap-4">
-            <Button 
-              variant="outline" 
-              size="icon" 
-              onClick={toggleSidebar} 
-              className="h-9 w-9"
+        {/* Header */}
+        <header className="flex items-center justify-between p-4 border-b bg-white sticky top-0 z-10 shadow-sm">
+          <div className="flex items-center gap-4">
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+              className="border-blue-200 hover:bg-blue-50"
             >
-              {isSidebarOpen ? <PanelLeftClose className="h-4 w-4" /> : <PanelLeftOpen className="h-4 w-4" />}
+              {isSidebarOpen ? (
+                <PanelLeftClose className="h-4 w-4" />
+              ) : (
+                <PanelLeftOpen className="h-4 w-4" />
+              )}
             </Button>
             <div>
-              <h1 className="text-lg sm:text-xl font-bold truncate max-w-[150px] sm:max-w-none">{examData?.title || "Exam"}</h1>
-              {!isFullscreenActive && examStatus === "in-progress" && (
-                <p className="text-xs text-red-600 font-medium">⚠️ Return to fullscreen</p>
-              )}
+              <h1 className="font-bold text-lg truncate max-w-[300px]">
+                {examData?.title}
+              </h1>
+              <p className="text-sm text-gray-500">
+                Question {currentQuestionIndex + 1} of {questions.length}
+              </p>
             </div>
           </div>
-          <div className="flex items-center gap-3 sm:gap-6">
-            {/* Timer with hide/show button */}
+
+          <div className="flex items-center gap-6">
             <div className="flex items-center gap-2">
               <Button
                 variant="outline"
                 size="icon"
-                onClick={toggleTimerVisibility}
-                className="h-8 w-8"
+                onClick={() => setIsTimerVisible(!isTimerVisible)}
+                className="h-8 w-8 border-blue-200 hover:bg-blue-50"
               >
-                {isTimerVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                {isTimerVisible ? (
+                  <EyeOff className="h-4 w-4" />
+                ) : (
+                  <Eye className="h-4 w-4" />
+                )}
               </Button>
               {isTimerVisible && (
-                <div className="flex items-center gap-2 text-base sm:text-lg font-semibold font-mono">
-                  <Clock className={`h-5 w-5 sm:h-6 sm:w-6 ${timeLeft < 300 ? "text-red-600" : "text-blue-600"}`} />
-                  <span className={timeLeft < 300 ? "text-red-600" : ""}>{formatTime(timeLeft)}</span>
+                <div
+                  className={cn(
+                    "flex items-center gap-2 font-mono text-lg font-bold px-3 py-1 rounded-lg",
+                    timeLeft < 300
+                      ? "bg-red-50 text-red-600 animate-pulse"
+                      : "bg-blue-50 text-blue-600"
+                  )}
+                >
+                  <Clock className="h-5 w-5" />
+                  {formatTime(timeLeft)}
+                  {timeLeft < 300 && (
+                    <span className="text-xs ml-1">(Low Time!)</span>
+                  )}
                 </div>
               )}
             </div>
-            
-            <Separator orientation="vertical" className="h-6 sm:h-8" />
-            <div className="flex items-center gap-2 sm:gap-3">
-              <Avatar className="h-8 w-8 sm:h-10 sm:w-10">
-                <AvatarFallback className="text-xs sm:text-sm">
-                  {studentInfo?.name?.split(" ").map((n: string) => n[0]).join("") || "ST"}
+
+            <Separator orientation="vertical" className="h-8" />
+
+            <div className="flex items-center gap-3">
+              <Avatar className="border-2 border-blue-200">
+                <AvatarFallback className="bg-blue-100 text-blue-700">
+                  {studentInfo?.name?.[0] || "S"}
                 </AvatarFallback>
               </Avatar>
               <div className="hidden sm:block">
                 <p className="font-semibold text-sm">{studentInfo?.name}</p>
-                <p className="text-xs text-gray-500">{studentInfo?.student_id}</p>
+                <p className="text-xs text-gray-500">
+                  {studentInfo?.student_id}
+                </p>
               </div>
             </div>
-            <Button variant="destructive" onClick={() => setIsConfirmModalOpen(true)} disabled={isSubmitting} className="h-9 px-3 text-sm sm:h-10 sm:px-4 sm:text-base">
-              <Send className="h-3 w-3 sm:h-4 sm:w-4 mr-2" />
-              <span className="hidden sm:inline">Submit</span>
-              <span className="sm:hidden">End</span>
+
+            <Button
+              variant="destructive"
+              onClick={() => setIsConfirmModalOpen(true)}
+              className="bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700"
+            >
+              Submit Exam
             </Button>
           </div>
         </header>
 
-        <main className="flex-1 p-4 sm:p-6 md:p-8 lg:p-10 overflow-y-auto">
-          <Card className="shadow-md">
-            <CardHeader className="p-4 sm:p-6">
-              <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4">
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-gray-600">Question {currentQuestionIndex + 1} of {questions.length}</p>
+        {/* Main Content */}
+        <main className="flex-1 p-6 overflow-y-auto">
+          {currentQ && (
+            <Card className="shadow-xl border-0 overflow-hidden">
+              <CardHeader className="p-8 bg-gradient-to-r from-blue-50 to-indigo-50">
+                <div className="flex justify-between items-start">
+                  <div className="flex-1">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center gap-3">
+                        <div className="px-3 py-1 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-full text-sm font-semibold">
+                          Q{currentQuestionIndex + 1}
+                        </div>
+                        <p className="text-sm font-medium text-gray-600">
+                          {currentQ.type === "matching" &&
+                            currentQ.matchingPairs &&
+                            `${currentQ.matchingPairs.length} matching pairs`}
+                          {currentQ.type === "blank" &&
+                            currentQ.blanks &&
+                            `${currentQ.blanks.length} blanks`}
+                          {["mcq", "tf", "passage"].includes(currentQ.type) &&
+                            `${currentQ.options?.length || 0} options`}
+                        </p>
+                      </div>
 
-                  {/* Passage button - always shows if there's a passage */}
-                  {currentQuestion.has_passage && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="mt-2 mb-3"
-                      onClick={() => openPassage(currentQuestion.passage_html)}
-                    >
-                      <BookOpen className="h-4 w-4 mr-2" />
-                      View Passage
-                    </Button>
-                  )}
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          onClick={handleToggleFlag}
+                          className={cn(
+                            "transition-all",
+                            flaggedQuestions.has(currentQuestionIndex) &&
+                              "bg-amber-100 text-amber-800 border-amber-300 hover:bg-amber-200"
+                          )}
+                        >
+                          <Flag className="h-4 w-4 mr-2" />
+                          {flaggedQuestions.has(currentQuestionIndex)
+                            ? "Flagged"
+                            : "Flag"}
+                        </Button>
+                      </div>
+                    </div>
 
-                  <CardTitle className="pt-2 text-lg sm:text-xl md:text-2xl leading-relaxed">
-                    {renderWithMath(truncatedText)}
-                    {shouldTruncate && (
-                      <Button
-                        variant="link"
-                        className="ml-2 p-0 h-auto text-blue-600 text-sm sm:text-base"
-                        onClick={() => setShowFullQuestionModal(true)}
-                      >
-                        Read Full Question
-                      </Button>
+                    {/* Modern Passage Display */}
+                    {currentQ.has_passage && currentQ.passage_html && (
+                      <ModernPassageDisplay
+                        passageHtml={currentQ.passage_html}
+                        isExpanded={passageExpanded}
+                        onToggle={() => setPassageExpanded(!passageExpanded)}
+                      />
                     )}
-                  </CardTitle>
-                </div>
-                <Button 
-                  variant="outline" 
-                  onClick={handleToggleFlag}
-                  className={cn(
-                    "flex-shrink-0",
-                    flaggedQuestions.has(currentQuestionIndex) && 
-                    "bg-amber-100 text-amber-800 border-amber-300"
-                  )}
-                >
-                  <Flag className="h-4 w-4 mr-2" /> 
-                  {flaggedQuestions.has(currentQuestionIndex) ? "Flagged" : "Flag"}
-                </Button>
-              </div>
 
-              {currentQuestion.image_url && (
-                <div className="mt-4 mb-4 sm:mb-6">
-                  <div className="relative">
-                    <img 
-                      src={currentQuestion.image_url || "/placeholder.svg"} 
-                      alt="Question" 
-                      className="w-full h-auto max-h-48 sm:max-h-64 object-contain rounded-lg border"
-                    />
+                    {/* Question Text */}
+                    <div className="mt-4">
+                      {currentQ.type === "blank" ? (
+                        <div className="text-lg leading-relaxed font-medium bg-white p-4 rounded-lg border">
+                          {currentQ.question_text
+                            .split(/(\[BLANK:[^\]]+\])/g)
+                            .map((part: string, i: number) => {
+                              const match = part.match(/\[BLANK:([^\]]+)\]/);
+                              if (match) {
+                                const blankId = match[1];
+                                return (
+                                  <span
+                                    key={i}
+                                    className="inline-block mx-1 align-bottom"
+                                  >
+                                    <UnderlinedBlankInput
+                                      value={getBlankAnswer(blankId)}
+                                      onChange={(val) =>
+                                        handleBlankChange(blankId, val)
+                                      }
+                                    />
+                                  </span>
+                                );
+                              }
+                              return (
+                                <span key={i}>{renderWithMath(part)}</span>
+                              );
+                            })}
+                        </div>
+                      ) : currentQ.type === "matching" ? (
+                        <div className="space-y-4">
+                          {currentQ.matchingInstructions && (
+                            <div className="bg-blue-100 p-3 rounded-lg border border-blue-200">
+                              <p className="text-sm font-medium text-blue-800">
+                                {renderWithMath(currentQ.matchingInstructions)}
+                              </p>
+                            </div>
+                          )}
+                          <CardTitle className="text-xl text-gray-800">
+                            {renderWithMath(currentQ.question_text)}
+                          </CardTitle>
+                        </div>
+                      ) : (
+                        <CardTitle className="text-xl leading-relaxed text-gray-800">
+                          {renderWithMath(currentQ.question_text)}
+                        </CardTitle>
+                      )}
+                    </div>
                   </div>
                 </div>
-              )}
-            </CardHeader>
-            <CardContent className="p-4 sm:p-6">
-              <RadioGroup 
-                value={answers[currentQuestionIndex]?.toString() ?? ""} 
-                onValueChange={(val) => handleAnswerChange(Number(val))} 
-                className="space-y-3 sm:space-y-4"
-              >
-                {currentQuestion.options?.map((option: any, index: number) => {
-                  const optionLetter = String.fromCharCode(65 + index)
-                  const isSelected = answers[currentQuestionIndex] === index
-                  const hasImage = option.image
-                  
-                  return (
-                    <div
-                      key={index}
-                      className={cn(
-                        "relative flex flex-col sm:flex-row p-3 sm:p-4 rounded-lg border-2 transition-all cursor-pointer hover:bg-gray-50",
-                        isSelected ? "border-blue-500 bg-blue-50" : "border-gray-200",
-                        hasImage ? "items-start" : "items-center"
-                      )}
-                      onClick={() => handleAnswerChange(index)}
+
+                {currentQ.image_url && (
+                  <div className="mt-6 flex justify-center">
+                    <div className="max-w-2xl w-full">
+                      <img
+                        src={currentQ.image_url}
+                        alt="Question"
+                        className="w-full max-h-80 rounded-xl border-2 border-gray-200 object-contain shadow-md"
+                      />
+                    </div>
+                  </div>
+                )}
+              </CardHeader>
+
+              <CardContent className="p-8 pt-6">
+                {/* MCQ / TF / Passage Options */}
+                {["mcq", "tf", "passage"].includes(currentQ.type) && (
+                  <div className="space-y-4">
+                    <p className="text-sm font-medium text-gray-600 mb-2">
+                      choose the best option
+                    </p>
+                    <RadioGroup
+                      value={answers[currentQuestionIndex]?.toString() ?? ""}
+                      onValueChange={(v) => handleAnswerChange(Number(v))}
+                      className="space-y-3"
                     >
-                      {/* Hidden radio input for accessibility */}
-                      <RadioGroupItem value={index.toString()} id={`option-${index}`} className="sr-only" />
-                      
-                      {/* Layout with image on left */}
-                      <div className="flex w-full">
-                        {/* Option image on LEFT side if exists */}
-                        {hasImage && (
-                          <div className="flex-shrink-0 mr-4 w-32 sm:w-40 h-24 sm:h-28">
-                            <div className="w-full h-full rounded-lg overflow-hidden border bg-gray-50">
-                              <img
-                                src={option.image || "/placeholder.svg"}
-                                alt={`Option ${optionLetter}`}
-                                className="w-full h-full object-contain"
-                              />
+                      {currentQ.options?.map((opt: any, idx: number) => {
+                        const isSelected =
+                          answers[currentQuestionIndex] === idx;
+                        return (
+                          <div
+                            key={idx}
+                            className={cn(
+                              "flex items-center p-5 rounded-xl border-2 cursor-pointer transition-all hover:shadow-md",
+                              isSelected
+                                ? "border-blue-500 bg-gradient-to-r from-blue-50 to-indigo-50"
+                                : "border-gray-200 hover:border-blue-300"
+                            )}
+                            onClick={() => handleAnswerChange(idx)}
+                          >
+                            <RadioGroupItem
+                              value={idx.toString()}
+                              id={`opt-${idx}`}
+                              className="sr-only"
+                            />
+                            <div className="flex w-full items-center">
+                              <div
+                                className={cn(
+                                  "h-12 w-12 rounded-xl flex items-center justify-center mr-4 font-bold text-lg border-2 transition-all",
+                                  isSelected
+                                    ? "bg-gradient-to-r from-blue-600 to-indigo-600 text-white border-blue-600"
+                                    : "bg-gray-100 text-gray-600 border-gray-300"
+                                )}
+                              >
+                                {String.fromCharCode(65 + idx)}
+                              </div>
+                              <div className="flex-1 font-medium text-base">
+                                {renderWithMath(opt.text)}
+                              </div>
+                              {opt.image && (
+                                <img
+                                  src={opt.image}
+                                  alt="Option"
+                                  className="h-24 w-24 object-cover rounded-lg border ml-4 shadow-sm"
+                                />
+                              )}
+                              {isSelected && (
+                                <div className="ml-4">
+                                  <Check className="h-7 w-7 text-green-600 bg-green-100 p-1 rounded-full" />
+                                </div>
+                              )}
                             </div>
                           </div>
-                        )}
-                        
-                        {/* Option content */}
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center">
-                            {/* Option letter badge */}
-                            <div className={cn(
-                              "flex-shrink-0 w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center mr-3 sm:mr-4 font-bold text-base sm:text-lg",
-                              isSelected 
-                                ? "bg-blue-500 text-white" 
-                                : "bg-gray-100 text-gray-700 border border-gray-300"
-                            )}>
-                              {optionLetter}
-                            </div>
-                            
-                            {/* Option text content */}
-                            <div className="flex-1 min-w-0">
-                              <Label htmlFor={`option-${index}`} className="cursor-pointer block">
-                                <div className="text-sm sm:text-base font-medium whitespace-normal">
-                                  <span className="inline-block align-middle">
-                                    {renderWithMath(option.text)}
-                                  </span>
-                                </div>
-                              </Label>
-                            </div>
-                            
-                            {/* Selection indicator */}
-                            {isSelected && (
-                              <div className="flex-shrink-0 ml-2 sm:ml-4">
-                                <Check className="h-5 w-5 sm:h-6 sm:w-6 text-blue-500" />
-                              </div>
+                        );
+                      })}
+                    </RadioGroup>
+                  </div>
+                )}
+
+                {/* Matching UI */}
+                {currentQ.type === "matching" && currentQ.matchingPairs && (
+                  <div className="space-y-6">
+                    {/* Main Container */}
+                    <div className="bg-white rounded-xl border-2 border-gray-200 overflow-hidden shadow-sm">
+                      <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-gray-200">
+                        {/* COLUMN A - Questions */}
+                        <div className="flex flex-col">
+                          <div className="p-4 border-b bg-gradient-to-r from-blue-50 to-indigo-50">
+                            <h3 className="text-center font-bold text-gray-800 uppercase tracking-wider">
+                              Column A
+                            </h3>
+                          </div>
+                          <div className="flex-1">
+                            {currentQ.matchingPairs.map(
+                              (pair: any, idx: number) => {
+                                const currentAnswer = getMatchingAnswer();
+                                const answerLetter = currentAnswer[idx] || "";
+
+                                return (
+                                  <div
+                                    key={idx}
+                                    className="p-4 min-h-[90px] border-b border-gray-100 last:border-b-0 hover:bg-gray-50/50 flex items-center"
+                                  >
+                                    <div className="flex items-center gap-4 w-full">
+                                      <div className="flex items-center gap-3 flex-shrink-0">
+                                        {/* Input box for the student to type the letter */}
+                                        <MatchingAnswerInput
+                                          value={answerLetter}
+                                          onChange={(val) =>
+                                            handleMatchSelect(idx, val)
+                                          }
+                                          maxLetters={
+                                            currentQ.matchingPairs.length
+                                          }
+                                        />
+                                        {/* Question Number (1, 2, 3...) */}
+                                        <div className="w-9 h-9 rounded-full bg-blue-600 text-white font-bold flex items-center justify-center shadow-md">
+                                          {idx + 1}
+                                        </div>
+                                      </div>
+                                      <div className="flex-1 min-w-0">
+                                        <div className="text-base text-gray-800 font-medium leading-relaxed">
+                                          {renderWithMath(pair.sideA)}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                );
+                              }
                             )}
                           </div>
-                          
-                          {/* Image label for mobile */}
-                          {hasImage && isMobile && (
-                            <p className="text-xs text-gray-500 mt-2 ml-12">Option {optionLetter} Image</p>
-                          )}
+                        </div>
+
+                        {/* COLUMN B - Options */}
+                        <div className="flex flex-col bg-gray-50/20">
+                          <div className="p-4 border-b bg-gradient-to-r from-emerald-50 to-green-50">
+                            <h3 className="text-center font-bold text-gray-800 uppercase tracking-wider">
+                              Column B
+                            </h3>
+                          </div>
+                          <div className="flex-1">
+                            {currentQ.matchingPairs.map(
+                              (pair: any, idx: number) => (
+                                <div
+                                  key={idx}
+                                  className="p-4 min-h-[90px] border-b border-gray-100 last:border-b-0 hover:bg-gray-50/50 flex items-center"
+                                >
+                                  <div className="flex items-start gap-4 w-full">
+                                    {/* Option Letter (A, B, C...) */}
+                                    <div className="w-9 h-9 rounded-lg bg-emerald-100 text-emerald-700 border border-emerald-200 font-bold flex items-center justify-center flex-shrink-0 shadow-sm">
+                                      {String.fromCharCode(65 + idx)}
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                      <div className="text-base text-gray-700 leading-relaxed pt-1">
+                                        {renderWithMath(pair.sideB)}
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              )
+                            )}
+                          </div>
                         </div>
                       </div>
                     </div>
-                  )
-                })}
-              </RadioGroup>
-            </CardContent>
-          </Card>
 
-          <div className="flex justify-between mt-4 sm:mt-6">
-            <Button 
-              variant="outline" 
-              onClick={() => setCurrentQuestionIndex((p) => p - 1)} 
+                    {/* Helpful Instruction Box */}
+                    <div className="bg-blue-50 p-4 rounded-lg border border-blue-200 flex gap-4 items-center">
+                      <div className="bg-blue-100 p-2 rounded-full flex-shrink-0">
+                        <svg
+                          className="w-6 h-6 text-blue-600"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth="2"
+                            d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                          />
+                        </svg>
+                      </div>
+                      <div className="text-sm text-blue-800">
+                        <span className="font-bold">Instructions:</span>{" "}
+                        Carefully match each item from <strong>Column A</strong>{" "}
+                        with its corresponding match in{" "}
+                        <strong>Column B</strong>. Type the correct letter into
+                        the input box provided next to each number.
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Navigation Buttons */}
+          <div className="flex justify-between mt-8">
+            <Button
+              variant="outline"
+              size="lg"
+              onClick={() => setCurrentQuestionIndex((p) => p - 1)}
               disabled={currentQuestionIndex === 0}
-              className="h-9 sm:h-10"
+              className="px-6 py-3 border-blue-200 hover:bg-blue-50"
             >
-              <ChevronLeft className="h-4 w-4 mr-2" /> Previous
+              <ChevronLeft className="mr-2 h-5 w-5" /> Previous
             </Button>
-            <Button 
-              onClick={() => setCurrentQuestionIndex((p) => p + 1)} 
-              disabled={currentQuestionIndex === questions.length - 1}
-              className="bg-blue-600 hover:bg-blue-700 h-9 sm:h-10"
-            >
-              Next <ChevronRight className="h-4 w-4 ml-2" />
-            </Button>
+
+            <div className="flex items-center gap-4">
+              <span className="text-sm text-gray-500">
+                {currentQuestionIndex + 1} of {questions.length}
+              </span>
+              <Button
+                onClick={() => setCurrentQuestionIndex((p) => p + 1)}
+                size="lg"
+                disabled={currentQuestionIndex === questions.length - 1}
+                className="px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
+              >
+                Next <ChevronRight className="ml-2 h-5 w-5" />
+              </Button>
+            </div>
           </div>
         </main>
       </div>
 
-      <AlertDialog open={isConfirmModalOpen} onOpenChange={setIsConfirmModalOpen}>
-        <AlertDialogContent className="max-w-[95vw] sm:max-w-lg">
+      {/* Submit Confirmation Modal */}
+      <AlertDialog
+        open={isConfirmModalOpen}
+        onOpenChange={setIsConfirmModalOpen}
+      >
+        <AlertDialogContent className="max-w-md">
           <AlertDialogHeader>
-            <AlertDialogTitle>Submit Exam?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to submit your exam? This action cannot be undone.
-              <div className="mt-4 p-4 bg-gray-100 rounded-lg">
-                <div className="grid grid-cols-3 gap-4 text-center">
-                  <div>
-                    <div className="text-xl sm:text-2xl font-bold text-green-600">{stats.answered}</div>
-                    <div className="text-xs sm:text-sm text-gray-600">Answered</div>
-                  </div>
-                  <div>
-                    <div className="text-xl sm:text-2xl font-bold text-gray-600">{stats.unanswered}</div>
-                    <div className="text-xs sm:text-sm text-gray-600">Unanswered</div>
-                  </div>
-                  <div>
-                    <div className="text-xl sm:text-2xl font-bold text-amber-600">{stats.flagged}</div>
-                    <div className="text-xs sm:text-sm text-gray-600">Flagged</div>
-                  </div>
-                </div>
-              </div>
+            <div className="flex items-center gap-3 mb-2">
+              <AlertTriangle className="h-6 w-6 text-amber-600" />
+              <AlertDialogTitle className="text-xl">
+                Ready to Submit?
+              </AlertDialogTitle>
+            </div>
+            <AlertDialogDescription className="text-gray-600">
+              You're about to submit your exam. Make sure you've answered all
+              questions before proceeding.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter className="flex flex-col sm:flex-row gap-2">
-            <AlertDialogCancel className="w-full sm:w-auto">Continue Exam</AlertDialogCancel>
-            <AlertDialogAction onClick={handleFinalSubmit} disabled={isSubmitting} className="w-full sm:w-auto bg-red-600 hover:bg-red-700">
-              {isSubmitting && <Spinner className="mr-2 h-4 w-4" />}
-              Submit Exam
+
+          <div className="py-4">
+            <div className="grid grid-cols-3 gap-3 text-center">
+              <div className="p-4 bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl border border-green-200">
+                <div className="text-3xl font-bold text-green-600">
+                  {stats.answered}
+                </div>
+                <div className="text-xs text-green-800 font-medium mt-2 uppercase tracking-wider">
+                  Answered
+                </div>
+              </div>
+              <div className="p-4 bg-gradient-to-br from-gray-50 to-slate-50 rounded-xl border border-gray-200">
+                <div className="text-3xl font-bold text-gray-600">
+                  {stats.unanswered}
+                </div>
+                <div className="text-xs text-gray-800 font-medium mt-2 uppercase tracking-wider">
+                  Unanswered
+                </div>
+              </div>
+              <div className="p-4 bg-gradient-to-br from-amber-50 to-orange-50 rounded-xl border border-amber-200">
+                <div className="text-3xl font-bold text-amber-600">
+                  {stats.flagged}
+                </div>
+                <div className="text-xs text-amber-800 font-medium mt-2 uppercase tracking-wider">
+                  Flagged
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
+              <p className="text-sm text-blue-800">
+                <strong>Time Remaining:</strong> {formatTime(timeLeft)}
+              </p>
+              {timeLeft < 300 && (
+                <p className="text-sm text-red-600 mt-1">
+                  ⚠️ Time is running out!
+                </p>
+              )}
+            </div>
+          </div>
+
+          <AlertDialogFooter className="flex flex-col sm:flex-row gap-3">
+            <AlertDialogCancel className="w-full sm:w-auto">
+              Review More
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleFinalSubmit}
+              className="w-full sm:w-auto bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700"
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? (
+                <>
+                  <Spinner className="mr-2 h-4 w-4" />
+                  Submitting...
+                </>
+              ) : (
+                "Submit Exam Now"
+              )}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
     </div>
-  )
+  );
 }
