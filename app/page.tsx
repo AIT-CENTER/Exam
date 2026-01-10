@@ -653,9 +653,11 @@ export default function StudentLogin() {
           <div className="w-full max-w-md">
             {/* Mobile Logo */}
             <div className="lg:hidden flex items-center gap-3 mb-10">
-              <div className="p-3 bg-gradient-to-br from-blue-600 to-purple-600 rounded-xl text-white">
-                <GraduationCap className="h-8 w-8" />
-              </div>
+              <div
+                  className="w-16 h-16 p-3 rounded-2xl bg-white/60 backdrop-blur-md shadow-md ring-1 ring-black/5 flex items-center justify-center overflow-hidden"
+                >
+                  <img src="/icons/icon-192.png" alt="ExamFlow Logo" className="w-full h-full object-cover scale-125" />
+                </div>
               <div>
                 <h1 className="text-2xl font-bold text-gray-900">ALPHA</h1>
                 <p className="text-gray-500 text-sm">

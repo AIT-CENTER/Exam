@@ -1,14 +1,37 @@
 {
-  "name": "Alpha",
-  "version": "0.1.0",
+  "name": "ALPHA",
+  "version": "2.1.0",
   "type": "module",
+  "main": "main.cjs",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "postbuild": "next-sitemap"
+    "postbuild": "next-sitemap",
+    "electron": "electron .",
+    "dist": "electron-builder"
+  },
+  "build": {
+    "appId": "com.alpha.exam",
+    "productName": "ALPHA COLLEGE | Exam |",
+    "copyright": "Copyright © 2026 Alpha Institute of Technology",
+    "win": {
+      "icon": "build/icon.png",
+      "target": [
+        "nsis"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "files": [
+      "main.cjs",
+      "icon.png",
+      "build/**/*"
+    ]
   },
   "dependencies": {
     "@emotion/is-prop-valid": "^1.2.2",
@@ -129,6 +152,9 @@
     "@types/node": "^22",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "electron": "^39.2.7",
+    "electron-builder": "^26.4.0",
+    "electron-is-dev": "^3.0.1",
     "postcss": "^8.5",
     "tailwindcss": "^4.1.9",
     "tw-animate-css": "1.3.3",
