@@ -1,7 +1,9 @@
 {
   "name": "ALPHA",
-  "version": "2.1.0",
+  "version": "3.2.0",
   "type": "module",
+  "description": "Alpha Institute Examination Desktop Application",
+  "author": "Alpha Institute of Technology",
   "main": "main.cjs",
   "private": true,
   "scripts": {

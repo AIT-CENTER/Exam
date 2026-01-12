@@ -73,10 +73,288 @@ import {
   ScrollText,
   ChevronUp,
   ChevronDown,
+  Shield,
+  ShieldAlert,
+  Smartphone,
+  Globe,
+  Cpu,
+  LogOut,
+  RefreshCw,
+  Lock,
+  Unlock,
+  Zap,
+  Activity,
+  WifiOff,
 } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { InlineMath, BlockMath } from "react-katex";
 import "katex/dist/katex.min.css";
+
+// --- Device Fingerprinting ---
+const getBrowserFingerprint = async (): Promise<string> => {
+  try {
+    const components = [
+      navigator.userAgent,
+      navigator.language,
+      screen.colorDepth,
+      screen.width,
+      screen.height,
+      new Date().getTimezoneOffset(),
+      !!navigator.cookieEnabled,
+      !!navigator.doNotTrack,
+      navigator.hardwareConcurrency || 'unknown',
+      navigator.platform,
+    ];
+    
+    const fingerprintString = components.join('|');
+    
+    let hash = 0;
+    for (let i = 0; i < fingerprintString.length; i++) {
+      const char = fingerprintString.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash;
+    }
+    
+    return `device_${Math.abs(hash).toString(16).substring(0, 16)}`;
+  } catch (error) {
+    return `device_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  }
+};
+
+// --- Enhanced Session Monitor with Real-time Device Locking ---
+class EnhancedSessionMonitor {
+  private heartbeatInterval: NodeJS.Timeout | null = null;
+  private deviceCheckInterval: NodeJS.Timeout | null = null;
+  private sessionCheckInterval: NodeJS.Timeout | null = null;
+  private sessionId: string;
+  private securityToken: string;
+  private deviceFingerprint: string;
+  private onSessionTerminated: (reason: string) => void;
+  private onRedirectHome: () => void;
+  private isActive = true;
+  private lastHeartbeatTime = Date.now();
+  private heartbeatFailedCount = 0;
+  private deviceChanged = false;
+
+  constructor(
+    sessionId: string,
+    securityToken: string,
+    deviceFingerprint: string,
+    onSessionTerminated: (reason: string) => void,
+    onRedirectHome: () => void
+  ) {
+    this.sessionId = sessionId;
+    this.securityToken = securityToken;
+    this.deviceFingerprint = deviceFingerprint;
+    this.onSessionTerminated = onSessionTerminated;
+    this.onRedirectHome = onRedirectHome;
+  }
+
+  async start() {
+    // Send immediate heartbeat to claim session
+    await this.sendHeartbeat(true);
+    
+    // Start heartbeat every 3 seconds
+    this.heartbeatInterval = setInterval(async () => {
+      await this.sendHeartbeat();
+    }, 3000);
+
+    // Check device ownership every 5 seconds
+    this.deviceCheckInterval = setInterval(async () => {
+      await this.checkDeviceOwnership();
+    }, 5000);
+
+    // Check session status every 10 seconds
+    this.sessionCheckInterval = setInterval(async () => {
+      await this.checkSessionStatus();
+    }, 10000);
+
+    console.log("Session monitor started for session:", this.sessionId);
+  }
+
+  private async sendHeartbeat(isInitial = false) {
+    if (!this.isActive) return;
+
+    try {
+      this.lastHeartbeatTime = Date.now();
+      
+      // Update both tables atomically
+      const updates = [
+        supabase
+          .from('exam_sessions')
+          .update({
+            last_activity_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+            time_remaining: this.getTimeRemainingCallback?.(),
+          })
+          .eq('id', this.sessionId)
+          .eq('security_token', this.securityToken),
+
+        supabase
+          .from('session_security')
+          .update({
+            last_verified: new Date().toISOString(),
+            device_fingerprint: this.deviceFingerprint,
+            is_active: true
+          })
+          .eq('session_id', this.sessionId)
+          .eq('token', this.securityToken)
+      ];
+
+      const results = await Promise.all(updates);
+      
+      // Check for errors
+      const hasError = results.some(result => result.error);
+      if (hasError) {
+        throw new Error("Heartbeat update failed");
+      }
+
+      this.heartbeatFailedCount = 0;
+      
+      if (isInitial) {
+        console.log("Initial heartbeat sent, session claimed by device:", this.deviceFingerprint);
+      }
+    } catch (error) {
+      console.error('Heartbeat failed:', error);
+      this.heartbeatFailedCount++;
+      
+      if (this.heartbeatFailedCount >= 3) {
+        this.terminateSession('Connection lost. Multiple heartbeat failures.');
+      }
+    }
+  }
+
+  private async checkDeviceOwnership() {
+    if (!this.isActive) return;
+
+    try {
+      // Check if this device still owns the session
+      const { data: security, error } = await supabase
+        .from('session_security')
+        .select('device_fingerprint, is_active, last_verified')
+        .eq('session_id', this.sessionId)
+        .eq('token', this.securityToken)
+        .single();
+
+      if (error || !security) {
+        this.terminateSession('Security record not found or invalid.');
+        return;
+      }
+
+      if (!security.is_active) {
+        this.terminateSession('Session deactivated by system.');
+        return;
+      }
+
+      // Check if device fingerprint matches
+      if (security.device_fingerprint !== this.deviceFingerprint) {
+        this.deviceChanged = true;
+        this.terminateSession('Device changed. Session taken over by another device.');
+        return;
+      }
+
+      // Check last verification time (should be within 15 seconds)
+      const lastVerified = new Date(security.last_verified);
+      const now = new Date();
+      const diffInSeconds = (now.getTime() - lastVerified.getTime()) / 1000;
+      
+      if (diffInSeconds > 15) {
+        // Session might have issues, try to reclaim
+        await this.reclaimSession();
+      }
+    } catch (error) {
+      console.error('Device ownership check error:', error);
+    }
+  }
+
+  private async checkSessionStatus() {
+    if (!this.isActive) return;
+
+    try {
+      const { data: session, error } = await supabase
+        .from('exam_sessions')
+        .select('status, security_token')
+        .eq('id', this.sessionId)
+        .single();
+
+      if (error || !session) {
+        this.terminateSession('Session not found in database.');
+        return;
+      }
+
+      if (session.status !== 'in_progress') {
+        this.terminateSession(`Exam session ${session.status}.`);
+        return;
+      }
+
+      if (session.security_token !== this.securityToken) {
+        this.terminateSession('Security token invalid. Session may have been taken over.');
+        return;
+      }
+    } catch (error) {
+      console.error('Session status check error:', error);
+    }
+  }
+
+  private async reclaimSession() {
+    try {
+      await supabase
+        .from('session_security')
+        .update({
+          device_fingerprint: this.deviceFingerprint,
+          last_verified: new Date().toISOString(),
+          is_active: true
+        })
+        .eq('session_id', this.sessionId)
+        .eq('token', this.securityToken);
+      
+      console.log("Session reclaimed by device:", this.deviceFingerprint);
+    } catch (error) {
+      console.error('Failed to reclaim session:', error);
+    }
+  }
+
+  private terminateSession(reason: string) {
+    if (!this.isActive) return;
+    
+    this.isActive = false;
+    this.stop();
+    
+    console.log("Session terminated:", reason);
+    this.onSessionTerminated(reason);
+    
+    // Small delay before redirecting
+    setTimeout(() => {
+      this.onRedirectHome();
+    }, 2000);
+  }
+
+  stop() {
+    if (this.heartbeatInterval) {
+      clearInterval(this.heartbeatInterval);
+      this.heartbeatInterval = null;
+    }
+    if (this.deviceCheckInterval) {
+      clearInterval(this.deviceCheckInterval);
+      this.deviceCheckInterval = null;
+    }
+    if (this.sessionCheckInterval) {
+      clearInterval(this.sessionCheckInterval);
+      this.sessionCheckInterval = null;
+    }
+  }
+
+  // Callback to get current time remaining
+  private getTimeRemainingCallback: (() => number) | null = null;
+  
+  setTimeRemainingCallback(callback: () => number) {
+    this.getTimeRemainingCallback = callback;
+  }
+
+  isSessionActive() {
+    return this.isActive;
+  }
+}
 
 // --- Utility Functions ---
 
@@ -146,21 +424,18 @@ const seededShuffle = <T,>(array: T[], seed: string): T[] => {
   const shuffled = [...array];
   let hash = 0;
 
-  // Create a more complex hash from the seed
   for (let i = 0; i < seed.length; i++) {
     hash = (hash << 5) - hash + seed.charCodeAt(i);
     hash = hash ^ hash;
-    hash = hash & 0x7fffffff; // Ensure positive
+    hash = hash & 0x7fffffff;
   }
 
-  // Seeded pseudo-random function (improved)
   let seedValue = hash;
   const seededRandom = () => {
     seedValue = (seedValue * 9301 + 49297) % 233280;
     return seedValue / 233280;
   };
 
-  // Fisher-Yates shuffle with seeded random
   for (let i = shuffled.length - 1; i > 0; i--) {
     const j = Math.floor(seededRandom() * (i + 1));
     [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
@@ -177,7 +452,6 @@ const shuffleOptionsWithSeed = (
 ) => {
   const shuffledOptions = seededShuffle([...options], seed);
 
-  // Find the new position of the correct answer
   const originalCorrectOption = options[correctOptionId];
   const newCorrectIndex = shuffledOptions.findIndex(
     (opt) =>
@@ -197,17 +471,14 @@ const shuffleMatchingPairsWithSeed = (pairs: any[], seed: string) => {
 
   const shuffledPairs = [...pairs];
 
-  // Extract Column B items with their indices
   const columnBItems = shuffledPairs.map((pair, idx) => ({
     sideB: pair.sideB,
     correctMatch: pair.correctMatch,
     originalIndex: idx,
   }));
 
-  // Shuffle Column B
   const shuffledColumnB = seededShuffle(columnBItems, seed);
 
-  // Create a mapping of old positions to new positions
   const positionMap: Record<string, string> = {};
   columnBItems.forEach((item, oldIdx) => {
     const newIdx = shuffledColumnB.findIndex(
@@ -220,7 +491,6 @@ const shuffleMatchingPairsWithSeed = (pairs: any[], seed: string) => {
     }
   });
 
-  // Update pairs with shuffled Column B and mapped correctMatch
   return shuffledPairs.map((pair, idx) => ({
     ...pair,
     sideB: shuffledColumnB[idx].sideB,
@@ -433,7 +703,13 @@ function FullscreenWarningModal({ onRetry }: { onRetry: () => void }) {
   );
 }
 
-function ExamTerminatedModal({ onClose }: { onClose: () => void }) {
+function SessionTerminatedModal({ 
+  onClose,
+  reason = "Session terminated due to security violation"
+}: { 
+  onClose: () => void;
+  reason?: string;
+}) {
   return (
     <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
       <div className="bg-white rounded-2xl p-8 max-w-md mx-4 text-center">
@@ -441,11 +717,9 @@ function ExamTerminatedModal({ onClose }: { onClose: () => void }) {
           <Ban className="h-8 w-8 text-red-600" />
         </div>
         <h2 className="text-2xl font-bold text-gray-900 mb-4">
-          Exam Terminated
+          Session Terminated
         </h2>
-        <p className="text-gray-600 mb-6">
-          Exam terminated due to security violations.
-        </p>
+        <p className="text-gray-600 mb-6">{reason}</p>
         <Button
           onClick={onClose}
           className="w-full bg-red-600 hover:bg-red-700"
@@ -529,6 +803,13 @@ export default function ExamTakingPage() {
   );
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
 
+  // Security States
+  const [deviceFingerprint, setDeviceFingerprint] = useState<string>("");
+  const [ipAddress, setIpAddress] = useState<string>("");
+  const [securityToken, setSecurityToken] = useState<string>("");
+  const [securityInitialized, setSecurityInitialized] = useState(false);
+  const [sessionMonitor, setSessionMonitor] = useState<EnhancedSessionMonitor | null>(null);
+
   // Timer States
   const [timeLeft, setTimeLeft] = useState(0);
   const timeLeftRef = useRef(0);
@@ -548,14 +829,17 @@ export default function ExamTakingPage() {
   const [isFullscreenActive, setIsFullscreenActive] = useState(false);
   const [windowWidth, setWindowWidth] = useState(0);
   const [passageExpanded, setPassageExpanded] = useState(false);
+  const [showSessionTerminated, setShowSessionTerminated] = useState(false);
+  const [terminationReason, setTerminationReason] = useState("");
+  const [connectionStatus, setConnectionStatus] = useState<"connected" | "disconnected" | "poor">("connected");
 
   // Refs
   const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const timeSyncIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const sessionCheckIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const examDurationRef = useRef<number>(0);
   const autoSubmitTriggeredRef = useRef<boolean>(false);
   const lastFullscreenCheckRef = useRef<number>(0);
+  const sessionMonitorRef = useRef<EnhancedSessionMonitor | null>(null);
+  const lastAnswerSaveRef = useRef<number>(0);
 
   // Refs to track latest state for timer callback
   const questionsRef = useRef<any[]>([]);
@@ -563,6 +847,7 @@ export default function ExamTakingPage() {
   const examDataRef = useRef<any>(null);
   const studentInfoRef = useRef<any>(null);
   const sessionIdRef = useRef<string | null>(null);
+  const securityTokenRef = useRef<string>("");
 
   // Keep refs updated with latest state
   useEffect(() => {
@@ -571,7 +856,130 @@ export default function ExamTakingPage() {
     examDataRef.current = examData;
     studentInfoRef.current = studentInfo;
     sessionIdRef.current = sessionId;
-  }, [questions, answers, examData, studentInfo, sessionId]);
+    securityTokenRef.current = securityToken;
+  }, [questions, answers, examData, studentInfo, sessionId, securityToken]);
+
+  // Initialize device fingerprinting
+  useEffect(() => {
+    const initializeSecurity = async () => {
+      try {
+        const fingerprint = await getBrowserFingerprint();
+        setDeviceFingerprint(fingerprint);
+        
+        // Check stored fingerprint (from login)
+        const storedFingerprint = localStorage.getItem('device_fingerprint');
+        const storedToken = localStorage.getItem('security_token');
+        
+        if (storedFingerprint && storedToken) {
+          setSecurityToken(storedToken);
+          securityTokenRef.current = storedToken;
+        }
+        
+        setSecurityInitialized(true);
+      } catch (error) {
+        console.error("Failed to initialize security:", error);
+        setSecurityInitialized(true);
+      }
+    };
+
+    initializeSecurity();
+  }, []);
+
+  // Initialize Session Monitor
+  useEffect(() => {
+    if (sessionId && securityToken && deviceFingerprint && examStatus === 'in-progress') {
+      const monitor = new EnhancedSessionMonitor(
+        sessionId,
+        securityToken,
+        deviceFingerprint,
+        handleSessionInvalidation,
+        () => {
+          router.push('/');
+        }
+      );
+      
+      // Set time remaining callback
+      monitor.setTimeRemainingCallback(() => timeLeftRef.current);
+      
+      monitor.start();
+      sessionMonitorRef.current = monitor;
+      setSessionMonitor(monitor);
+      
+      console.log("Session monitor initialized for device:", deviceFingerprint);
+      
+      return () => {
+        if (sessionMonitorRef.current) {
+          sessionMonitorRef.current.stop();
+          sessionMonitorRef.current = null;
+        }
+      };
+    }
+  }, [sessionId, securityToken, deviceFingerprint, examStatus, router]);
+
+  // Handle session invalidation
+  const handleSessionInvalidation = async (reason: string) => {
+    setTerminationReason(reason);
+    setShowSessionTerminated(true);
+    setExamStatus('terminated');
+    
+    // Clean up
+    if (sessionMonitorRef.current) {
+      sessionMonitorRef.current.stop();
+    }
+    
+    // Stop timer
+    if (timerIntervalRef.current) {
+      clearInterval(timerIntervalRef.current);
+      timerIntervalRef.current = null;
+    }
+    
+    // Exit fullscreen if active
+    if (document.fullscreenElement) {
+      try {
+        await document.exitFullscreen();
+      } catch (err) {
+        console.log("Fullscreen exit failed:", err);
+      }
+    }
+    
+    // Clear session data
+    localStorage.removeItem('examSession');
+    localStorage.removeItem('security_token');
+  };
+
+  // Check device ownership on load
+  const checkDeviceOwnership = async (sessionId: string, token: string) => {
+    try {
+      const { data: security, error } = await supabase
+        .from('session_security')
+        .select('device_fingerprint, is_active')
+        .eq('session_id', sessionId)
+        .eq('token', token)
+        .single();
+
+      if (error || !security) {
+        return { valid: false, reason: 'Security record not found' };
+      }
+
+      if (!security.is_active) {
+        return { valid: false, reason: 'Session is not active' };
+      }
+
+      // Check if device fingerprint matches
+      const storedFingerprint = localStorage.getItem('device_fingerprint');
+      if (security.device_fingerprint !== storedFingerprint) {
+        return { 
+          valid: false, 
+          reason: 'Device mismatch. This session belongs to another device.' 
+        };
+      }
+
+      return { valid: true };
+    } catch (error) {
+      console.error('Device ownership check error:', error);
+      return { valid: false, reason: 'Check failed' };
+    }
+  };
 
   // Initialization
   useEffect(() => {
@@ -581,7 +989,7 @@ export default function ExamTakingPage() {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
-  // Keep ref updated
+  // Keep time ref updated
   useEffect(() => {
     timeLeftRef.current = timeLeft;
   }, [timeLeft]);
@@ -592,6 +1000,8 @@ export default function ExamTakingPage() {
       try {
         const studentId = searchParams.get("student");
         const examCode = searchParams.get("exam");
+        const sessionParam = searchParams.get("session");
+        const tokenParam = searchParams.get("token");
 
         if (!studentId || !examCode) {
           toast.error("Invalid URL");
@@ -812,18 +1222,43 @@ export default function ExamTakingPage() {
         setAnswers(initialAnswers);
         answersRef.current = initialAnswers;
 
-        // Check for existing session
-        const { data: activeSessions } = await supabase
-          .from("exam_sessions")
-          .select("*")
-          .eq("student_id", student.id)
-          .eq("exam_id", exam.id)
-          .eq("status", "in_progress");
+        // Check for existing session (resume or new)
+        let activeSession = null;
+        let sessionToken = tokenParam;
+        
+        // If session ID is provided in URL, try to resume that specific session
+        if (sessionParam) {
+          const { data: session } = await supabase
+            .from("exam_sessions")
+            .select("*")
+            .eq("id", sessionParam)
+            .eq("student_id", student.id)
+            .eq("exam_id", exam.id)
+            .eq("status", "in_progress")
+            .single();
 
-        const activeSession =
-          activeSessions && activeSessions.length > 0
+          activeSession = session;
+          
+          if (activeSession && !sessionToken) {
+            sessionToken = activeSession.security_token;
+          }
+        } else {
+          // Otherwise look for any active session
+          const { data: activeSessions } = await supabase
+            .from("exam_sessions")
+            .select("*")
+            .eq("student_id", student.id)
+            .eq("exam_id", exam.id)
+            .eq("status", "in_progress");
+
+          activeSession = activeSessions && activeSessions.length > 0
             ? activeSessions[0]
             : null;
+            
+          if (activeSession && !sessionToken) {
+            sessionToken = activeSession.security_token;
+          }
+        }
 
         if (activeSession) {
           // Check if session is already submitted
@@ -831,6 +1266,23 @@ export default function ExamTakingPage() {
             toast.error("You have already submitted this exam");
             router.push("/");
             return;
+          }
+
+          // Validate device ownership
+          if (sessionToken) {
+            const deviceCheck = await checkDeviceOwnership(activeSession.id, sessionToken);
+            if (!deviceCheck.valid) {
+              toast.error(deviceCheck.reason || "Device validation failed");
+              router.push("/");
+              return;
+            }
+          }
+
+          // Store security token
+          if (sessionToken) {
+            setSecurityToken(sessionToken);
+            securityTokenRef.current = sessionToken;
+            localStorage.setItem('security_token', sessionToken);
           }
 
           // Resume existing session
@@ -1063,10 +1515,17 @@ export default function ExamTakingPage() {
       const currentExamData = examDataRef.current;
       const currentStudentInfo = studentInfoRef.current;
       const currentSessionId = sessionIdRef.current;
+      const currentSecurityToken = securityTokenRef.current;
 
-      if (!currentQuestions || !currentAnswers || !currentExamData || !currentStudentInfo || !currentSessionId) {
+      if (!currentQuestions || !currentAnswers || !currentExamData || !currentStudentInfo || !currentSessionId || !currentSecurityToken) {
         console.error("Missing data for submission");
         toast.error("Cannot submit: missing exam data");
+        return;
+      }
+
+      // Validate session before submission
+      if (sessionMonitorRef.current && !sessionMonitorRef.current.isSessionActive()) {
+        toast.error("Session is no longer active");
         return;
       }
 
@@ -1078,6 +1537,11 @@ export default function ExamTakingPage() {
       }
       
       setSubmissionResult(result);
+
+      // Stop session monitor first
+      if (sessionMonitorRef.current) {
+        sessionMonitorRef.current.stop();
+      }
 
       // Update Session
       const { error: sessionError } = await supabase
@@ -1094,6 +1558,13 @@ export default function ExamTakingPage() {
         console.error("Error updating session:", sessionError);
         throw sessionError;
       }
+
+      // Update session security
+      await supabase
+        .from("session_security")
+        .update({ is_active: false })
+        .eq("session_id", currentSessionId)
+        .eq("token", currentSecurityToken);
 
       // Save Results (NO GRADE COLUMN)
       const { error: resultError } = await supabase.from("results").upsert(
@@ -1151,6 +1622,10 @@ export default function ExamTakingPage() {
         }
       }
 
+      // Clear session data
+      localStorage.removeItem('examSession');
+      localStorage.removeItem('security_token');
+
       if (isAutoSubmit) {
         toast.info("Exam auto-submitted due to time expiration");
       } else {
@@ -1195,45 +1670,10 @@ export default function ExamTakingPage() {
           return newValue;
         });
       }, 1000);
-
-      // Sync time every 5 seconds
-      timeSyncIntervalRef.current = setInterval(async () => {
-        const current = timeLeftRef.current;
-        if (current > 0 && sessionId) {
-          await supabase
-            .from("exam_sessions")
-            .update({
-              time_remaining: current,
-              last_activity_at: new Date().toISOString(),
-            })
-            .eq("id", sessionId);
-        }
-      }, 5000);
-
-      // Check session status every 10 seconds
-      sessionCheckIntervalRef.current = setInterval(async () => {
-        if (sessionId) {
-          const { data: session } = await supabase
-            .from("exam_sessions")
-            .select("status")
-            .eq("id", sessionId)
-            .single();
-
-          if (session && session.status === "submitted") {
-            // Exam was submitted externally
-            toast.error("Exam has been submitted");
-            handleExternalSubmission();
-          }
-        }
-      }, 10000);
     }
 
     return () => {
       if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
-      if (timeSyncIntervalRef.current)
-        clearInterval(timeSyncIntervalRef.current);
-      if (sessionCheckIntervalRef.current)
-        clearInterval(sessionCheckIntervalRef.current);
     };
   }, [examStatus, sessionId]);
 
@@ -1257,10 +1697,34 @@ export default function ExamTakingPage() {
     return () => clearInterval(interval);
   }, [examStatus, examData]);
 
+  // --- Network Connection Monitor ---
+  useEffect(() => {
+    const handleOnline = () => {
+      setConnectionStatus("connected");
+    };
+
+    const handleOffline = () => {
+      setConnectionStatus("disconnected");
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
   // --- Handlers ---
 
   const handleStartExam = async () => {
     try {
+      // Generate security token
+      const newSecurityToken = [...Array(32)]
+        .map(() => Math.random().toString(36)[2])
+        .join('');
+
       const { data: newSession, error } = await supabase
         .from("exam_sessions")
         .insert({
@@ -1269,11 +1733,38 @@ export default function ExamTakingPage() {
           teacher_id: examData.created_by,
           status: "in_progress",
           time_remaining: examDurationRef.current,
+          security_token: newSecurityToken,
+          device_takeover_count: 0
         })
         .select()
         .single();
 
       if (error) throw error;
+
+      // Create session security record
+      const { error: securityError } = await supabase
+        .from("session_security")
+        .insert({
+          session_id: newSession.id,
+          student_id: studentInfo.id,
+          device_fingerprint: deviceFingerprint,
+          ip_address: ipAddress || 'unknown',
+          user_agent: navigator.userAgent,
+          token: newSecurityToken,
+          is_active: true,
+          last_verified: new Date().toISOString()
+        });
+
+      if (securityError) {
+        // Rollback session creation
+        await supabase.from("exam_sessions").delete().eq("id", newSession.id);
+        throw securityError;
+      }
+
+      // Store security token
+      setSecurityToken(newSecurityToken);
+      securityTokenRef.current = newSecurityToken;
+      localStorage.setItem('security_token', newSecurityToken);
 
       setSessionId(newSession.id);
       sessionIdRef.current = newSession.id;
@@ -1295,10 +1786,24 @@ export default function ExamTakingPage() {
   };
 
   const handleAnswerChange = async (val: any) => {
+    // Check session validity
+    if (sessionMonitorRef.current && !sessionMonitorRef.current.isSessionActive()) {
+      handleSessionInvalidation("Session no longer active");
+      return;
+    }
+
     const newAnswers = [...answers];
     newAnswers[currentQuestionIndex] = val;
     setAnswers(newAnswers);
     answersRef.current = newAnswers;
+
+    // Throttle answer saves to avoid too many database calls
+    const now = Date.now();
+    if (now - lastAnswerSaveRef.current < 1000) {
+      return;
+    }
+
+    lastAnswerSaveRef.current = now;
 
     if (sessionId) {
       const q = questions[currentQuestionIndex];
@@ -1316,13 +1821,23 @@ export default function ExamTakingPage() {
         payload.answer_text = JSON.stringify(val);
       }
 
-      await supabase
-        .from("student_answers")
-        .upsert(payload, { onConflict: "session_id,question_id" });
+      try {
+        await supabase
+          .from("student_answers")
+          .upsert(payload, { onConflict: "session_id,question_id" });
+      } catch (error) {
+        console.error("Failed to save answer:", error);
+      }
     }
   };
 
   const handleToggleFlag = async () => {
+    // Check session validity
+    if (sessionMonitorRef.current && !sessionMonitorRef.current.isSessionActive()) {
+      handleSessionInvalidation("Session no longer active");
+      return;
+    }
+
     const newFlags = new Set(flaggedQuestions);
     if (newFlags.has(currentQuestionIndex)) {
       newFlags.delete(currentQuestionIndex);
@@ -1332,39 +1847,27 @@ export default function ExamTakingPage() {
     setFlaggedQuestions(newFlags);
 
     if (sessionId) {
-      await supabase.from("student_answers").upsert(
-        {
-          session_id: sessionId,
-          question_id: questions[currentQuestionIndex].id,
-          is_flagged: newFlags.has(currentQuestionIndex),
-        },
-        { onConflict: "session_id,question_id" }
-      );
-    }
-  };
-
-  const handleExternalSubmission = async () => {
-    setIsSubmitting(true);
-    try {
-      setExamStatus("completed");
-      
-      if (document.fullscreenElement) {
-        try {
-          await document.exitFullscreen();
-        } catch (err) {
-          console.log("Fullscreen exit failed:", err);
-        }
+      try {
+        await supabase.from("student_answers").upsert(
+          {
+            session_id: sessionId,
+            question_id: questions[currentQuestionIndex].id,
+            is_flagged: newFlags.has(currentQuestionIndex),
+          },
+          { onConflict: "session_id,question_id" }
+        );
+      } catch (error) {
+        console.error("Failed to save flag:", error);
       }
-
-      toast.info("Exam has been submitted externally");
-    } catch (e) {
-      console.error("Error handling external submission:", e);
-    } finally {
-      setIsSubmitting(false);
     }
   };
 
   const handleFinalSubmit = async () => {
+    // Validate session before submission
+    if (sessionMonitorRef.current && !sessionMonitorRef.current.isSessionActive()) {
+      toast.error("Session is no longer active");
+      return;
+    }
     await submitExam(false);
   };
 
@@ -1480,7 +1983,7 @@ export default function ExamTakingPage() {
 
             {examData?.description && (
               <div className="text-gray-600 bg-amber-50 p-4 rounded-lg border border-amber-200">
-                <div className="flex items-center gap-2 mb-2">
+                <div className="flex items-center gap-2">
                   <AlertCircle className="h-5 w-5 text-amber-600" />
                   <p className="font-semibold text-amber-800">Instructions</p>
                 </div>
@@ -1524,6 +2027,12 @@ export default function ExamTakingPage() {
                 <li className="flex items-center gap-2">
                   <div className="h-2 w-2 rounded-full bg-blue-600"></div>
                   <span>
+                    <strong>Device locking enabled</strong> - One device per student only
+                  </span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <div className="h-2 w-2 rounded-full bg-blue-600"></div>
+                  <span>
                     <strong>Auto-save enabled</strong> - Answers are saved
                     automatically
                   </span>
@@ -1540,12 +2049,40 @@ export default function ExamTakingPage() {
               </ul>
             </div>
 
+            {deviceFingerprint && (
+              <div className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 p-4 rounded-lg">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Shield className="h-5 w-5 text-green-600" />
+                    <span className="font-medium text-green-800">Device Verified</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                    <span className="text-xs text-green-600">Secure</span>
+                  </div>
+                </div>
+                <p className="text-xs text-green-700 mt-2">
+                  Device ID: {deviceFingerprint.substring(0, 12)}...
+                </p>
+              </div>
+            )}
+
             <Button
               size="lg"
               className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold py-3 text-lg"
               onClick={handleStartExam}
+              disabled={!securityInitialized}
             >
-              Start Exam Now <ChevronRight className="ml-2 h-5 w-5" />
+              {securityInitialized ? (
+                <>
+                  Start Exam Now <ChevronRight className="ml-2 h-5 w-5" />
+                </>
+              ) : (
+                <>
+                  <Spinner className="mr-2 h-5 w-5" />
+                  Initializing Security...
+                </>
+              )}
             </Button>
 
             <p className="text-center text-sm text-gray-500">
@@ -1662,6 +2199,15 @@ export default function ExamTakingPage() {
     );
   }
 
+  if (showSessionTerminated) {
+    return (
+      <SessionTerminatedModal
+        onClose={() => router.push("/")}
+        reason={terminationReason}
+      />
+    );
+  }
+
   if (showFullscreenWarning) {
     return (
       <FullscreenWarningModal
@@ -1759,6 +2305,33 @@ export default function ExamTakingPage() {
                 <Flag className="h-4 w-4" /> Flagged
               </span>
               <span className="font-bold text-lg">{stats.flagged}</span>
+            </div>
+            
+            {/* Security Status */}
+            <div className={cn(
+              "flex justify-between items-center p-3 rounded-lg",
+              connectionStatus === "connected" 
+                ? "text-blue-600 bg-blue-50" 
+                : connectionStatus === "disconnected"
+                ? "text-red-600 bg-red-50"
+                : "text-amber-600 bg-amber-50"
+            )}>
+              <span className="flex items-center gap-2 font-medium">
+                {connectionStatus === "connected" ? (
+                  <Activity className="h-4 w-4" />
+                ) : connectionStatus === "disconnected" ? (
+                  <WifiOff className="h-4 w-4" />
+                ) : (
+                  <AlertTriangle className="h-4 w-4" />
+                )}
+                {connectionStatus === "connected" ? "Connected" : 
+                 connectionStatus === "disconnected" ? "Disconnected" : "Poor Connection"}
+              </span>
+              <div className={cn(
+                "w-2 h-2 rounded-full",
+                connectionStatus === "connected" ? "bg-green-500 animate-pulse" :
+                connectionStatus === "disconnected" ? "bg-red-500" : "bg-amber-500"
+              )}></div>
             </div>
           </div>
         </aside>

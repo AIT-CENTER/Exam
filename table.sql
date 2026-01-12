@@ -1,109 +1,86 @@
--- 1. Create grades table first (no foreign keys)
-CREATE TABLE IF NOT EXISTS public.grades (
-  id SERIAL NOT NULL,
-  grade_name TEXT NOT NULL,
-  description TEXT NULL,
-  grade_subjects TEXT[] NULL,
-  CONSTRAINT grades_pkey PRIMARY KEY (id),
-  CONSTRAINT grades_grade_name_key UNIQUE (grade_name)
+create table public.admin (
+  id uuid not null,
+  username text not null,
+  full_name text not null,
+  email text not null,
+  phone_number text null,
+  created_at timestamp with time zone null default CURRENT_TIMESTAMP,
+  updated_at timestamp with time zone null default CURRENT_TIMESTAMP,
+  created_by uuid null,
+  constraint admin_pkey primary key (id),
+  constraint admin_email_key unique (email),
+  constraint admin_username_key unique (username),
+  constraint admin_created_by_fkey foreign KEY (created_by) references admin (id) on delete set null
 ) TABLESPACE pg_default;
 
--- 2. Create subjects table (no foreign keys)
-CREATE TABLE IF NOT EXISTS public.subjects (
-  id SERIAL NOT NULL,
-  subject_name TEXT NOT NULL,
-  description TEXT NULL,
-  stream TEXT NULL,
-  CONSTRAINT subjects_pkey PRIMARY KEY (id),
-  CONSTRAINT subjects_subject_name_key UNIQUE (subject_name),
-  CONSTRAINT subjects_stream_check CHECK (
+create table public.assign_exams (
+  id serial not null,
+  exam_id integer not null,
+  teacher_id uuid not null,
+  student_id integer not null,
+  grade_id integer not null,
+  section text not null,
+  assigned_at timestamp with time zone null default CURRENT_TIMESTAMP,
+  assigned_by uuid not null,
+  constraint assign_exams_pkey primary key (id),
+  constraint unique_exam_student_assignment unique (exam_id, student_id),
+  constraint assign_exams_exam_id_fkey foreign KEY (exam_id) references exams (id) on delete CASCADE,
+  constraint assign_exams_grade_id_fkey foreign KEY (grade_id) references grades (id) on delete CASCADE,
+  constraint assign_exams_assigned_by_fkey foreign KEY (assigned_by) references teacher (id) on delete CASCADE,
+  constraint assign_exams_student_id_fkey foreign KEY (student_id) references students (id) on delete CASCADE,
+  constraint assign_exams_teacher_id_fkey foreign KEY (teacher_id) references teacher (id) on delete CASCADE
+) TABLESPACE pg_default;
+
+create index IF not exists idx_assign_exams_teacher_student on public.assign_exams using btree (teacher_id, student_id) TABLESPACE pg_default;
+
+create index IF not exists idx_assign_exams_assigned_by on public.assign_exams using btree (assigned_by) TABLESPACE pg_default;
+
+create table public.exam_sessions (
+  id uuid not null default gen_random_uuid (),
+  student_id integer not null,
+  exam_id integer not null,
+  teacher_id uuid null,
+  status text not null default 'in_progress'::text,
+  started_at timestamp with time zone null default CURRENT_TIMESTAMP,
+  submitted_at timestamp with time zone null,
+  last_activity_at timestamp with time zone null default CURRENT_TIMESTAMP,
+  time_remaining integer null,
+  score integer null default 0,
+  created_at timestamp with time zone null default CURRENT_TIMESTAMP,
+  updated_at timestamp with time zone null default CURRENT_TIMESTAMP,
+  constraint exam_sessions_pkey primary key (id),
+  constraint exam_sessions_exam_id_fkey foreign KEY (exam_id) references exams (id) on delete CASCADE,
+  constraint exam_sessions_student_id_fkey foreign KEY (student_id) references students (id) on delete CASCADE,
+  constraint exam_sessions_teacher_id_fkey foreign KEY (teacher_id) references teacher (id) on delete CASCADE,
+  constraint exam_sessions_status_check check (
     (
-      (stream IS NULL)
-      OR (
-        stream = ANY (
-          ARRAY['Natural'::text, 'Social'::text, 'Common'::text]
-        )
+      status = any (
+        array[
+          'in_progress'::text,
+          'paused'::text,
+          'submitted'::text,
+          'inactive'::text
+        ]
       )
     )
   )
 ) TABLESPACE pg_default;
 
--- 3. Create students table (depends on grades)
-CREATE TABLE IF NOT EXISTS public.students (
-  id SERIAL NOT NULL,
-  name TEXT NOT NULL,
-  father_name TEXT NOT NULL,
-  grandfather_name TEXT NOT NULL,
-  gender TEXT NOT NULL,
-  student_id TEXT NOT NULL,
-  grade_id INTEGER NOT NULL,
-  section TEXT NOT NULL,
-  email TEXT NULL,
-  stream TEXT NULL,
-  created_at TIMESTAMP WITH TIME ZONE NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP WITH TIME ZONE NULL DEFAULT CURRENT_TIMESTAMP,
-  CONSTRAINT students_pkey PRIMARY KEY (id),
-  CONSTRAINT students_email_key UNIQUE (email),
-  CONSTRAINT students_student_id_key UNIQUE (student_id),
-  CONSTRAINT students_grade_id_fkey FOREIGN KEY (grade_id) REFERENCES public.grades(id),
-  CONSTRAINT students_gender_check CHECK (
-    (
-      gender = ANY (
-        ARRAY['male'::text, 'female'::text, 'other'::text]
-      )
-    )
-  )
-) TABLESPACE pg_default;
+create index IF not exists idx_exam_sessions_student_id on public.exam_sessions using btree (student_id) TABLESPACE pg_default;
 
--- 4. Create teacher table (depends on grades and subjects)
-CREATE TABLE IF NOT EXISTS public.teacher (
-  id UUID NOT NULL DEFAULT gen_random_uuid(),
-  username TEXT NOT NULL,
-  full_name TEXT NOT NULL,
-  email TEXT NOT NULL,
-  phone_number TEXT NULL,
-  grade_id INTEGER NULL,
-  subject_id INTEGER NULL,
-  section TEXT NULL,
-  password TEXT NULL,
-  created_at TIMESTAMP WITH TIME ZONE NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP WITH TIME ZONE NULL DEFAULT CURRENT_TIMESTAMP,
-  stream TEXT NULL,
-  CONSTRAINT teacher_pkey PRIMARY KEY (id),
-  CONSTRAINT teacher_email_key UNIQUE (email),
-  CONSTRAINT teacher_username_key UNIQUE (username),
-  CONSTRAINT teacher_grade_id_fkey FOREIGN KEY (grade_id) REFERENCES public.grades(id),
-  CONSTRAINT teacher_subject_id_fkey FOREIGN KEY (subject_id) REFERENCES public.subjects(id),
-  CONSTRAINT teacher_stream_check CHECK (
-    (
-      (stream IS NULL)
-      OR (
-        stream = ANY (ARRAY['Natural'::text, 'Social'::text])
-      )
-    )
-  )
-) TABLESPACE pg_default;
+create index IF not exists idx_exam_sessions_exam_id on public.exam_sessions using btree (exam_id) TABLESPACE pg_default;
 
--- 5. Create admin table (depends on teacher and auth.users)
--- Note: auth.users is typically from Supabase auth extension
-CREATE TABLE IF NOT EXISTS public.admin (
-  id UUID NOT NULL,
-  username TEXT NOT NULL,
-  full_name TEXT NOT NULL,
-  email TEXT NOT NULL,
-  phone_number TEXT NULL,
-  created_at TIMESTAMP WITH TIME ZONE NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP WITH TIME ZONE NULL DEFAULT CURRENT_TIMESTAMP,
-  created_by UUID NULL,
-  CONSTRAINT admin_pkey PRIMARY KEY (id),
-  CONSTRAINT admin_email_key UNIQUE (email),
-  CONSTRAINT admin_username_key UNIQUE (username),
-  CONSTRAINT admin_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.admin(id) ON DELETE SET NULL
-  -- CONSTRAINT admin_id_fkey FOREIGN KEY (id) REFERENCES auth.users(id) ON DELETE CASCADE
-  -- Note: auth.users reference commented out - uncomment if auth schema exists
-) TABLESPACE pg_default;
+create index IF not exists idx_exam_sessions_status on public.exam_sessions using btree (status) TABLESPACE pg_default;
 
--- 6. Create exams table (depends on teacher, grades, subjects)
+create index IF not exists idx_exam_sessions_teacher_id on public.exam_sessions using btree (teacher_id) TABLESPACE pg_default;
+
+create index IF not exists idx_exam_sessions_last_activity on public.exam_sessions using btree (last_activity_at) TABLESPACE pg_default;
+
+create unique INDEX IF not exists unique_student_active_session on public.exam_sessions using btree (student_id) TABLESPACE pg_default
+where
+  (status = 'in_progress'::text);
+
+
 create table public.exams (
   id serial not null,
   exam_code text not null,
@@ -131,7 +108,45 @@ create table public.exams (
   constraint exams_subject_id_fkey foreign KEY (subject_id) references subjects (id)
 ) TABLESPACE pg_default;
 
--- 7. Create questions table (depends on exams)
+create table public.grade_sections (
+  id serial not null,
+  grade_id integer not null,
+  section_name text not null,
+  created_at timestamp with time zone null default CURRENT_TIMESTAMP,
+  updated_at timestamp with time zone null default CURRENT_TIMESTAMP,
+  constraint grade_sections_pkey primary key (id),
+  constraint grade_sections_unique unique (grade_id, section_name),
+  constraint grade_sections_grade_id_fkey foreign KEY (grade_id) references grades (id) on delete CASCADE
+) TABLESPACE pg_default;
+
+create index IF not exists idx_grade_sections_grade_id on public.grade_sections using btree (grade_id) TABLESPACE pg_default;
+
+create table public.grade_subjects (
+  id serial not null,
+  grade_id integer not null,
+  subject_id integer not null,
+  created_at timestamp with time zone null default CURRENT_TIMESTAMP,
+  constraint grade_subjects_pkey primary key (id),
+  constraint grade_subjects_unique unique (grade_id, subject_id),
+  constraint grade_subjects_grade_id_fkey foreign KEY (grade_id) references grades (id) on delete CASCADE,
+  constraint grade_subjects_subject_id_fkey foreign KEY (subject_id) references subjects (id) on delete CASCADE
+) TABLESPACE pg_default;
+
+create index IF not exists idx_grade_subjects_grade_id on public.grade_subjects using btree (grade_id) TABLESPACE pg_default;
+
+create index IF not exists idx_grade_subjects_subject_id on public.grade_subjects using btree (subject_id) TABLESPACE pg_default;
+
+
+create table public.grades (
+  id serial not null,
+  grade_name text not null,
+  description text null,
+  grade_subjects text[] null,
+  constraint grades_pkey primary key (id),
+  constraint grades_grade_name_key unique (grade_name)
+) TABLESPACE pg_default;
+
+
 create table public.questions (
   id serial not null,
   exam_id integer not null,
@@ -163,286 +178,263 @@ create table public.questions (
 
 create index IF not exists idx_questions_exam_id on public.questions using btree (exam_id) TABLESPACE pg_default;
 
--- 8. Create exam_sessions table (depends on exams, students, teacher)
-CREATE TABLE IF NOT EXISTS public.exam_sessions (
-  id UUID NOT NULL DEFAULT gen_random_uuid(),
-  student_id INTEGER NOT NULL,
-  exam_id INTEGER NOT NULL,
-  teacher_id UUID NULL,
-  status TEXT NOT NULL DEFAULT 'in_progress'::text,
-  started_at TIMESTAMP WITH TIME ZONE NULL DEFAULT CURRENT_TIMESTAMP,
-  submitted_at TIMESTAMP WITH TIME ZONE NULL,
-  last_activity_at TIMESTAMP WITH TIME ZONE NULL DEFAULT CURRENT_TIMESTAMP,
-  time_remaining INTEGER NULL,
-  score INTEGER NULL DEFAULT 0,
-  created_at TIMESTAMP WITH TIME ZONE NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP WITH TIME ZONE NULL DEFAULT CURRENT_TIMESTAMP,
-  CONSTRAINT exam_sessions_pkey PRIMARY KEY (id),
-  CONSTRAINT exam_sessions_exam_id_fkey FOREIGN KEY (exam_id) REFERENCES public.exams(id) ON DELETE CASCADE,
-  CONSTRAINT exam_sessions_student_id_fkey FOREIGN KEY (student_id) REFERENCES public.students(id) ON DELETE CASCADE,
-  CONSTRAINT exam_sessions_teacher_id_fkey FOREIGN KEY (teacher_id) REFERENCES public.teacher(id) ON DELETE CASCADE,
-  CONSTRAINT exam_sessions_status_check CHECK (
+
+create table public.results (
+  id serial not null,
+  exam_id integer not null,
+  student_id integer not null,
+  total_marks_obtained integer null default 0,
+  comments text null,
+  created_at timestamp with time zone null default CURRENT_TIMESTAMP,
+  updated_at timestamp with time zone null default CURRENT_TIMESTAMP,
+  submission_time timestamp with time zone null default CURRENT_TIMESTAMP,
+  teacher_id uuid null,
+  constraint results_pkey primary key (id),
+  constraint unique_exam_student unique (exam_id, student_id),
+  constraint results_exam_id_fkey foreign KEY (exam_id) references exams (id) on delete CASCADE,
+  constraint results_student_id_fkey foreign KEY (student_id) references students (id) on delete CASCADE,
+  constraint results_teacher_id_fkey foreign KEY (teacher_id) references teacher (id) on delete set null
+) TABLESPACE pg_default;
+
+create index IF not exists idx_results_exam_id on public.results using btree (exam_id) TABLESPACE pg_default;
+
+create index IF not exists idx_results_student_id on public.results using btree (student_id) TABLESPACE pg_default;
+
+create index IF not exists idx_results_teacher_id on public.results using btree (teacher_id) TABLESPACE pg_default;
+
+create index IF not exists idx_results_created_at on public.results using btree (created_at) TABLESPACE pg_default;
+
+create table public.student_answers (
+  id serial not null,
+  session_id uuid not null,
+  question_id integer not null,
+  selected_option_id integer null,
+  answer_text text null,
+  is_flagged boolean null default false,
+  is_correct boolean null,
+  answered_at timestamp with time zone null default now(),
+  created_at timestamp with time zone null default now(),
+  constraint student_answers_pkey primary key (id),
+  constraint unique_session_question unique (session_id, question_id),
+  constraint student_answers_question_id_fkey foreign KEY (question_id) references questions (id) on delete CASCADE,
+  constraint student_answers_session_id_fkey foreign KEY (session_id) references exam_sessions (id) on delete CASCADE
+) TABLESPACE pg_default;
+
+create index IF not exists idx_student_answers_session_id on public.student_answers using btree (session_id) TABLESPACE pg_default;
+
+create index IF not exists idx_student_answers_question_id on public.student_answers using btree (question_id) TABLESPACE pg_default;
+
+create index IF not exists idx_student_answers_is_correct on public.student_answers using btree (is_correct) TABLESPACE pg_default;
+
+
+create table public.students (
+  id serial not null,
+  name text not null,
+  father_name text not null,
+  grandfather_name text not null,
+  gender text not null,
+  student_id text not null,
+  grade_id integer not null,
+  section text not null,
+  email text null,
+  stream text null,
+  created_at timestamp with time zone null default CURRENT_TIMESTAMP,
+  updated_at timestamp with time zone null default CURRENT_TIMESTAMP,
+  constraint students_pkey primary key (id),
+  constraint students_email_key unique (email),
+  constraint students_student_id_key unique (student_id),
+  constraint students_grade_id_fkey foreign KEY (grade_id) references grades (id),
+  constraint students_gender_check check (
     (
-      status = ANY (
-        ARRAY[
-          'in_progress'::text,
-          'paused'::text,
-          'submitted'::text,
-          'inactive'::text
-        ]
+      gender = any (
+        array['male'::text, 'female'::text, 'other'::text]
       )
     )
   )
 ) TABLESPACE pg_default;
 
--- 9. Create assign_exams table (depends on exams, teacher, students, grades)
-CREATE TABLE IF NOT EXISTS public.assign_exams (
-  id SERIAL NOT NULL,
-  exam_id INTEGER NOT NULL,
-  teacher_id UUID NOT NULL,
-  student_id INTEGER NOT NULL,
-  grade_id INTEGER NOT NULL,
-  section TEXT NOT NULL,
-  assigned_at TIMESTAMP WITH TIME ZONE NULL DEFAULT CURRENT_TIMESTAMP,
-  assigned_by UUID NOT NULL,
-  CONSTRAINT assign_exams_pkey PRIMARY KEY (id),
-  CONSTRAINT unique_exam_student_assignment UNIQUE (exam_id, student_id),
-  CONSTRAINT assign_exams_exam_id_fkey FOREIGN KEY (exam_id) REFERENCES public.exams(id) ON DELETE CASCADE,
-  CONSTRAINT assign_exams_grade_id_fkey FOREIGN KEY (grade_id) REFERENCES public.grades(id) ON DELETE CASCADE,
-  CONSTRAINT assign_exams_assigned_by_fkey FOREIGN KEY (assigned_by) REFERENCES public.teacher(id) ON DELETE CASCADE,
-  CONSTRAINT assign_exams_student_id_fkey FOREIGN KEY (student_id) REFERENCES public.students(id) ON DELETE CASCADE,
-  CONSTRAINT assign_exams_teacher_id_fkey FOREIGN KEY (teacher_id) REFERENCES public.teacher(id) ON DELETE CASCADE
+
+create table public.subjects (
+  id serial not null,
+  subject_name text not null,
+  description text null,
+  stream text null,
+  constraint subjects_pkey primary key (id),
+  constraint subjects_subject_name_key unique (subject_name),
+  constraint subjects_stream_check check (
+    (
+      (stream is null)
+      or (
+        stream = any (
+          array['Natural'::text, 'Social'::text, 'Common'::text]
+        )
+      )
+    )
+  )
 ) TABLESPACE pg_default;
 
--- 10. Create results table (depends on exams, students, teacher)
-CREATE TABLE IF NOT EXISTS public.results (
-  id SERIAL NOT NULL,
-  exam_id INTEGER NOT NULL,
-  student_id INTEGER NOT NULL,
-  total_marks_obtained INTEGER NULL DEFAULT 0,
-  grade TEXT NULL,
-  comments TEXT NULL,
-  created_at TIMESTAMP WITH TIME ZONE NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP WITH TIME ZONE NULL DEFAULT CURRENT_TIMESTAMP,
-  submission_time TIMESTAMP WITH TIME ZONE NULL DEFAULT CURRENT_TIMESTAMP,
-  teacher_id UUID NULL,
-  CONSTRAINT results_pkey PRIMARY KEY (id),
-  CONSTRAINT unique_exam_student UNIQUE (exam_id, student_id),
-  CONSTRAINT results_exam_id_fkey FOREIGN KEY (exam_id) REFERENCES public.exams(id) ON DELETE CASCADE,
-  CONSTRAINT results_student_id_fkey FOREIGN KEY (student_id) REFERENCES public.students(id) ON DELETE CASCADE,
-  CONSTRAINT results_teacher_id_fkey FOREIGN KEY (teacher_id) REFERENCES public.teacher(id) ON DELETE SET NULL
+
+create table public.teacher (
+  id uuid not null default gen_random_uuid (),
+  username text not null,
+  full_name text not null,
+  email text not null,
+  phone_number text null,
+  grade_id integer null,
+  subject_id integer null,
+  section text null,
+  password text null,
+  created_at timestamp with time zone null default CURRENT_TIMESTAMP,
+  updated_at timestamp with time zone null default CURRENT_TIMESTAMP,
+  stream text null,
+  constraint teacher_pkey primary key (id),
+  constraint teacher_email_key unique (email),
+  constraint teacher_username_key unique (username),
+  constraint teacher_grade_id_fkey foreign KEY (grade_id) references grades (id),
+  constraint teacher_subject_id_fkey foreign KEY (subject_id) references subjects (id),
+  constraint teacher_stream_check check (
+    (
+      (stream is null)
+      or (
+        stream = any (array['Natural'::text, 'Social'::text])
+      )
+    )
+  )
 ) TABLESPACE pg_default;
 
--- 11. Create student_answers table (depends on exam_sessions, questions)
-CREATE TABLE IF NOT EXISTS public.student_answers (
-  id SERIAL NOT NULL,
-  session_id UUID NOT NULL,
-  question_id INTEGER NOT NULL,
-  selected_option_id INTEGER NULL,
-  answer_text TEXT NULL,
-  is_flagged BOOLEAN NULL DEFAULT false,
-  is_correct BOOLEAN NULL,
-  answered_at TIMESTAMP WITH TIME ZONE NULL DEFAULT NOW(),
-  created_at TIMESTAMP WITH TIME ZONE NULL DEFAULT NOW(),
-  CONSTRAINT student_answers_pkey PRIMARY KEY (id),
-  CONSTRAINT unique_session_question UNIQUE (session_id, question_id),
-  CONSTRAINT student_answers_question_id_fkey FOREIGN KEY (question_id) REFERENCES public.questions(id) ON DELETE CASCADE,
-  CONSTRAINT student_answers_session_id_fkey FOREIGN KEY (session_id) REFERENCES public.exam_sessions(id) ON DELETE CASCADE
-) TABLESPACE pg_default;
 
--- 12. Create grade_sections table (depends on grades)
-CREATE TABLE IF NOT EXISTS public.grade_sections (
-  id SERIAL NOT NULL,
-  grade_id INTEGER NOT NULL,
-  section_name TEXT NOT NULL,
-  created_at TIMESTAMP WITH TIME ZONE NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP WITH TIME ZONE NULL DEFAULT CURRENT_TIMESTAMP,
-  CONSTRAINT grade_sections_pkey PRIMARY KEY (id),
-  CONSTRAINT grade_sections_unique UNIQUE (grade_id, section_name),
-  CONSTRAINT grade_sections_grade_id_fkey FOREIGN KEY (grade_id) REFERENCES public.grades(id) ON DELETE CASCADE
-) TABLESPACE pg_default;
-
--- 13. Create grade_subjects table (depends on grades and subjects)
-CREATE TABLE IF NOT EXISTS public.grade_subjects (
-  id SERIAL NOT NULL,
-  grade_id INTEGER NOT NULL,
-  subject_id INTEGER NOT NULL,
-  created_at TIMESTAMP WITH TIME ZONE NULL DEFAULT CURRENT_TIMESTAMP,
-  CONSTRAINT grade_subjects_pkey PRIMARY KEY (id),
-  CONSTRAINT grade_subjects_unique UNIQUE (grade_id, subject_id),
-  CONSTRAINT grade_subjects_grade_id_fkey FOREIGN KEY (grade_id) REFERENCES public.grades(id) ON DELETE CASCADE,
-  CONSTRAINT grade_subjects_subject_id_fkey FOREIGN KEY (subject_id) REFERENCES public.subjects(id) ON DELETE CASCADE
-) TABLESPACE pg_default;
-
--- Now create indexes (after all tables are created)
-CREATE INDEX IF NOT EXISTS idx_questions_exam_id ON public.questions USING btree (exam_id) TABLESPACE pg_default;
-
-CREATE INDEX IF NOT EXISTS idx_exam_sessions_student_id ON public.exam_sessions USING btree (student_id) TABLESPACE pg_default;
-CREATE INDEX IF NOT EXISTS idx_exam_sessions_exam_id ON public.exam_sessions USING btree (exam_id) TABLESPACE pg_default;
-CREATE INDEX IF NOT EXISTS idx_exam_sessions_status ON public.exam_sessions USING btree (status) TABLESPACE pg_default;
-CREATE INDEX IF NOT EXISTS idx_exam_sessions_teacher_id ON public.exam_sessions USING btree (teacher_id) TABLESPACE pg_default;
-CREATE INDEX IF NOT EXISTS idx_exam_sessions_last_activity ON public.exam_sessions USING btree (last_activity_at) TABLESPACE pg_default;
-CREATE UNIQUE INDEX IF NOT EXISTS unique_student_active_session ON public.exam_sessions USING btree (student_id) TABLESPACE pg_default
-WHERE (status = 'in_progress'::text);
-
-CREATE INDEX IF NOT EXISTS idx_assign_exams_teacher_student ON public.assign_exams USING btree (teacher_id, student_id) TABLESPACE pg_default;
-CREATE INDEX IF NOT EXISTS idx_assign_exams_assigned_by ON public.assign_exams USING btree (assigned_by) TABLESPACE pg_default;
-
-CREATE INDEX IF NOT EXISTS idx_results_exam_id ON public.results USING btree (exam_id) TABLESPACE pg_default;
-CREATE INDEX IF NOT EXISTS idx_results_student_id ON public.results USING btree (student_id) TABLESPACE pg_default;
-CREATE INDEX IF NOT EXISTS idx_results_teacher_id ON public.results USING btree (teacher_id) TABLESPACE pg_default;
-CREATE INDEX IF NOT EXISTS idx_results_created_at ON public.results USING btree (created_at) TABLESPACE pg_default;
-
-CREATE INDEX IF NOT EXISTS idx_student_answers_session_id ON public.student_answers USING btree (session_id) TABLESPACE pg_default;
-CREATE INDEX IF NOT EXISTS idx_student_answers_question_id ON public.student_answers USING btree (question_id) TABLESPACE pg_default;
-CREATE INDEX IF NOT EXISTS idx_student_answers_is_correct ON public.student_answers USING btree (is_correct) TABLESPACE pg_default;
-
-CREATE INDEX IF NOT EXISTS idx_grade_sections_grade_id ON public.grade_sections USING btree (grade_id) TABLESPACE pg_default;
-CREATE INDEX IF NOT EXISTS idx_grade_subjects_grade_id ON public.grade_subjects USING btree (grade_id) TABLESPACE pg_default;
-CREATE INDEX IF NOT EXISTS idx_grade_subjects_subject_id ON public.grade_subjects USING btree (subject_id) TABLESPACE pg_default;
-
--- Create views
-CREATE OR REPLACE VIEW public.exam_session_progress_view AS
-SELECT
-  es.id AS session_id,
-  s.id AS student_id,
-  s.name AS student_name,
-  s.student_id AS student_number,
+create view public.exam_session_progress_view as
+select
+  es.id as session_id,
+  s.id as student_id,
+  s.name as student_name,
+  s.student_id as student_number,
   g.grade_name,
   s.section,
-  e.title AS exam_title,
-  e.id AS exam_id,
-  e.created_by AS teacher_id,
+  e.title as exam_title,
+  e.id as exam_id,
+  e.created_by as teacher_id,
   es.status,
   es.time_remaining,
-  es.score AS current_score,
+  es.score as current_score,
   es.started_at,
   es.last_activity_at,
   (
-    SELECT
-      COUNT(*) AS count
-    FROM
+    select
+      count(*) as count
+    from
       student_answers sa
-    WHERE
+    where
       sa.session_id = es.id
-      AND sa.is_correct = TRUE
-  ) AS correct_answers,
+      and sa.is_correct = true
+  ) as correct_answers,
   (
-    SELECT
-      COUNT(*) AS count
-    FROM
+    select
+      count(*) as count
+    from
       student_answers sa
-    WHERE
+    where
       sa.session_id = es.id
-  ) AS questions_answered,
+  ) as questions_answered,
   (
-    SELECT
-      COUNT(*) AS count
-    FROM
+    select
+      count(*) as count
+    from
       questions q
-    WHERE
+    where
       q.exam_id = e.id
-  ) AS total_questions,
-  e.total_marks AS possible_marks,
+  ) as total_questions,
+  e.total_marks as possible_marks,
   EXTRACT(
-    EPOCH
-    FROM
+    epoch
+    from
       CURRENT_TIMESTAMP - es.last_activity_at
-  ) AS seconds_since_activity
-FROM
+  ) as seconds_since_activity
+from
   exam_sessions es
-  JOIN students s ON s.id = es.student_id
-  JOIN exams e ON e.id = es.exam_id
-  JOIN grades g ON g.id = s.grade_id;
+  join students s on s.id = es.student_id
+  join exams e on e.id = es.exam_id
+  join grades g on g.id = s.grade_id;
 
-CREATE OR REPLACE VIEW public.student_aggregate_results_view AS
-SELECT
-  s.id AS student_id,
-  s.name AS student_name,
-  s.student_id AS student_number,
+
+  create view public.student_aggregate_results_view as
+select
+  s.id as student_id,
+  s.name as student_name,
+  s.student_id as student_number,
   s.grade_id,
   s.section,
   g.grade_name,
-  COUNT(DISTINCT r.exam_id) AS total_exams,
-  SUM(r.total_marks_obtained) AS total_marks_obtained,
-  SUM(e.total_marks) AS total_possible_marks,
-  ROUND(
-    SUM(r.total_marks_obtained)::NUMERIC / NULLIF(SUM(e.total_marks), 0)::NUMERIC * 100::NUMERIC,
+  count(distinct r.exam_id) as total_exams,
+  sum(r.total_marks_obtained) as total_marks_obtained,
+  sum(e.total_marks) as total_possible_marks,
+  round(
+    sum(r.total_marks_obtained)::numeric / NULLIF(sum(e.total_marks), 0)::numeric * 100::numeric,
     2
-  ) AS overall_percentage,
-  ROUND(AVG(r.total_marks_obtained), 2) AS average_score,
-  MIN(r.total_marks_obtained) AS min_score,
-  MAX(r.total_marks_obtained) AS max_score,
-  MAX(r.submission_time) AS last_exam_date
-FROM
+  ) as overall_percentage,
+  round(avg(r.total_marks_obtained), 2) as average_score,
+  min(r.total_marks_obtained) as min_score,
+  max(r.total_marks_obtained) as max_score,
+  max(r.submission_time) as last_exam_date
+from
   students s
-  JOIN grades g ON g.id = s.grade_id
-  LEFT JOIN results r ON r.student_id = s.id
-  LEFT JOIN exams e ON e.id = r.exam_id
-GROUP BY
+  join grades g on g.id = s.grade_id
+  left join results r on r.student_id = s.id
+  left join exams e on e.id = r.exam_id
+group by
   s.id,
   s.name,
   s.student_id,
   s.grade_id,
   s.section,
   g.grade_name
-ORDER BY
+order by
   s.name;
 
-CREATE OR REPLACE VIEW public.student_exam_results_view AS
-SELECT
-  r.id AS result_id,
+
+  create view public.student_exam_results_view as
+select
+  r.id as result_id,
   r.exam_id,
-  e.title AS exam_title,
+  e.title as exam_title,
   e.exam_code,
   e.exam_date,
-  e.total_marks AS exam_total_marks,
-  e.created_by AS teacher_id,
-  r.total_marks_obtained AS score_obtained,
-  ROUND(
-    r.total_marks_obtained::NUMERIC / NULLIF(e.total_marks, 0)::NUMERIC * 100::NUMERIC,
+  e.total_marks as exam_total_marks,
+  e.created_by as teacher_id,
+  r.total_marks_obtained as score_obtained,
+  round(
+    r.total_marks_obtained::numeric / NULLIF(e.total_marks, 0)::numeric * 100::numeric,
     2
-  ) AS percentage,
-  CASE
-    WHEN (
-      r.total_marks_obtained::NUMERIC / NULLIF(e.total_marks, 0)::NUMERIC
-    ) >= 0.9 THEN 'A'::text
-    WHEN (
-      r.total_marks_obtained::NUMERIC / NULLIF(e.total_marks, 0)::NUMERIC
-    ) >= 0.8 THEN 'B'::text
-    WHEN (
-      r.total_marks_obtained::NUMERIC / NULLIF(e.total_marks, 0)::NUMERIC
-    ) >= 0.7 THEN 'C'::text
-    WHEN (
-      r.total_marks_obtained::NUMERIC / NULLIF(e.total_marks, 0)::NUMERIC
-    ) >= 0.6 THEN 'D'::text
-    ELSE 'F'::text
-  END AS grade,
+  ) as percentage,
+  case
+    when (
+      r.total_marks_obtained::numeric / NULLIF(e.total_marks, 0)::numeric
+    ) >= 0.9 then 'A'::text
+    when (
+      r.total_marks_obtained::numeric / NULLIF(e.total_marks, 0)::numeric
+    ) >= 0.8 then 'B'::text
+    when (
+      r.total_marks_obtained::numeric / NULLIF(e.total_marks, 0)::numeric
+    ) >= 0.7 then 'C'::text
+    when (
+      r.total_marks_obtained::numeric / NULLIF(e.total_marks, 0)::numeric
+    ) >= 0.6 then 'D'::text
+    else 'F'::text
+  end as grade,
   r.comments,
   r.submission_time,
-  r.created_at AS result_date,
+  r.created_at as result_date,
   r.updated_at,
-  s.id AS student_id,
-  s.name AS student_name,
-  s.student_id AS student_number,
+  s.id as student_id,
+  s.name as student_name,
+  s.student_id as student_number,
   s.grade_id,
   s.section,
   g.grade_name
-FROM
+from
   results r
-  JOIN exams e ON e.id = r.exam_id
-  JOIN students s ON s.id = r.student_id
-  JOIN grades g ON g.id = s.grade_id
-ORDER BY
-  r.created_at DESC;
-
--- Note: Triggers require functions to be created first
--- You'll need to create these functions separately:
--- 1. mark_answer()
--- 2. update_last_activity()
-
-
--- Single policy that allows all authenticated operations
-CREATE POLICY "Enable all for authenticated users" ON storage.objects
-FOR ALL USING (bucket_id = 'exam_images')
-WITH CHECK (bucket_id = 'exam_images');
+  join exams e on e.id = r.exam_id
+  join students s on s.id = r.student_id
+  join grades g on g.id = s.grade_id
+order by
+  r.created_at desc;
