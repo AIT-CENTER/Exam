@@ -29,20 +29,16 @@ import {
   XCircle,
   Eye,
   EyeOff,
-  Smartphone,
-  Globe,
-  ShieldAlert,
-  Cpu,
-  GlobeLock,
-  Network,
-  AlertTriangle,
   Lock,
-  Unlock,
-  RefreshCw,
-  PhoneOff,
+  GraduationCap,
+  Sparkles,
+  ShieldCheck,
+  Calendar,
+  Target,
+  Users,
+  Award,
+  ChevronRight,
 } from "lucide-react";
-
-import { cn } from "@/lib/utils";
 
 // Fingerprint utility
 const getBrowserFingerprint = async (): Promise<string> => {
@@ -247,7 +243,7 @@ export default function StudentLogin() {
     maxLength: 20,
   });
 
-  // State for visibility - hunda false jedhanii jalqaba (value hin agarsiisan)
+  // State for visibility
   const [showStudentId, setShowStudentId] = useState(false);
   const [showExamId, setShowExamId] = useState(false);
 
@@ -1005,18 +1001,6 @@ export default function StudentLogin() {
                   </p>
                 </div>
               </div>
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-purple-100 rounded-lg">
-                  <Cpu className="h-4 w-4 text-purple-600" />
-                </div>
-                <div>
-                  <p className="text-xs text-gray-500">Device</p>
-                  <p className="font-medium text-green-600">Same Device</p>
-                  <p className="text-xs text-gray-500">
-                    Resuming on current device
-                  </p>
-                </div>
-              </div>
             </div>
 
             <DialogFooter>
@@ -1057,7 +1041,7 @@ export default function StudentLogin() {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-red-600">
-              <PhoneOff className="h-5 w-5" />
+              <XCircle className="h-5 w-5" />
               Active Session Detected
             </DialogTitle>
             <DialogDescription>
@@ -1068,7 +1052,7 @@ export default function StudentLogin() {
           <div className="space-y-4 py-4">
             <div className="rounded-lg bg-red-50 border border-red-200 p-4">
               <div className="flex items-start gap-3">
-                <ShieldAlert className="h-5 w-5 text-red-500 mt-0.5" />
+                <Shield className="h-5 w-5 text-red-500 mt-0.5" />
                 <div>
                   <p className="text-sm text-red-700 font-medium mb-1">
                     ⚠️ 10-Second Device Lock
@@ -1128,12 +1112,11 @@ export default function StudentLogin() {
               <Button
                 onClick={handleRetryAfterBlock}
                 disabled={countdown > 0}
-                className={cn(
-                  "flex-1",
+                className={`flex-1 ${
                   countdown > 0
                     ? "bg-gray-400 cursor-not-allowed"
                     : "bg-red-600 hover:bg-red-700"
-                )}
+                }`}
               >
                 {countdown > 0 ? (
                   <>
@@ -1157,7 +1140,7 @@ export default function StudentLogin() {
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-amber-600">
-              <RefreshCw className="h-5 w-5" />
+              <ChevronRight className="h-5 w-5" />
               Session Takeover Required
             </DialogTitle>
             <DialogDescription>
@@ -1168,7 +1151,7 @@ export default function StudentLogin() {
           <div className="space-y-4 py-4">
             <div className="rounded-lg bg-amber-50 border border-amber-200 p-4">
               <div className="flex items-start gap-3">
-                <Smartphone className="h-5 w-5 text-amber-500 mt-0.5" />
+                <Shield className="h-5 w-5 text-amber-500 mt-0.5" />
                 <div>
                   <p className="text-sm text-amber-700 font-medium mb-1">
                     Device Switch Detected
@@ -1254,7 +1237,7 @@ export default function StudentLogin() {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-amber-600">
-              <Network className="h-5 w-5" />
+              <Shield className="h-5 w-5" />
               Multiple Sessions Detected
             </DialogTitle>
             <DialogDescription>
@@ -1265,7 +1248,7 @@ export default function StudentLogin() {
           <div className="space-y-4 py-4">
             <div className="rounded-lg bg-amber-50 border border-amber-200 p-4">
               <div className="flex items-start gap-3">
-                <AlertTriangle className="h-5 w-5 text-amber-500 mt-0.5" />
+                <AlertCircle className="h-5 w-5 text-amber-500 mt-0.5" />
                 <div>
                   <p className="text-sm text-amber-700 font-medium mb-1">
                     Network Sharing Warning
@@ -1301,241 +1284,86 @@ export default function StudentLogin() {
       </Dialog>
 
       {/* Main Login Page - Professional Split Screen */}
-      <div className="min-h-screen flex bg-gradient-to-br from-gray-50 to-gray-100">
+      <div className="min-h-screen flex">
         {/* Left Side – Brand / Info Section */}
         <div
           className="
-            hidden lg:flex lg:w-1/2
-            bg-gradient-to-br from-slate-900 via-slate-800 to-blue-900
-            shadow-2xl
-            p-12 flex-col justify-between
-            text-white relative overflow-hidden
-          "
+    hidden lg:flex lg:w-1/2
+    bg-gradient-to-br from-gray-50 via-slate-100 to-sky-200
+    shadow-xl backdrop-blur-sm bg-white/90 shadow-lg rounded-2xl
+    p-12 flex-col justify-between
+    text-slate-700
+  "
         >
-          {/* Background Pattern */}
-          <div className="absolute inset-0 opacity-10">
-            <div
-              className="absolute inset-0"
-              style={{
-                backgroundImage: `radial-gradient(circle at 25px 25px, white 2%, transparent 0%), radial-gradient(circle at 75px 75px, white 2%, transparent 0%)`,
-                backgroundSize: "100px 100px",
-              }}
-            />
-          </div>
-
           {/* Top Content */}
-          <div className="relative z-10">
-            {/* Logo / Brand Area - BORDER ANIMATION WITH LOGO */}
+          <div>
+            {/* Logo / Brand Area */}
             <div className="flex items-center gap-4 mb-10">
               <div className="relative">
                 <div
-                  className="
-                    w-16 h-16 p-3 rounded-2xl 
-                    bg-white/10 backdrop-blur-md 
-                    shadow-lg border-2 border-white/20 
-                    flex items-center justify-center
-                    relative overflow-hidden
-                    group
-                  "
+                  className="w-16 h-16 p-3 rounded-2xl bg-white/60 backdrop-blur-md shadow-md ring-1 ring-black/5 flex items-center justify-center overflow-hidden"
                 >
-                  {/* Border Animation */}
-                  <div className="absolute inset-0 rounded-2xl">
-                    <div
-                      className="
-                      absolute -inset-1 bg-white/60 backdrop-blur-md shadow-md 
-                      opacity-0 group-hover:opacity-100 
-                      transition-all duration-500 blur-xl
-                    "
-                    ></div>
-                    <div
-                      className="
-                      absolute inset-0 rounded-2xl 
-                      bg-white/60 backdrop-blur-md shadow-md
-                      transition-all duration-500
-                    "
-                    ></div>
-                  </div>
-
-                  <img
-                    src="/icons/icon-192.png"
-                    alt="ExamFlow Logo"
-                    className="w-full h-full object-cover scale-125"
-                  />
-
-                  {/* Pulsing Animation */}
-                  <div
-                    className="
-                    absolute inset-0 rounded-2xl 
-                    border-2 border-transparent 
-                    group-hover:border-blue-300/50
-                    transition-all duration-300
-                    animate-pulse
-                  "
-                  ></div>
+                  <img src="/icons/icon-192.png" alt="ExamFlow Logo" className="w-full h-full object-cover scale-125" />
                 </div>
 
-                {/* Glow Effect */}
-                <div className="absolute -inset-1 rounded-2xl bg-gradient-to-r from-blue-500/20 to-indigo-500/20 blur-xl -z-10 group-hover:from-blue-500/30 group-hover:to-indigo-500/30 transition-all duration-500" />
+                {/* Soft Glow */}
+                <div className="absolute -inset-1 rounded-2xl bg-blue-500/10 blur-xl -z-10" />
               </div>
 
               <div>
-                <h1 className="text-3xl font-bold text-white tracking-tight">
-                  ALPHA COLLEGE
+                <h1 className="text-3xl font-bold text-slate-900 tracking-tight">
+                  ALPHA
                 </h1>
-                <p className="text-slate-300 text-sm mt-1">
-                  Secure Examination System
+                <p className="text-slate-600 text-sm mt-1">
+                  Professional Assessment Platform
                 </p>
               </div>
             </div>
 
-            {/* Security Features */}
-            <div className="mb-8">
-              <h3 className="text-lg font-semibold text-white mb-4">
-                Enhanced Security Features
-              </h3>
-              <div className="space-y-3">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-white/10 rounded-lg">
-                    <Lock className="h-4 w-4 text-green-400" />
-                  </div>
-                  <div>
-                    <span className="text-slate-300">
-                      10-Second Device Lock
-                    </span>
-                    <p className="text-slate-400 text-xs">
-                      Prevents quick device switching
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-white/10 rounded-lg">
-                    <GlobeLock className="h-4 w-4 text-blue-400" />
-                  </div>
-                  <div>
-                    <span className="text-slate-300">
-                      Real-time Session Monitoring
-                    </span>
-                    <p className="text-slate-400 text-xs">
-                      Continuous device verification
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-white/10 rounded-lg">
-                    <Smartphone className="h-4 w-4 text-purple-400" />
-                  </div>
-                  <div>
-                    <span className="text-slate-300">
-                      One Device Per Student
-                    </span>
-                    <p className="text-slate-400 text-xs">
-                      Strict single-device policy
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-white/10 rounded-lg">
-                    <Clock className="h-4 w-4 text-amber-400" />
-                  </div>
-                  <div>
-                    <span className="text-slate-300">Time Continuation</span>
-                    <p className="text-slate-400 text-xs">
-                      Time continues on device switch
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
+            {/* Motivation Message */}
+            <p className="text-slate-700 text-base leading-relaxed max-w-md">
+              “Success comes from preparation, focus, and confidence. Approach
+              your exam calmly — every question is an opportunity to show what
+              you know.”
+            </p>
 
-            {/* Security Notice */}
-            <div className="bg-white/5 backdrop-blur-sm rounded-xl p-6 border border-white/10">
-              <div className="flex items-center gap-3 mb-3">
-                <Shield className="h-5 w-5 text-green-400" />
-                <h4 className="font-semibold text-white">
-                  Important Security Policy
-                </h4>
-              </div>
-              <p className="text-slate-200 text-sm leading-relaxed">
-                For exam integrity, only one device per student is allowed. If
-                you switch devices, the session on the previous device will be
-                immediately terminated. A 10-second lock prevents rapid device
-                switching to maintain exam fairness.
-              </p>
-            </div>
+            {/* Supporting Information */}
+            <p className="mt-5 text-slate-600 text-sm leading-relaxed max-w-md">
+              This secure online examination system is designed to ensure
+              fairness, accuracy, and a smooth experience for every student.
+              Your progress is saved automatically to keep your work safe.
+            </p>
           </div>
 
-          {/* Bottom Footer */}
-          <div className="relative z-10 text-slate-400 text-sm">
-            <div className="border-t border-white/10 mt-3 pt-4">
-              <p>© 2026 ALPHA COLLEGE. All rights reserved.</p>
-            </div>
+          {/* Bottom Motivation / Footer */}
+          <div className="text-slate-500 text-sm">
+            <p>Stay calm. Stay focused. Do your best.</p>
+            <p className="mt-1">© 2026 ALPHA COLLEGE. All rights reserved.</p>
           </div>
         </div>
 
         {/* Right Side - Login Form */}
-        <div className="flex-1 flex items-center justify-center p-4 sm:p-8">
+        <div className="flex-1 flex items-center justify-center p-8">
           <div className="w-full max-w-md">
-            {/* Mobile Logo - WITH BORDER ANIMATION */}
-            <div className="lg:hidden flex items-center gap-3 mb-8">
+            {/* Mobile Logo */}
+            <div className="lg:hidden flex items-center gap-3 mb-10">
               <div
-                  className="
-                    w-16 h-16 p-3 rounded-2xl 
-                    bg-white/10 backdrop-blur-md 
-                    shadow-lg border-2 border-white/20 
-                    flex items-center justify-center
-                    relative overflow-hidden
-                    group
-                  "
+                  className="w-16 h-16 p-3 rounded-2xl bg-white/60 backdrop-blur-md shadow-md ring-1 ring-black/5 flex items-center justify-center overflow-hidden"
                 >
-                  {/* Border Animation */}
-                  <div className="absolute inset-0 rounded-2xl">
-                    <div
-                      className="
-                      absolute -inset-1 bg-white/60 backdrop-blur-md shadow-md 
-                      opacity-0 group-hover:opacity-100 
-                      transition-all duration-500 blur-xl
-                    "
-                    ></div>
-                    <div
-                      className="
-                      absolute inset-0 rounded-2xl 
-                      bg-white/60 backdrop-blur-md shadow-md
-                      transition-all duration-500
-                    "
-                    ></div>
-                  </div>
-
-                  <img
-                    src="/icons/icon-192.png"
-                    alt="ExamFlow Logo"
-                    className="w-full h-full object-cover scale-125"
-                  />
-
-                  {/* Pulsing Animation */}
-                  <div
-                    className="
-                    absolute inset-0 rounded-2xl 
-                    border-2 border-transparent 
-                    group-hover:border-blue-300/50
-                    transition-all duration-300
-                    animate-pulse
-                  "
-                  ></div>
+                  <img src="/icons/icon-192.png" alt="ExamFlow Logo" className="w-full h-full object-cover scale-125" />
                 </div>
               <div>
-                <h1 className="text-xl font-bold text-gray-900">
-                  ALPHA COLLEGE
-                </h1>
-                <p className="text-gray-600 text-xs">
-                  Secure Examination System
+                <h1 className="text-2xl font-bold text-gray-900">ALPHA</h1>
+                <p className="text-gray-500 text-sm">
+                  Professional Assessment Platform
                 </p>
               </div>
             </div>
 
             {/* Login Header */}
-            <div className="mb-8">
-              <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">
-                Exam Login
+            <div className="mb-10">
+              <h2 className="text-3xl font-bold text-gray-900 mb-3">
+                Welcome Back
               </h2>
               <p className="text-gray-600">
                 Enter your credentials to access your examination
@@ -1543,7 +1371,7 @@ export default function StudentLogin() {
             </div>
 
             {/* Login Form */}
-            <form onSubmit={handleLogin} className="space-y-6">
+            <form onSubmit={handleLogin} className="space-y-8">
               {/* Student ID Input */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
@@ -1570,7 +1398,7 @@ export default function StudentLogin() {
                     onChange={handleStudentIdChange}
                     onFocus={handleStudentIdFocus}
                     onBlur={handleStudentIdBlur}
-                    placeholder="XXXXXXX"
+                    placeholder="XXXXXX"
                     type="password"
                     className={`
                       h-12 pl-10 pr-12 
@@ -1588,7 +1416,6 @@ export default function StudentLogin() {
                     `}
                     maxLength={studentIdFormat.maxLength}
                     disabled={loading}
-                    autoComplete="username"
                   />
 
                   <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
@@ -1597,12 +1424,9 @@ export default function StudentLogin() {
                     )}
                     <button
                       type="button"
-                      className="p-1 rounded-md hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="p-1 rounded-md hover:bg-gray-100 transition-colors disabled:opacity-50"
                       onClick={toggleStudentIdVisibility}
                       disabled={!studentId || loading}
-                      aria-label={
-                        showStudentId ? "Hide student ID" : "Show student ID"
-                      }
                     >
                       {showStudentId ? (
                         <EyeOff className="h-4 w-4 text-gray-500" />
@@ -1681,7 +1505,6 @@ export default function StudentLogin() {
                     `}
                     maxLength={6}
                     disabled={loading}
-                    autoComplete="off"
                   />
 
                   <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
@@ -1690,12 +1513,9 @@ export default function StudentLogin() {
                     )}
                     <button
                       type="button"
-                      className="p-1 rounded-md hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="p-1 rounded-md hover:bg-gray-100 transition-colors disabled:opacity-50"
                       onClick={toggleExamIdVisibility}
                       disabled={!examId || loading}
-                      aria-label={
-                        showExamId ? "Hide exam code" : "Show exam code"
-                      }
                     >
                       {showExamId ? (
                         <EyeOff className="h-4 w-4 text-gray-500" />
@@ -1732,7 +1552,7 @@ export default function StudentLogin() {
                         {Array.from({ length: 6 }).map((_, i) => (
                           <div
                             key={i}
-                            className={`w-2 h-2 rounded-full transition-all duration-300 ${
+                            className={`w-2 h-2 rounded-full ${
                               i < examId.length
                                 ? examId.length === 6
                                   ? "bg-green-500"
@@ -1761,14 +1581,14 @@ export default function StudentLogin() {
                     text-base
                     font-semibold
                     transition-all duration-300
-                    relative overflow-hidden group
                     ${
                       loading
                         ? "bg-gray-400 cursor-not-allowed"
                         : !securityInitialized
                         ? "bg-gray-500 cursor-not-allowed"
-                        : "bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-lg hover:shadow-xl hover:-translate-y-0.5"
+                        : "bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 shadow-lg hover:shadow-xl"
                     }
+                    relative overflow-hidden group
                   `}
                   disabled={
                     loading ||
