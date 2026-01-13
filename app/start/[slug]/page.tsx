@@ -85,6 +85,9 @@ import {
   Zap,
   Activity,
   WifiOff,
+  Menu,
+  Grid,
+  Navigation,
 } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { InlineMath, BlockMath } from "react-katex";
@@ -533,8 +536,8 @@ const UnderlinedBlankInput = ({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="border-0 border-b-2 border-dashed border-primary bg-transparent text-left font-medium text-gray-800 px-2 py-1 outline-none transition-all min-w-[150px] max-w-[500px]"
-        style={{ width: "150px" }}
+        className="border-0 border-b-2 border-dashed border-primary bg-transparent text-left font-medium text-gray-800 px-2 py-1 outline-none transition-all min-w-[100px] md:min-w-[150px] max-w-[500px]"
+        style={{ width: "100px" }}
       />
     </div>
   );
@@ -603,9 +606,9 @@ const MatchingAnswerInput = ({
         onChange={handleChange}
         onKeyDown={handleKeyDown}
         disabled={disabled}
-        className="px-1 py-1 text-center text-base font-medium border-0 border-b-2 border border-gray-600 focus:border-blue-600 focus:outline-none bg-transparent min-w-[44px] max-w-[60px]"
+        className="px-1 py-1 text-center text-base font-medium border-0 border-b-2 border border-gray-600 focus:border-blue-600 focus:outline-none bg-transparent min-w-[36px] md:min-w-[44px] max-w-[60px]"
         maxLength={1}
-        style={{ width: "44px" }}
+        style={{ width: "36px" }}
       />
     </div>
   );
@@ -639,12 +642,12 @@ const ModernPassageDisplay = ({
           {isExpanded ? (
             <>
               <ChevronUp className="h-4 w-4 mr-1" />
-              Collapse
+              <span className="hidden sm:inline">Collapse</span>
             </>
           ) : (
             <>
               <ChevronDown className="h-4 w-4 mr-1" />
-              Expand
+              <span className="hidden sm:inline">Expand</span>
             </>
           )}
         </Button>
@@ -659,16 +662,17 @@ const ModernPassageDisplay = ({
         )}
       >
         <div
-          className="prose prose-lg max-w-none p-3 bg-white/70 rounded-lg backdrop-blur-sm"
+          className="prose prose-sm md:prose-lg max-w-none p-2 md:p-3 bg-white/70 rounded-lg backdrop-blur-sm"
           dangerouslySetInnerHTML={{ __html: passageHtml }}
         />
       </div>
 
       {!isExpanded && (
         <div className="mt-2 text-center">
-          <div className="inline-flex items-center gap-1 text-sm text-blue-600 bg-blue-50 px-3 py-1 rounded-full">
+          <div className="inline-flex items-center gap-1 text-xs md:text-sm text-blue-600 bg-blue-50 px-2 py-1 md:px-3 md:py-1 rounded-full">
             <ScrollText className="h-3 w-3" />
-            Click "Expand" to read full passage
+            <span className="hidden sm:inline">Click "Expand" to read full passage</span>
+            <span className="sm:hidden">Tap to expand passage</span>
           </div>
         </div>
       )}
@@ -681,20 +685,19 @@ const ModernPassageDisplay = ({
 function FullscreenWarningModal({ onRetry }: { onRetry: () => void }) {
   return (
     <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
-      <div className="bg-white rounded-2xl p-8 max-w-md mx-4 text-center">
-        <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-          <Maximize className="h-8 w-8 text-red-600" />
+      <div className="bg-white rounded-2xl p-6 md:p-8 max-w-md mx-4 text-center">
+        <div className="w-12 h-12 md:w-16 md:h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+          <Maximize className="h-6 w-6 md:h-8 md:w-8 text-red-600" />
         </div>
-        <h2 className="text-2xl font-bold text-gray-900 mb-4">
+        <h2 className="text-xl md:text-2xl font-bold text-gray-900 mb-4">
           Fullscreen Required
         </h2>
-        <p className="text-gray-600 mb-6">
-          Exam setting requires fullscreen mode. Please enter fullscreen to
-          continue.
+        <p className="text-gray-600 mb-6 text-sm md:text-base">
+          Exam setting requires fullscreen mode. Please enter fullscreen to continue.
         </p>
         <Button
           onClick={onRetry}
-          className="w-full bg-red-600 hover:bg-red-700 text-lg py-3"
+          className="w-full bg-red-600 hover:bg-red-700 text-base md:text-lg py-3"
         >
           Return to Fullscreen
         </Button>
@@ -712,14 +715,14 @@ function SessionTerminatedModal({
 }) {
   return (
     <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
-      <div className="bg-white rounded-2xl p-8 max-w-md mx-4 text-center">
-        <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-          <Ban className="h-8 w-8 text-red-600" />
+      <div className="bg-white rounded-2xl p-6 md:p-8 max-w-md mx-4 text-center">
+        <div className="w-12 h-12 md:w-16 md:h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+          <Ban className="h-6 w-6 md:h-8 md:w-8 text-red-600" />
         </div>
-        <h2 className="text-2xl font-bold text-gray-900 mb-4">
+        <h2 className="text-xl md:text-2xl font-bold text-gray-900 mb-4">
           Session Terminated
         </h2>
-        <p className="text-gray-600 mb-6">{reason}</p>
+        <p className="text-gray-600 mb-6 text-sm md:text-base">{reason}</p>
         <Button
           onClick={onClose}
           className="w-full bg-red-600 hover:bg-red-700"
@@ -746,12 +749,12 @@ function PassageModal({
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-[900px] max-w-[95vw] h-[85vh] flex flex-col p-0 overflow-hidden">
-        <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white p-6">
+        <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white p-4 md:p-6">
           <DialogHeader className="text-white">
-            <div className="flex items-center gap-3">
-              <BookText className="h-6 w-6" />
+            <div className="flex items-center gap-2 md:gap-3">
+              <BookText className="h-5 w-5 md:h-6 md:w-6" />
               <div>
-                <DialogTitle className="text-xl">Reading Passage</DialogTitle>
+                <DialogTitle className="text-lg md:text-xl">Reading Passage</DialogTitle>
                 <DialogDescription className="text-blue-100">
                   For Question {questionNumber}
                 </DialogDescription>
@@ -760,11 +763,11 @@ function PassageModal({
           </DialogHeader>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-6">
+        <div className="flex-1 overflow-y-auto p-4 md:p-6">
           <div className="max-w-4xl mx-auto">
-            <div className="bg-white rounded-xl shadow-lg p-8 border border-gray-200">
+            <div className="bg-white rounded-xl shadow-lg p-4 md:p-8 border border-gray-200">
               <div
-                className="prose prose-lg max-w-none"
+                className="prose prose-sm md:prose-lg max-w-none"
                 dangerouslySetInnerHTML={{ __html: passageHtml }}
               />
             </div>
@@ -774,7 +777,7 @@ function PassageModal({
         <div className="border-t p-4 bg-gray-50 flex justify-end">
           <Button
             onClick={onClose}
-            className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
+            className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-sm md:text-base"
           >
             Return to Question
           </Button>
@@ -783,6 +786,199 @@ function PassageModal({
     </Dialog>
   );
 }
+
+// Floating Mobile Navigation Bar
+const FloatingMobileNavBar = ({
+  currentQuestionIndex,
+  questions,
+  flaggedQuestions,
+  onQuestionSelect,
+  isOpen,
+  setIsOpen,
+}: {
+  currentQuestionIndex: number;
+  questions: any[];
+  flaggedQuestions: Set<number>;
+  onQuestionSelect: (index: number) => void;
+  isOpen: boolean;
+  setIsOpen: (open: boolean) => void;
+}) => {
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+
+  return (
+    <>
+      {/* Floating Toggle Button */}
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="fixed bottom-4 right-4 z-50 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-full p-3 shadow-2xl"
+      >
+        <Navigation className="h-6 w-6" />
+      </button>
+
+      {/* Navigation Panel */}
+      {isOpen && (
+        <div className="fixed inset-0 z-40 bg-black/50" onClick={() => setIsOpen(false)}>
+          <div 
+            className="absolute bottom-0 left-0 right-0 bg-white rounded-t-3xl shadow-2xl max-h-[80vh] overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="p-4 border-b bg-gradient-to-r from-blue-600 to-indigo-600 text-white">
+              <div className="flex items-center justify-between">
+                <h3 className="font-bold text-lg">Question Navigator</h3>
+                <button 
+                  onClick={() => setIsOpen(false)}
+                  className="text-white hover:text-gray-200"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+              
+              {/* Stats Bar */}
+              <div className="flex items-center justify-between mt-3 text-sm">
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-1">
+                    <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                    <span>Answered: {questions.filter((_, i) => true).length}</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <div className="w-2 h-2 rounded-full bg-gray-400"></div>
+                    <span>Unanswered: {questions.length - questions.filter((_, i) => true).length}</span>
+                  </div>
+                </div>
+                
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setViewMode('grid')}
+                    className={`px-3 py-1 rounded-full text-xs ${viewMode === 'grid' ? 'bg-white text-blue-600' : 'bg-blue-500/30 text-white'}`}
+                  >
+                    Grid
+                  </button>
+                  <button
+                    onClick={() => setViewMode('list')}
+                    className={`px-3 py-1 rounded-full text-xs ${viewMode === 'list' ? 'bg-white text-blue-600' : 'bg-blue-500/30 text-white'}`}
+                  >
+                    List
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Questions Grid/List */}
+            <div className="p-4 overflow-y-auto max-h-[60vh]">
+              {viewMode === 'grid' ? (
+                <div className="grid grid-cols-5 gap-2">
+                  {questions.map((_, i) => {
+                    const isAnswered = true;
+                    const isCurrent = currentQuestionIndex === i;
+                    const isFlagged = flaggedQuestions.has(i);
+
+                    return (
+                      <button
+                        key={i}
+                        onClick={() => {
+                          onQuestionSelect(i);
+                          setIsOpen(false);
+                        }}
+                        className={cn(
+                          "h-12 w-12 rounded-lg flex items-center justify-center font-medium text-sm relative transition-all",
+                          isCurrent
+                            ? "bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg"
+                            : isAnswered
+                            ? "bg-green-100 text-green-800 border border-green-300"
+                            : "bg-gray-100 text-gray-600 border border-gray-300",
+                          isFlagged && "border-amber-400 border-2"
+                        )}
+                      >
+                        {isFlagged && (
+                          <Flag className="absolute -top-1 -right-1 h-4 w-4 text-amber-500 fill-amber-500" />
+                        )}
+                        {i + 1}
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {questions.map((_, i) => {
+                    const isAnswered = true;
+                    const isCurrent = currentQuestionIndex === i;
+                    const isFlagged = flaggedQuestions.has(i);
+
+                    return (
+                      <button
+                        key={i}
+                        onClick={() => {
+                          onQuestionSelect(i);
+                          setIsOpen(false);
+                        }}
+                        className={cn(
+                          "w-full p-3 rounded-lg flex items-center justify-between text-left",
+                          isCurrent
+                            ? "bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-500"
+                            : isAnswered
+                            ? "bg-green-50 border border-green-200"
+                            : "bg-gray-50 border border-gray-200"
+                        )}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className={cn(
+                            "h-8 w-8 rounded-full flex items-center justify-center font-medium",
+                            isCurrent 
+                              ? "bg-blue-600 text-white"
+                              : isAnswered
+                              ? "bg-green-500 text-white"
+                              : "bg-gray-400 text-white"
+                          )}>
+                            {i + 1}
+                          </div>
+                          <span className="font-medium">Question {i + 1}</span>
+                          {isFlagged && (
+                            <Flag className="h-4 w-4 text-amber-500" />
+                          )}
+                        </div>
+                        <div className={cn(
+                          "text-xs px-2 py-1 rounded-full",
+                          isAnswered ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-800"
+                        )}>
+                          {isAnswered ? "Answered" : "Not answered"}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Quick Actions */}
+            <div className="p-4 border-t bg-gray-50 flex justify-between">
+              <button
+                onClick={() => {
+                  onQuestionSelect(Math.max(0, currentQuestionIndex - 1));
+                  setIsOpen(false);
+                }}
+                disabled={currentQuestionIndex === 0}
+                className="px-4 py-2 bg-gray-200 rounded-lg disabled:opacity-50"
+              >
+                Previous
+              </button>
+              <button
+                onClick={() => {
+                  onQuestionSelect(Math.min(questions.length - 1, currentQuestionIndex + 1));
+                  setIsOpen(false);
+                }}
+                disabled={currentQuestionIndex === questions.length - 1}
+                className="px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg disabled:opacity-50"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+};
 
 // --- Main Component ---
 
@@ -832,6 +1028,7 @@ export default function ExamTakingPage() {
   const [showSessionTerminated, setShowSessionTerminated] = useState(false);
   const [terminationReason, setTerminationReason] = useState("");
   const [connectionStatus, setConnectionStatus] = useState<"connected" | "disconnected" | "poor">("connected");
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   // Refs
   const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -1563,8 +1760,8 @@ export default function ExamTakingPage() {
       await supabase
         .from("session_security")
         .update({ is_active: false })
-        .eq("session_id", currentSessionId)
-        .eq("token", currentSecurityToken);
+        .eq('session_id', currentSessionId)
+        .eq('token', currentSecurityToken);
 
       // Save Results (NO GRADE COLUMN)
       const { error: resultError } = await supabase.from("results").upsert(
@@ -1941,6 +2138,7 @@ export default function ExamTakingPage() {
 
   const currentQ = questions[currentQuestionIndex];
   const isMobile = windowWidth < 768;
+  const isTablet = windowWidth >= 768 && windowWidth < 1024;
 
   // --- Render Views ---
 
@@ -1958,91 +2156,86 @@ export default function ExamTakingPage() {
       <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 p-4">
         <Card className="w-full max-w-2xl shadow-xl border-0">
           <CardHeader className="text-center bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-t-lg">
-            <CardTitle className="text-3xl font-bold">
+            <CardTitle className="text-xl md:text-3xl font-bold">
               {examData?.title}
             </CardTitle>
-            <p className="text-blue-100 pt-1">
+            <p className="text-blue-100 pt-1 text-sm md:text-base">
               Read carefully before starting.
             </p>
           </CardHeader>
-          <CardContent className="space-y-6 p-8">
+          <CardContent className="space-y-6 p-4 md:p-8">
             <div className="grid grid-cols-2 gap-4 text-center">
-              <div className="p-4 bg-blue-50 rounded-lg border border-blue-100">
-                <p className="text-sm font-medium text-blue-600">Duration</p>
-                <p className="text-2xl font-bold text-gray-900">
+              <div className="p-3 md:p-4 bg-blue-50 rounded-lg border border-blue-100">
+                <p className="text-xs md:text-sm font-medium text-blue-600">Duration</p>
+                <p className="text-lg md:text-2xl font-bold text-gray-900">
                   {examData?.duration} Min
                 </p>
               </div>
-              <div className="p-4 bg-indigo-50 rounded-lg border border-indigo-100">
-                <p className="text-sm font-medium text-indigo-600">Questions</p>
-                <p className="text-2xl font-bold text-gray-900">
+              <div className="p-3 md:p-4 bg-indigo-50 rounded-lg border border-indigo-100">
+                <p className="text-xs md:text-sm font-medium text-indigo-600">Questions</p>
+                <p className="text-lg md:text-2xl font-bold text-gray-900">
                   {questions.length}
                 </p>
               </div>
             </div>
 
             {examData?.description && (
-              <div className="text-gray-600 bg-amber-50 p-4 rounded-lg border border-amber-200">
+              <div className="text-gray-600 bg-amber-50 p-3 md:p-4 rounded-lg border border-amber-200">
                 <div className="flex items-center gap-2">
-                  <AlertCircle className="h-5 w-5 text-amber-600" />
-                  <p className="font-semibold text-amber-800">Instructions</p>
+                  <AlertCircle className="h-4 w-4 md:h-5 md:w-5 text-amber-600" />
+                  <p className="font-semibold text-amber-800 text-sm md:text-base">Instructions</p>
                 </div>
-                <p>{examData.description}</p>
+                <p className="text-sm md:text-base mt-1">{examData.description}</p>
               </div>
             )}
 
-            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 p-4 rounded-lg">
-              <div className="flex items-center gap-2 mb-3">
-                <AlertTriangle className="h-5 w-5 text-blue-600" />
-                <p className="font-bold text-blue-800">Exam Settings:</p>
+            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 p-3 md:p-4 rounded-lg">
+              <div className="flex items-center gap-2 mb-2 md:mb-3">
+                <AlertTriangle className="h-4 w-4 md:h-5 md:w-5 text-blue-600" />
+                <p className="font-bold text-blue-800 text-sm md:text-base">Exam Settings:</p>
               </div>
-              <ul className="space-y-2 text-sm text-blue-800">
+              <ul className="space-y-1 md:space-y-2 text-xs md:text-sm text-blue-800">
                 {examData?.questions_shuffled && (
                   <li className="flex items-center gap-2">
-                    <div className="h-2 w-2 rounded-full bg-blue-600"></div>
+                    <div className="h-1 w-1 md:h-2 md:w-2 rounded-full bg-blue-600"></div>
                     <span>
-                      <strong>Questions are randomized</strong> - Each student
-                      gets different order
+                      <strong>Questions are randomized</strong> - Each student gets different order
                     </span>
                   </li>
                 )}
                 {examData?.options_shuffled && (
                   <li className="flex items-center gap-2">
-                    <div className="h-2 w-2 rounded-full bg-blue-600"></div>
+                    <div className="h-1 w-1 md:h-2 md:w-2 rounded-full bg-blue-600"></div>
                     <span>
-                      <strong>Options are shuffled</strong> - Answer choices
-                      appear in different order
+                      <strong>Options are shuffled</strong> - Answer choices appear in different order
                     </span>
                   </li>
                 )}
                 {examData?.fullscreen_required && (
                   <li className="flex items-center gap-2">
-                    <div className="h-2 w-2 rounded-full bg-blue-600"></div>
+                    <div className="h-1 w-1 md:h-2 md:w-2 rounded-full bg-blue-600"></div>
                     <span>
-                      <strong>Fullscreen required</strong> - You must stay in
-                      fullscreen mode
+                      <strong>Fullscreen required</strong> - You must stay in fullscreen mode
                     </span>
                   </li>
                 )}
                 <li className="flex items-center gap-2">
-                  <div className="h-2 w-2 rounded-full bg-blue-600"></div>
+                  <div className="h-1 w-1 md:h-2 md:w-2 rounded-full bg-blue-600"></div>
                   <span>
                     <strong>Device locking enabled</strong> - One device per student only
                   </span>
                 </li>
                 <li className="flex items-center gap-2">
-                  <div className="h-2 w-2 rounded-full bg-blue-600"></div>
+                  <div className="h-1 w-1 md:h-2 md:w-2 rounded-full bg-blue-600"></div>
                   <span>
-                    <strong>Auto-save enabled</strong> - Answers are saved
-                    automatically
+                    <strong>Auto-save enabled</strong> - Answers are saved automatically
                   </span>
                 </li>
                 {examData?.show_results && (
                   <li className="flex items-center gap-2">
-                    <div className="h-2 w-2 rounded-full bg-green-600"></div>
+                    <div className="h-1 w-1 md:h-2 md:w-2 rounded-full bg-green-600"></div>
                     <span>
-                      <strong>Results will be shown</strong> - You'll see your
-                      score after submission
+                      <strong>Results will be shown</strong> - You'll see your score after submission
                     </span>
                   </li>
                 )}
@@ -2050,18 +2243,18 @@ export default function ExamTakingPage() {
             </div>
 
             {deviceFingerprint && (
-              <div className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 p-4 rounded-lg">
+              <div className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 p-3 md:p-4 rounded-lg">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <Shield className="h-5 w-5 text-green-600" />
-                    <span className="font-medium text-green-800">Device Verified</span>
+                    <Shield className="h-4 w-4 md:h-5 md:w-5 text-green-600" />
+                    <span className="font-medium text-green-800 text-sm md:text-base">Device Verified</span>
                   </div>
                   <div className="flex items-center gap-1">
-                    <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                    <div className="w-1 h-1 md:w-2 md:h-2 bg-green-500 rounded-full animate-pulse"></div>
                     <span className="text-xs text-green-600">Secure</span>
                   </div>
                 </div>
-                <p className="text-xs text-green-700 mt-2">
+                <p className="text-xs text-green-700 mt-1 md:mt-2">
                   Device ID: {deviceFingerprint.substring(0, 12)}...
                 </p>
               </div>
@@ -2069,25 +2262,24 @@ export default function ExamTakingPage() {
 
             <Button
               size="lg"
-              className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold py-3 text-lg"
+              className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold py-3 text-base md:text-lg"
               onClick={handleStartExam}
               disabled={!securityInitialized}
             >
               {securityInitialized ? (
                 <>
-                  Start Exam Now <ChevronRight className="ml-2 h-5 w-5" />
+                  Start Exam Now <ChevronRight className="ml-2 h-4 w-4 md:h-5 md:w-5" />
                 </>
               ) : (
                 <>
-                  <Spinner className="mr-2 h-5 w-5" />
+                  <Spinner className="mr-2 h-4 w-4 md:h-5 md:w-5" />
                   Initializing Security...
                 </>
               )}
             </Button>
 
-            <p className="text-center text-sm text-gray-500">
-              By starting the exam, you agree to follow all exam rules and
-              guidelines.
+            <p className="text-center text-xs md:text-sm text-gray-500">
+              By starting the exam, you agree to follow all exam rules and guidelines.
             </p>
           </CardContent>
         </Card>
@@ -2102,94 +2294,92 @@ export default function ExamTakingPage() {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 flex items-center justify-center p-4">
         <Card className="w-full max-w-2xl text-center shadow-2xl border-0 overflow-hidden">
-          <div className="bg-gradient-to-r from-green-600 to-emerald-600 text-white p-8">
-            <CheckCircle2 className="h-20 w-20 mx-auto mb-4" />
-            <h2 className="text-3xl font-bold mb-2">
+          <div className="bg-gradient-to-r from-green-600 to-emerald-600 text-white p-6 md:p-8">
+            <CheckCircle2 className="h-16 w-16 md:h-20 md:w-20 mx-auto mb-4" />
+            <h2 className="text-xl md:text-3xl font-bold mb-2">
               Exam Submitted Successfully!
             </h2>
-            <p className="text-green-100">
+            <p className="text-green-100 text-sm md:text-base">
               Your answers have been recorded and graded.
             </p>
           </div>
 
-          <CardContent className="p-8">
+          <CardContent className="p-4 md:p-8">
             {shouldShowResults && submissionResult ? (
-              <div className="space-y-6">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="p-4 bg-green-50 rounded-lg border border-green-200">
-                    <p className="text-sm font-medium text-green-600">
+              <div className="space-y-4 md:space-y-6">
+                <div className="grid grid-cols-2 gap-3 md:gap-4">
+                  <div className="p-3 md:p-4 bg-green-50 rounded-lg border border-green-200">
+                    <p className="text-xs md:text-sm font-medium text-green-600">
                       Score Obtained
                     </p>
-                    <p className="text-2xl font-bold text-gray-900">
+                    <p className="text-lg md:text-2xl font-bold text-gray-900">
                       {submissionResult.totalMarks} / {submissionResult.totalPossibleMarks}
                     </p>
                   </div>
-                  <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
-                    <p className="text-sm font-medium text-blue-600">
+                  <div className="p-3 md:p-4 bg-blue-50 rounded-lg border border-blue-200">
+                    <p className="text-xs md:text-sm font-medium text-blue-600">
                       Percentage
                     </p>
-                    <p className="text-2xl font-bold text-gray-900">
+                    <p className="text-lg md:text-2xl font-bold text-gray-900">
                       {submissionResult.percent}%
                     </p>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="p-4 bg-amber-50 rounded-lg border border-amber-200">
-                    <p className="text-sm font-medium text-amber-600">
+                <div className="grid grid-cols-2 gap-3 md:gap-4">
+                  <div className="p-3 md:p-4 bg-amber-50 rounded-lg border border-amber-200">
+                    <p className="text-xs md:text-sm font-medium text-amber-600">
                       Correct Answers
                     </p>
-                    <p className="text-2xl font-bold text-gray-900">
+                    <p className="text-lg md:text-2xl font-bold text-gray-900">
                       {submissionResult.correctCount} / {submissionResult.totalQuestions}
                     </p>
                   </div>
-                  <div className="p-4 bg-indigo-50 rounded-lg border border-indigo-200">
-                    <p className="text-sm font-medium text-indigo-600">
+                  <div className="p-3 md:p-4 bg-indigo-50 rounded-lg border border-indigo-200">
+                    <p className="text-xs md:text-sm font-medium text-indigo-600">
                       Time Taken
                     </p>
-                    <p className="text-2xl font-bold text-gray-900">
+                    <p className="text-lg md:text-2xl font-bold text-gray-900">
                       {formatTime(submissionResult.timeSpent)}
                     </p>
                   </div>
                 </div>
 
-                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-6 rounded-xl border border-blue-200">
-                  <div className="flex items-center justify-center gap-3 mb-4">
-                    <Award className="h-8 w-8 text-amber-600" />
-                    <h3 className="text-xl font-bold text-gray-800">
+                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-4 md:p-6 rounded-xl border border-blue-200">
+                  <div className="flex items-center justify-center gap-2 md:gap-3 mb-3 md:mb-4">
+                    <Award className="h-6 w-6 md:h-8 md:w-8 text-amber-600" />
+                    <h3 className="text-lg md:text-xl font-bold text-gray-800">
                       Performance Summary
                     </h3>
                   </div>
-                  <div className="mt-4 w-full bg-gray-200 rounded-full h-4">
+                  <div className="mt-3 md:mt-4 w-full bg-gray-200 rounded-full h-2 md:h-4">
                     <div 
-                      className="bg-gradient-to-r from-green-500 to-emerald-600 h-4 rounded-full transition-all duration-500"
+                      className="bg-gradient-to-r from-green-500 to-emerald-600 h-2 md:h-4 rounded-full transition-all duration-500"
                       style={{ width: `${submissionResult.percent}%` }}
                     ></div>
                   </div>
-                  <p className="text-sm text-gray-500 mt-2">
+                  <p className="text-xs md:text-sm text-gray-500 mt-2">
                     Progress: {submissionResult.percent}%
                   </p>
                 </div>
               </div>
             ) : (
-              <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-6 rounded-xl border border-blue-200">
-                <div className="flex items-center justify-center gap-3 mb-4">
-                  <EyeOff className="h-8 w-8 text-blue-600" />
-                  <h3 className="text-xl font-bold text-gray-800">
+              <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-4 md:p-6 rounded-xl border border-blue-200">
+                <div className="flex items-center justify-center gap-2 md:gap-3 mb-3 md:mb-4">
+                  <EyeOff className="h-6 w-6 md:h-8 md:w-8 text-blue-600" />
+                  <h3 className="text-lg md:text-xl font-bold text-gray-800">
                     Results Hidden
                   </h3>
                 </div>
-                <p className="text-gray-600">
-                  Your exam has been submitted successfully. Results are not
-                  shown immediately as per the exam settings. Your teacher will
-                  notify you when results are available.
+                <p className="text-gray-600 text-sm md:text-base">
+                  Your exam has been submitted successfully. Results are not shown immediately as per the exam settings. Your teacher will notify you when results are available.
                 </p>
               </div>
             )}
 
             <Button
               onClick={() => router.push("/")}
-              className="mt-6 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 w-full py-3 text-lg"
+              className="mt-4 md:mt-6 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 w-full py-3 text-base md:text-lg"
             >
               Return to Home
             </Button>
@@ -2229,29 +2419,42 @@ export default function ExamTakingPage() {
         questionNumber={currentQuestionIndex + 1}
       />
 
+      {/* Floating Mobile Navigation */}
+      {isMobile && examStatus === "in-progress" && (
+        <FloatingMobileNavBar
+          currentQuestionIndex={currentQuestionIndex}
+          questions={questions}
+          flaggedQuestions={flaggedQuestions}
+          onQuestionSelect={setCurrentQuestionIndex}
+          isOpen={mobileNavOpen}
+          setIsOpen={setMobileNavOpen}
+        />
+      )}
+
       {/* Sidebar (Desktop) */}
       {!isMobile && (
         <aside
           className={cn(
             "bg-white border-r flex flex-col transition-all duration-300 ease-in-out shadow-lg",
-            isSidebarOpen ? "w-80 p-4" : "w-0 p-0 border-0 overflow-hidden"
+            isSidebarOpen ? "w-64 md:w-80 p-3 md:p-4" : "w-0 p-0 border-0 overflow-hidden"
           )}
         >
-          <div className="flex items-center justify-between mb-6">
-            <h3 className="text-lg font-semibold text-gray-800">
+          <div className="flex items-center justify-between mb-4 md:mb-6">
+            <h3 className="text-base md:text-lg font-semibold text-gray-800">
               Question Navigator
             </h3>
             <Button
               variant="ghost"
               size="icon"
               onClick={() => setIsSidebarOpen(false)}
+              className="h-8 w-8 md:h-9 md:w-9"
             >
               <PanelLeftClose className="h-4 w-4" />
             </Button>
           </div>
 
           <div className="flex-1 overflow-y-auto pr-2">
-            <div className="grid grid-cols-5 gap-3">
+            <div className="grid grid-cols-4 md:grid-cols-5 gap-2 md:gap-3">
               {questions.map((_, i) => {
                 const isAnswered =
                   answers[i] !== null && answers[i] !== undefined;
@@ -2269,7 +2472,7 @@ export default function ExamTakingPage() {
                         : "outline"
                     }
                     className={cn(
-                      "h-12 w-12 p-0 relative text-lg font-medium transition-all",
+                      "h-10 w-10 md:h-12 md:w-12 p-0 relative text-sm md:text-lg font-medium transition-all",
                       isAnswered &&
                         !isCurrent &&
                         "bg-green-100 text-green-800 border-green-300 hover:bg-green-200",
@@ -2278,7 +2481,7 @@ export default function ExamTakingPage() {
                     onClick={() => setCurrentQuestionIndex(i)}
                   >
                     {isFlagged && (
-                      <Flag className="absolute -top-1 -right-1 h-4 w-4 text-amber-500 fill-amber-500" />
+                      <Flag className="absolute -top-1 -right-1 h-3 w-3 md:h-4 md:w-4 text-amber-500 fill-amber-500" />
                     )}
                     {i + 1}
                   </Button>
@@ -2287,42 +2490,42 @@ export default function ExamTakingPage() {
             </div>
           </div>
 
-          <div className="mt-auto pt-6 border-t space-y-3">
-            <div className="flex justify-between items-center text-green-600 bg-green-50 p-3 rounded-lg">
-              <span className="flex items-center gap-2 font-medium">
-                <CheckCircle2 className="h-4 w-4" /> Answered
+          <div className="mt-auto pt-4 md:pt-6 border-t space-y-2 md:space-y-3">
+            <div className="flex justify-between items-center text-green-600 bg-green-50 p-2 md:p-3 rounded-lg">
+              <span className="flex items-center gap-1 md:gap-2 font-medium text-sm md:text-base">
+                <CheckCircle2 className="h-3 w-3 md:h-4 md:w-4" /> Answered
               </span>
-              <span className="font-bold text-lg">{stats.answered}</span>
+              <span className="font-bold text-base md:text-lg">{stats.answered}</span>
             </div>
-            <div className="flex justify-between items-center text-gray-600 bg-gray-50 p-3 rounded-lg">
-              <span className="flex items-center gap-2 font-medium">
-                <HelpCircle className="h-4 w-4" /> Unanswered
+            <div className="flex justify-between items-center text-gray-600 bg-gray-50 p-2 md:p-3 rounded-lg">
+              <span className="flex items-center gap-1 md:gap-2 font-medium text-sm md:text-base">
+                <HelpCircle className="h-3 w-3 md:h-4 md:w-4" /> Unanswered
               </span>
-              <span className="font-bold text-lg">{stats.unanswered}</span>
+              <span className="font-bold text-base md:text-lg">{stats.unanswered}</span>
             </div>
-            <div className="flex justify-between items-center text-amber-600 bg-amber-50 p-3 rounded-lg">
-              <span className="flex items-center gap-2 font-medium">
-                <Flag className="h-4 w-4" /> Flagged
+            <div className="flex justify-between items-center text-amber-600 bg-amber-50 p-2 md:p-3 rounded-lg">
+              <span className="flex items-center gap-1 md:gap-2 font-medium text-sm md:text-base">
+                <Flag className="h-3 w-3 md:h-4 md:w-4" /> Flagged
               </span>
-              <span className="font-bold text-lg">{stats.flagged}</span>
+              <span className="font-bold text-base md:text-lg">{stats.flagged}</span>
             </div>
             
             {/* Security Status */}
             <div className={cn(
-              "flex justify-between items-center p-3 rounded-lg",
+              "flex justify-between items-center p-2 md:p-3 rounded-lg text-sm md:text-base",
               connectionStatus === "connected" 
                 ? "text-blue-600 bg-blue-50" 
                 : connectionStatus === "disconnected"
                 ? "text-red-600 bg-red-50"
                 : "text-amber-600 bg-amber-50"
             )}>
-              <span className="flex items-center gap-2 font-medium">
+              <span className="flex items-center gap-1 md:gap-2 font-medium">
                 {connectionStatus === "connected" ? (
-                  <Activity className="h-4 w-4" />
+                  <Activity className="h-3 w-3 md:h-4 md:w-4" />
                 ) : connectionStatus === "disconnected" ? (
-                  <WifiOff className="h-4 w-4" />
+                  <WifiOff className="h-3 w-3 md:h-4 md:w-4" />
                 ) : (
-                  <AlertTriangle className="h-4 w-4" />
+                  <AlertTriangle className="h-3 w-3 md:h-4 md:w-4" />
                 )}
                 {connectionStatus === "connected" ? "Connected" : 
                  connectionStatus === "disconnected" ? "Disconnected" : "Poor Connection"}
@@ -2337,124 +2540,76 @@ export default function ExamTakingPage() {
         </aside>
       )}
 
-      {/* Mobile Sheet Sidebar */}
-      {isMobile && (
-        <Sheet open={isSidebarOpen} onOpenChange={setIsSidebarOpen}>
-          <SheetContent side="left" className="w-80 p-0">
-            <SheetHeader className="p-4 border-b bg-gradient-to-r from-blue-600 to-indigo-600 text-white">
-              <SheetTitle className="text-white">Question Navigator</SheetTitle>
-            </SheetHeader>
-            <div className="flex-1 overflow-y-auto p-4">
-              <div className="grid grid-cols-5 gap-3">
-                {questions.map((_, i) => {
-                  const isAnswered =
-                    answers[i] !== null && answers[i] !== undefined;
-                  const isCurrent = currentQuestionIndex === i;
-                  const isFlagged = flaggedQuestions.has(i);
-
-                  return (
-                    <Button
-                      key={i}
-                      variant={
-                        isCurrent
-                          ? "default"
-                          : isAnswered
-                          ? "secondary"
-                          : "outline"
-                      }
-                      className={cn(
-                        "h-12 w-12 p-0 relative text-lg font-medium",
-                        isAnswered &&
-                          !isCurrent &&
-                          "bg-green-100 text-green-800 border-green-300",
-                        isFlagged && "border-amber-300"
-                      )}
-                      onClick={() => {
-                        setCurrentQuestionIndex(i);
-                        setIsSidebarOpen(false);
-                      }}
-                    >
-                      {isFlagged && (
-                        <Flag className="absolute -top-1 -right-1 h-4 w-4 text-amber-500 fill-amber-500" />
-                      )}
-                      {i + 1}
-                    </Button>
-                  );
-                })}
-              </div>
-            </div>
-          </SheetContent>
-        </Sheet>
-      )}
-
       <div className="flex-1 flex flex-col">
         {/* Header */}
-        <header className="flex items-center justify-between p-4 border-b bg-white sticky top-0 z-10 shadow-sm">
-          <div className="flex items-center gap-4">
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-              className="border-blue-200 hover:bg-blue-50"
-            >
-              {isSidebarOpen ? (
-                <PanelLeftClose className="h-4 w-4" />
-              ) : (
-                <PanelLeftOpen className="h-4 w-4" />
-              )}
-            </Button>
+        <header className="flex items-center justify-between p-3 md:p-4 border-b bg-white sticky top-0 z-10 shadow-sm">
+          <div className="flex items-center gap-2 md:gap-4">
+            {!isMobile && (
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+                className="border-blue-200 hover:bg-blue-50 h-8 w-8 md:h-9 md:w-9"
+              >
+                {isSidebarOpen ? (
+                  <PanelLeftClose className="h-4 w-4" />
+                ) : (
+                  <PanelLeftOpen className="h-4 w-4" />
+                )}
+              </Button>
+            )}
             <div>
-              <h1 className="font-bold text-lg truncate max-w-[300px]">
+              <h1 className="font-bold text-sm md:text-lg truncate max-w-[180px] md:max-w-[300px]">
                 {examData?.title}
               </h1>
-              <p className="text-sm text-gray-500">
+              <p className="text-xs md:text-sm text-gray-500">
                 Question {currentQuestionIndex + 1} of {questions.length}
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-6">
-            <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 md:gap-6">
+            <div className="flex items-center gap-1 md:gap-2">
               <Button
                 variant="outline"
                 size="icon"
                 onClick={() => setIsTimerVisible(!isTimerVisible)}
-                className="h-8 w-8 border-blue-200 hover:bg-blue-50"
+                className="h-7 w-7 md:h-8 md:w-8 border-blue-200 hover:bg-blue-50"
               >
                 {isTimerVisible ? (
-                  <EyeOff className="h-4 w-4" />
+                  <EyeOff className="h-3 w-3 md:h-4 md:w-4" />
                 ) : (
-                  <Eye className="h-4 w-4" />
+                  <Eye className="h-3 w-3 md:h-4 md:w-4" />
                 )}
               </Button>
               {isTimerVisible && (
                 <div
                   className={cn(
-                    "flex items-center gap-2 font-mono text-lg font-bold px-3 py-1 rounded-lg",
+                    "flex items-center gap-1 md:gap-2 font-mono text-sm md:text-lg font-bold px-2 md:px-3 py-1 rounded-lg",
                     timeLeft < 300
                       ? "bg-red-50 text-red-600 animate-pulse"
                       : "bg-blue-50 text-blue-600"
                   )}
                 >
-                  <Clock className="h-5 w-5" />
+                  <Clock className="h-4 w-4 md:h-5 md:w-5" />
                   {formatTime(timeLeft)}
                   {timeLeft < 300 && (
-                    <span className="text-xs ml-1">(Low Time!)</span>
+                    <span className="text-xs ml-1">(Low!)</span>
                   )}
                 </div>
               )}
             </div>
 
-            <Separator orientation="vertical" className="h-8" />
+            <Separator orientation="vertical" className="h-6 md:h-8" />
 
-            <div className="flex items-center gap-3">
-              <Avatar className="border-2 border-blue-200">
-                <AvatarFallback className="bg-blue-100 text-blue-700">
+            <div className="flex items-center gap-2 md:gap-3">
+              <Avatar className="border border-blue-200 h-8 w-8 md:h-9 md:w-9">
+                <AvatarFallback className="bg-blue-100 text-blue-700 text-xs md:text-sm">
                   {studentInfo?.name?.[0] || "S"}
                 </AvatarFallback>
               </Avatar>
               <div className="hidden sm:block">
-                <p className="font-semibold text-sm">{studentInfo?.name}</p>
+                <p className="font-semibold text-xs md:text-sm">{studentInfo?.name}</p>
                 <p className="text-xs text-gray-500">
                   {studentInfo?.student_id}
                 </p>
@@ -2464,26 +2619,26 @@ export default function ExamTakingPage() {
             <Button
               variant="destructive"
               onClick={() => setIsConfirmModalOpen(true)}
-              className="bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700"
+              className="bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 text-xs md:text-sm px-3 md:px-4 py-1.5 md:py-2"
             >
-              Submit Exam
+              Submit
             </Button>
           </div>
         </header>
 
         {/* Main Content */}
-        <main className="flex-1 p-6 overflow-y-auto">
+        <main className="flex-1 p-3 md:p-6 overflow-y-auto pb-20 md:pb-6">
           {currentQ && (
             <Card className="shadow-xl border-0 overflow-hidden">
-              <CardHeader className="p-8 bg-gradient-to-r from-blue-50 to-indigo-50">
+              <CardHeader className="p-4 md:p-8 bg-gradient-to-r from-blue-50 to-indigo-50">
                 <div className="flex justify-between items-start">
                   <div className="flex-1">
-                    <div className="flex items-center justify-between mb-4">
-                      <div className="flex items-center gap-3">
-                        <div className="px-3 py-1 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-full text-sm font-semibold">
+                    <div className="flex items-center justify-between mb-3 md:mb-4">
+                      <div className="flex items-center gap-2 md:gap-3">
+                        <div className="px-2 md:px-3 py-1 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-full text-xs md:text-sm font-semibold">
                           Q{currentQuestionIndex + 1}
                         </div>
-                        <p className="text-sm font-medium text-gray-600">
+                        <p className="text-xs md:text-sm font-medium text-gray-600">
                           {currentQ.type === "matching" &&
                             currentQ.matchingPairs &&
                             `${currentQ.matchingPairs.length} matching pairs`}
@@ -2495,17 +2650,17 @@ export default function ExamTakingPage() {
                         </p>
                       </div>
 
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1 md:gap-2">
                         <Button
                           variant="outline"
                           onClick={handleToggleFlag}
                           className={cn(
-                            "transition-all",
+                            "transition-all text-xs md:text-sm h-8 md:h-9 px-2 md:px-3",
                             flaggedQuestions.has(currentQuestionIndex) &&
                               "bg-amber-100 text-amber-800 border-amber-300 hover:bg-amber-200"
                           )}
                         >
-                          <Flag className="h-4 w-4 mr-2" />
+                          <Flag className="h-3 w-3 md:h-4 md:w-4 mr-1 md:mr-2" />
                           {flaggedQuestions.has(currentQuestionIndex)
                             ? "Flagged"
                             : "Flag"}
@@ -2523,9 +2678,9 @@ export default function ExamTakingPage() {
                     )}
 
                     {/* Question Text */}
-                    <div className="mt-4">
+                    <div className="mt-3 md:mt-4">
                       {currentQ.type === "blank" ? (
-                        <div className="text-lg leading-relaxed font-medium bg-white p-4 rounded-lg border">
+                        <div className="text-sm md:text-lg leading-relaxed font-medium bg-white p-3 md:p-4 rounded-lg border">
                           {currentQ.question_text
                             .split(/(\[BLANK:[^\]]+\])/g)
                             .map((part: string, i: number) => {
@@ -2552,20 +2707,20 @@ export default function ExamTakingPage() {
                             })}
                         </div>
                       ) : currentQ.type === "matching" ? (
-                        <div className="space-y-4">
+                        <div className="space-y-3 md:space-y-4">
                           {currentQ.matchingInstructions && (
-                            <div className="bg-blue-100 p-3 rounded-lg border border-blue-200">
-                              <p className="text-sm font-medium text-blue-800">
+                            <div className="bg-blue-100 p-2 md:p-3 rounded-lg border border-blue-200">
+                              <p className="text-xs md:text-sm font-medium text-blue-800">
                                 {renderWithMath(currentQ.matchingInstructions)}
                               </p>
                             </div>
                           )}
-                          <CardTitle className="text-xl text-gray-800">
+                          <CardTitle className="text-base md:text-xl text-gray-800">
                             {renderWithMath(currentQ.question_text)}
                           </CardTitle>
                         </div>
                       ) : (
-                        <CardTitle className="text-xl leading-relaxed text-gray-800">
+                        <CardTitle className="text-base md:text-xl leading-relaxed text-gray-800">
                           {renderWithMath(currentQ.question_text)}
                         </CardTitle>
                       )}
@@ -2574,29 +2729,29 @@ export default function ExamTakingPage() {
                 </div>
 
                 {currentQ.image_url && (
-                  <div className="mt-6 flex justify-center">
+                  <div className="mt-4 md:mt-6 flex justify-center">
                     <div className="max-w-2xl w-full">
                       <img
                         src={currentQ.image_url}
                         alt="Question"
-                        className="w-full max-h-80 rounded-xl border-2 border-gray-200 object-contain shadow-md"
+                        className="w-full max-h-60 md:max-h-80 rounded-xl border-2 border-gray-200 object-contain shadow-md"
                       />
                     </div>
                   </div>
                 )}
               </CardHeader>
 
-              <CardContent className="p-8 pt-6">
+              <CardContent className="p-4 md:p-8 pt-4 md:pt-6">
                 {/* MCQ / TF / Passage Options */}
                 {["mcq", "tf", "passage"].includes(currentQ.type) && (
-                  <div className="space-y-4">
-                    <p className="text-sm font-medium text-gray-600 mb-2">
+                  <div className="space-y-3 md:space-y-4">
+                    <p className="text-xs md:text-sm font-medium text-gray-600 mb-1 md:mb-2">
                       choose the best option
                     </p>
                     <RadioGroup
                       value={answers[currentQuestionIndex]?.toString() ?? ""}
                       onValueChange={(v) => handleAnswerChange(Number(v))}
-                      className="space-y-3"
+                      className="space-y-2 md:space-y-3"
                     >
                       {currentQ.options?.map((opt: any, idx: number) => {
                         const isSelected =
@@ -2605,7 +2760,7 @@ export default function ExamTakingPage() {
                           <div
                             key={idx}
                             className={cn(
-                              "flex items-center p-5 rounded-xl border-2 cursor-pointer transition-all hover:shadow-md",
+                              "flex items-center p-3 md:p-5 rounded-lg md:rounded-xl border-2 cursor-pointer transition-all hover:shadow-md",
                               isSelected
                                 ? "border-blue-500 bg-gradient-to-r from-blue-50 to-indigo-50"
                                 : "border-gray-200 hover:border-blue-300"
@@ -2620,7 +2775,7 @@ export default function ExamTakingPage() {
                             <div className="flex w-full items-center">
                               <div
                                 className={cn(
-                                  "h-12 w-12 rounded-xl flex items-center justify-center mr-4 font-bold text-lg border-2 transition-all",
+                                  "h-8 w-8 md:h-12 md:w-12 rounded-lg md:rounded-xl flex items-center justify-center mr-3 md:mr-4 font-bold text-base md:text-lg border-2 transition-all",
                                   isSelected
                                     ? "bg-gradient-to-r from-blue-600 to-indigo-600 text-white border-blue-600"
                                     : "bg-gray-100 text-gray-600 border-gray-300"
@@ -2628,19 +2783,19 @@ export default function ExamTakingPage() {
                               >
                                 {String.fromCharCode(65 + idx)}
                               </div>
-                              <div className="flex-1 font-medium text-base">
+                              <div className="flex-1 font-medium text-sm md:text-base">
                                 {renderWithMath(opt.text)}
                               </div>
                               {opt.image && (
                                 <img
                                   src={opt.image}
                                   alt="Option"
-                                  className="h-24 w-24 object-cover rounded-lg border ml-4 shadow-sm"
+                                  className="h-16 w-16 md:h-24 md:w-24 object-cover rounded-lg border ml-2 md:ml-4 shadow-sm"
                                 />
                               )}
                               {isSelected && (
-                                <div className="ml-4">
-                                  <Check className="h-7 w-7 text-green-600 bg-green-100 p-1 rounded-full" />
+                                <div className="ml-2 md:ml-4">
+                                  <Check className="h-5 w-5 md:h-7 md:w-7 text-green-600 bg-green-100 p-0.5 md:p-1 rounded-full" />
                                 </div>
                               )}
                             </div>
@@ -2651,98 +2806,87 @@ export default function ExamTakingPage() {
                   </div>
                 )}
 
-                {/* Matching UI */}
+                {/* Matching UI - Side by Side on all devices */}
                 {currentQ.type === "matching" && currentQ.matchingPairs && (
-                  <div className="space-y-6">
-                    {/* Main Container */}
+                  <div className="space-y-4 md:space-y-6">
+                    {/* Main Container - Side by Side Layout */}
                     <div className="bg-white rounded-xl border-2 border-gray-200 overflow-hidden shadow-sm">
                       <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-gray-200">
                         {/* COLUMN A - Questions */}
                         <div className="flex flex-col">
-                          <div className="p-4 border-b bg-gradient-to-r from-blue-50 to-indigo-50">
-                            <h3 className="text-center font-bold text-gray-800 uppercase tracking-wider">
+                          <div className="p-3 md:p-4 border-b bg-gradient-to-r from-blue-50 to-indigo-50">
+                            <h3 className="text-center font-bold text-gray-800 uppercase tracking-wider text-sm md:text-base">
                               Column A
                             </h3>
                           </div>
                           <div className="flex-1">
-                            {currentQ.matchingPairs.map(
-                              (pair: any, idx: number) => {
-                                const currentAnswer = getMatchingAnswer();
-                                const answerLetter = currentAnswer[idx] || "";
+                            {currentQ.matchingPairs.map((pair: any, idx: number) => {
+                              const currentAnswer = getMatchingAnswer();
+                              const answerLetter = currentAnswer[idx] || "";
 
-                                return (
-                                  <div
-                                    key={idx}
-                                    className="p-4 min-h-[90px] border-b border-gray-100 last:border-b-0 hover:bg-gray-50/50 flex items-center"
-                                  >
-                                    <div className="flex items-center gap-4 w-full">
-                                      <div className="flex items-center gap-3 flex-shrink-0">
-                                        {/* Input box for the student to type the letter */}
-                                        <MatchingAnswerInput
-                                          value={answerLetter}
-                                          onChange={(val) =>
-                                            handleMatchSelect(idx, val)
-                                          }
-                                          maxLetters={
-                                            currentQ.matchingPairs.length
-                                          }
-                                        />
-                                        {/* Question Number (1, 2, 3...) */}
-                                        <div className="w-9 h-9 rounded-full bg-blue-600 text-white font-bold flex items-center justify-center shadow-md">
-                                          {idx + 1}
-                                        </div>
+                              return (
+                                <div
+                                  key={idx}
+                                  className="p-3 md:p-4 min-h-[80px] md:min-h-[90px] border-b border-gray-100 last:border-b-0 hover:bg-gray-50/50 flex items-center"
+                                >
+                                  <div className="flex items-center gap-2 md:gap-4 w-full">
+                                    <div className="flex items-center gap-2 md:gap-3 flex-shrink-0">
+                                      <MatchingAnswerInput
+                                        value={answerLetter}
+                                        onChange={(val) => handleMatchSelect(idx, val)}
+                                        maxLetters={currentQ.matchingPairs.length}
+                                      />
+                                      <div className="w-8 h-8 md:w-9 md:h-9 rounded-full bg-blue-600 text-white font-bold flex items-center justify-center text-sm md:text-base">
+                                        {idx + 1}
                                       </div>
-                                      <div className="flex-1 min-w-0">
-                                        <div className="text-base text-gray-800 font-medium leading-relaxed">
-                                          {renderWithMath(pair.sideA)}
-                                        </div>
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                      <div className="text-sm md:text-base text-gray-800 font-medium leading-relaxed">
+                                        {renderWithMath(pair.sideA)}
                                       </div>
                                     </div>
                                   </div>
-                                );
-                              }
-                            )}
+                                </div>
+                              );
+                            })}
                           </div>
                         </div>
 
                         {/* COLUMN B - Options */}
                         <div className="flex flex-col bg-gray-50/20">
-                          <div className="p-4 border-b bg-gradient-to-r from-emerald-50 to-green-50">
-                            <h3 className="text-center font-bold text-gray-800 uppercase tracking-wider">
+                          <div className="p-3 md:p-4 border-b bg-gradient-to-r from-emerald-50 to-green-50">
+                            <h3 className="text-center font-bold text-gray-800 uppercase tracking-wider text-sm md:text-base">
                               Column B
                             </h3>
                           </div>
                           <div className="flex-1">
-                            {currentQ.matchingPairs.map(
-                              (pair: any, idx: number) => (
-                                <div
-                                  key={idx}
-                                  className="p-4 min-h-[90px] border-b border-gray-100 last:border-b-0 hover:bg-gray-50/50 flex items-center"
-                                >
-                                  <div className="flex items-start gap-4 w-full">
-                                    {/* Option Letter (A, B, C...) */}
-                                    <div className="w-9 h-9 rounded-lg bg-emerald-100 text-emerald-700 border border-emerald-200 font-bold flex items-center justify-center flex-shrink-0 shadow-sm">
-                                      {String.fromCharCode(65 + idx)}
-                                    </div>
-                                    <div className="flex-1 min-w-0">
-                                      <div className="text-base text-gray-700 leading-relaxed pt-1">
-                                        {renderWithMath(pair.sideB)}
-                                      </div>
+                            {currentQ.matchingPairs.map((pair: any, idx: number) => (
+                              <div
+                                key={idx}
+                                className="p-3 md:p-4 min-h-[80px] md:min-h-[90px] border-b border-gray-100 last:border-b-0 hover:bg-gray-50/50 flex items-center"
+                              >
+                                <div className="flex items-start gap-3 md:gap-4 w-full">
+                                  <div className="w-8 h-8 md:w-9 md:h-9 rounded-lg bg-emerald-100 text-emerald-700 border border-emerald-200 font-bold flex items-center justify-center text-sm md:text-base flex-shrink-0">
+                                    {String.fromCharCode(65 + idx)}
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="text-sm md:text-base text-gray-700 leading-relaxed pt-1">
+                                      {renderWithMath(pair.sideB)}
                                     </div>
                                   </div>
                                 </div>
-                              )
-                            )}
+                              </div>
+                            ))}
                           </div>
                         </div>
                       </div>
                     </div>
 
                     {/* Helpful Instruction Box */}
-                    <div className="bg-blue-50 p-4 rounded-lg border border-blue-200 flex gap-4 items-center">
-                      <div className="bg-blue-100 p-2 rounded-full flex-shrink-0">
+                    <div className="bg-blue-50 p-3 md:p-4 rounded-lg border border-blue-200 flex gap-3 md:gap-4 items-center">
+                      <div className="bg-blue-100 p-1.5 md:p-2 rounded-full flex-shrink-0">
                         <svg
-                          className="w-6 h-6 text-blue-600"
+                          className="w-5 h-5 md:w-6 md:h-6 text-blue-600"
                           fill="none"
                           stroke="currentColor"
                           viewBox="0 0 24 24"
@@ -2755,7 +2899,7 @@ export default function ExamTakingPage() {
                           />
                         </svg>
                       </div>
-                      <div className="text-sm text-blue-800">
+                      <div className="text-xs md:text-sm text-blue-800">
                         <span className="font-bold">Instructions:</span>{" "}
                         Carefully match each item from <strong>Column A</strong>{" "}
                         with its corresponding match in{" "}
@@ -2770,28 +2914,28 @@ export default function ExamTakingPage() {
           )}
 
           {/* Navigation Buttons */}
-          <div className="flex justify-between mt-8">
+          <div className="flex justify-between mt-6 md:mt-8">
             <Button
               variant="outline"
-              size="lg"
+              size={isMobile ? "default" : "lg"}
               onClick={() => setCurrentQuestionIndex((p) => p - 1)}
               disabled={currentQuestionIndex === 0}
-              className="px-6 py-3 border-blue-200 hover:bg-blue-50"
+              className="px-3 md:px-6 py-2 md:py-3 border-blue-200 hover:bg-blue-50 text-xs md:text-sm"
             >
-              <ChevronLeft className="mr-2 h-5 w-5" /> Previous
+              <ChevronLeft className="mr-1 md:mr-2 h-3 w-3 md:h-5 md:w-5" /> Previous
             </Button>
 
-            <div className="flex items-center gap-4">
-              <span className="text-sm text-gray-500">
+            <div className="flex items-center gap-3 md:gap-4">
+              <span className="text-xs md:text-sm text-gray-500">
                 {currentQuestionIndex + 1} of {questions.length}
               </span>
               <Button
                 onClick={() => setCurrentQuestionIndex((p) => p + 1)}
-                size="lg"
+                size={isMobile ? "default" : "lg"}
                 disabled={currentQuestionIndex === questions.length - 1}
-                className="px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
+                className="px-3 md:px-6 py-2 md:py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-xs md:text-sm"
               >
-                Next <ChevronRight className="ml-2 h-5 w-5" />
+                Next <ChevronRight className="ml-1 md:ml-2 h-3 w-3 md:h-5 md:w-5" />
               </Button>
             </div>
           </div>
@@ -2803,49 +2947,48 @@ export default function ExamTakingPage() {
         open={isConfirmModalOpen}
         onOpenChange={setIsConfirmModalOpen}
       >
-        <AlertDialogContent className="max-w-md">
+        <AlertDialogContent className="max-w-md mx-4">
           <AlertDialogHeader>
-            <div className="flex items-center gap-3 mb-2">
-              <AlertTriangle className="h-6 w-6 text-amber-600" />
-              <AlertDialogTitle className="text-xl">
+            <div className="flex items-center gap-2 md:gap-3 mb-2">
+              <AlertTriangle className="h-5 w-5 md:h-6 md:w-6 text-amber-600" />
+              <AlertDialogTitle className="text-lg md:text-xl">
                 Ready to Submit?
               </AlertDialogTitle>
             </div>
-            <AlertDialogDescription className="text-gray-600">
-              You're about to submit your exam. Make sure you've answered all
-              questions before proceeding.
+            <AlertDialogDescription className="text-gray-600 text-sm md:text-base">
+              You're about to submit your exam. Make sure you've answered all questions before proceeding.
             </AlertDialogDescription>
           </AlertDialogHeader>
 
-          <div className="py-4">
-            <div className="grid grid-cols-3 gap-3 text-center">
-              <div className="p-4 bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl border border-green-200">
-                <div className="text-3xl font-bold text-green-600">
+          <div className="py-3 md:py-4">
+            <div className="grid grid-cols-3 gap-2 md:gap-3 text-center">
+              <div className="p-3 md:p-4 bg-gradient-to-br from-green-50 to-emerald-50 rounded-lg md:rounded-xl border border-green-200">
+                <div className="text-xl md:text-3xl font-bold text-green-600">
                   {stats.answered}
                 </div>
-                <div className="text-xs text-green-800 font-medium mt-2 uppercase tracking-wider">
+                <div className="text-xs text-green-800 font-medium mt-1 md:mt-2 uppercase tracking-wider">
                   Answered
                 </div>
               </div>
-              <div className="p-4 bg-gradient-to-br from-gray-50 to-slate-50 rounded-xl border border-gray-200">
-                <div className="text-3xl font-bold text-gray-600">
+              <div className="p-3 md:p-4 bg-gradient-to-br from-gray-50 to-slate-50 rounded-lg md:rounded-xl border border-gray-200">
+                <div className="text-xl md:text-3xl font-bold text-gray-600">
                   {stats.unanswered}
                 </div>
-                <div className="text-xs text-gray-800 font-medium mt-2 uppercase tracking-wider">
+                <div className="text-xs text-gray-800 font-medium mt-1 md:mt-2 uppercase tracking-wider">
                   Unanswered
                 </div>
               </div>
-              <div className="p-4 bg-gradient-to-br from-amber-50 to-orange-50 rounded-xl border border-amber-200">
-                <div className="text-3xl font-bold text-amber-600">
+              <div className="p-3 md:p-4 bg-gradient-to-br from-amber-50 to-orange-50 rounded-lg md:rounded-xl border border-amber-200">
+                <div className="text-xl md:text-3xl font-bold text-amber-600">
                   {stats.flagged}
                 </div>
-                <div className="text-xs text-amber-800 font-medium mt-2 uppercase tracking-wider">
+                <div className="text-xs text-amber-800 font-medium mt-1 md:mt-2 uppercase tracking-wider">
                   Flagged
                 </div>
               </div>
             </div>
 
-            <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
+            <div className="mt-3 md:mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
               <p className="text-sm text-blue-800">
                 <strong>Time Remaining:</strong> {formatTime(timeLeft)}
               </p>
@@ -2857,18 +3000,18 @@ export default function ExamTakingPage() {
             </div>
           </div>
 
-          <AlertDialogFooter className="flex flex-col sm:flex-row gap-3">
-            <AlertDialogCancel className="w-full sm:w-auto">
+          <AlertDialogFooter className="flex flex-col sm:flex-row gap-2 md:gap-3">
+            <AlertDialogCancel className="w-full sm:w-auto text-sm md:text-base">
               Review More
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={handleFinalSubmit}
-              className="w-full sm:w-auto bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700"
+              className="w-full sm:w-auto bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 text-sm md:text-base"
               disabled={isSubmitting}
             >
               {isSubmitting ? (
                 <>
-                  <Spinner className="mr-2 h-4 w-4" />
+                  <Spinner className="mr-2 h-3 w-3 md:h-4 md:w-4" />
                   Submitting...
                 </>
               ) : (

@@ -13,6 +13,7 @@ create table public.admin (
   constraint admin_created_by_fkey foreign KEY (created_by) references admin (id) on delete set null
 ) TABLESPACE pg_default;
 
+
 create table public.assign_exams (
   id serial not null,
   exam_id integer not null,
@@ -35,6 +36,7 @@ create index IF not exists idx_assign_exams_teacher_student on public.assign_exa
 
 create index IF not exists idx_assign_exams_assigned_by on public.assign_exams using btree (assigned_by) TABLESPACE pg_default;
 
+
 create table public.exam_sessions (
   id uuid not null default gen_random_uuid (),
   student_id integer not null,
@@ -48,7 +50,12 @@ create table public.exam_sessions (
   score integer null default 0,
   created_at timestamp with time zone null default CURRENT_TIMESTAMP,
   updated_at timestamp with time zone null default CURRENT_TIMESTAMP,
+  security_token text null,
+  last_device_fingerprint text null,
+  device_takeover_count integer null default 0,
+  last_takeover_time timestamp with time zone null,
   constraint exam_sessions_pkey primary key (id),
+  constraint exam_sessions_security_token_key unique (security_token),
   constraint exam_sessions_exam_id_fkey foreign KEY (exam_id) references exams (id) on delete CASCADE,
   constraint exam_sessions_student_id_fkey foreign KEY (student_id) references students (id) on delete CASCADE,
   constraint exam_sessions_teacher_id_fkey foreign KEY (teacher_id) references teacher (id) on delete CASCADE,
@@ -81,6 +88,7 @@ where
   (status = 'in_progress'::text);
 
 
+
 create table public.exams (
   id serial not null,
   exam_code text not null,
@@ -108,6 +116,7 @@ create table public.exams (
   constraint exams_subject_id_fkey foreign KEY (subject_id) references subjects (id)
 ) TABLESPACE pg_default;
 
+
 create table public.grade_sections (
   id serial not null,
   grade_id integer not null,
@@ -120,6 +129,7 @@ create table public.grade_sections (
 ) TABLESPACE pg_default;
 
 create index IF not exists idx_grade_sections_grade_id on public.grade_sections using btree (grade_id) TABLESPACE pg_default;
+
 
 create table public.grade_subjects (
   id serial not null,
@@ -178,7 +188,6 @@ create table public.questions (
 
 create index IF not exists idx_questions_exam_id on public.questions using btree (exam_id) TABLESPACE pg_default;
 
-
 create table public.results (
   id serial not null,
   exam_id integer not null,
@@ -203,6 +212,32 @@ create index IF not exists idx_results_student_id on public.results using btree 
 create index IF not exists idx_results_teacher_id on public.results using btree (teacher_id) TABLESPACE pg_default;
 
 create index IF not exists idx_results_created_at on public.results using btree (created_at) TABLESPACE pg_default;
+
+
+create table public.session_security (
+  id uuid not null default gen_random_uuid (),
+  session_id uuid not null,
+  student_id integer not null,
+  device_fingerprint text not null,
+  ip_address text null,
+  user_agent text null,
+  login_time timestamp with time zone null default now(),
+  last_verified timestamp with time zone null default now(),
+  is_active boolean null default true,
+  token text not null,
+  constraint session_security_pkey primary key (id),
+  constraint session_security_session_id_device_fingerprint_key unique (session_id, device_fingerprint),
+  constraint session_security_token_key unique (token),
+  constraint session_security_session_id_fkey foreign KEY (session_id) references exam_sessions (id) on delete CASCADE,
+  constraint session_security_student_id_fkey foreign KEY (student_id) references students (id) on delete CASCADE
+) TABLESPACE pg_default;
+
+create index IF not exists idx_session_security_student on public.session_security using btree (student_id, is_active) TABLESPACE pg_default;
+
+create index IF not exists idx_session_security_fingerprint on public.session_security using btree (device_fingerprint) TABLESPACE pg_default;
+
+create index IF not exists idx_session_security_token on public.session_security using btree (token) TABLESPACE pg_default;
+
 
 create table public.student_answers (
   id serial not null,
@@ -273,7 +308,6 @@ create table public.subjects (
   )
 ) TABLESPACE pg_default;
 
-
 create table public.teacher (
   id uuid not null default gen_random_uuid (),
   username text not null,
@@ -301,6 +335,47 @@ create table public.teacher (
     )
   )
 ) TABLESPACE pg_default;
+
+
+
+create view public.active_exam_sessions_view as
+select
+  es.id,
+  es.student_id,
+  es.exam_id,
+  es.teacher_id,
+  es.status,
+  es.started_at,
+  es.submitted_at,
+  es.last_activity_at,
+  es.time_remaining,
+  es.score,
+  es.created_at,
+  es.updated_at,
+  es.security_token,
+  es.last_device_fingerprint,
+  es.device_takeover_count,
+  es.last_takeover_time,
+  ss.device_fingerprint as current_device_fingerprint,
+  ss.is_active as security_active,
+  ss.last_verified,
+  EXTRACT(
+    epoch
+    from
+      now() - es.updated_at
+  ) as seconds_since_update,
+  EXTRACT(
+    epoch
+    from
+      now() - ss.last_verified
+  ) as seconds_since_verification
+from
+  exam_sessions es
+  left join session_security ss on es.id = ss.session_id
+where
+  es.status = 'in_progress'::text
+  and ss.is_active = true;
+
 
 
 create view public.exam_session_progress_view as
@@ -357,7 +432,7 @@ from
   join grades g on g.id = s.grade_id;
 
 
-  create view public.student_aggregate_results_view as
+create view public.student_aggregate_results_view as
 select
   s.id as student_id,
   s.name as student_name,
@@ -392,7 +467,7 @@ order by
   s.name;
 
 
-  create view public.student_exam_results_view as
+create view public.student_exam_results_view as
 select
   r.id as result_id,
   r.exam_id,
