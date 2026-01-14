@@ -53,13 +53,14 @@ interface Result {
   exam_id: number
   student_id: number
   total_marks_obtained: number
-  grade: string
   comments: string
   created_at: string
   student_name: string
   student_student_id: string
   student_grade_id: number
   student_section: string
+  student_gender: string
+  student_stream: string
   exam_title: string
   exam_total_marks: number
   exam_subject_name: string
@@ -159,7 +160,7 @@ export default function IndividualExamResultsPage() {
       // Get exam IDs
       const examIds = formattedExams.map((exam) => exam.id)
 
-      // Fetch results for these exams with proper joins
+      // Fetch results for these exams with proper joins including gender and stream
       const { data: examResults, error: resultsError } = await supabase
         .from("results")
         .select(`
@@ -168,7 +169,9 @@ export default function IndividualExamResultsPage() {
             name,
             student_id,
             grade_id,
-            section
+            section,
+            gender,
+            stream
           ),
           exams!inner(
             title,
@@ -197,13 +200,14 @@ export default function IndividualExamResultsPage() {
           exam_id: result.exam_id,
           student_id: result.student_id,
           total_marks_obtained: result.total_marks_obtained,
-          grade: result.grade || calculateGrade(percentage),
           comments: result.comments || "",
           created_at: result.created_at,
           student_name: result.students?.name || "Unknown",
           student_student_id: result.students?.student_id || "Unknown",
           student_grade_id: result.students?.grade_id || 0,
           student_section: result.students?.section || "Unknown",
+          student_gender: result.students?.gender || "Unknown",
+          student_stream: result.students?.stream || "Unknown",
           exam_title: result.exams?.title || "Unknown Exam",
           exam_total_marks: result.exams?.total_marks || 0,
           exam_subject_name: result.exams?.subjects?.subject_name || "Unknown",
@@ -221,15 +225,6 @@ export default function IndividualExamResultsPage() {
       setLoading(false)
       setStatsLoading(false)
     }
-  }
-
-  const calculateGrade = (percentage: number): string => {
-    if (percentage >= 90) return "A+"
-    if (percentage >= 80) return "A"
-    if (percentage >= 70) return "B"
-    if (percentage >= 60) return "C"
-    if (percentage >= 50) return "D"
-    return "F"
   }
 
   const filteredResults = useMemo(() => {
@@ -331,7 +326,7 @@ export default function IndividualExamResultsPage() {
 
     // Create table with only required columns
     const headers = [
-      ["#", "Student ID", "Student Name", "Exam Name", "Subject", "Score", "Grade"]
+      ["#", "Student ID", "Student Name", "Exam Name", "Subject", "Score", "Gender", "Stream"]
     ]
 
     const tableData = filteredResults.map((r, i) => {
@@ -342,7 +337,8 @@ export default function IndividualExamResultsPage() {
         r.exam_title.substring(0, 25) + (r.exam_title.length > 25 ? '...' : ''),
         r.exam_subject_name,
         `${r.total_marks_obtained}/${r.exam_total_marks}`,
-        calculateGrade(r.percentage || Math.round((r.total_marks_obtained / r.exam_total_marks) * 100))
+        r.student_gender,
+        r.student_stream
       ]
     })
 
@@ -370,11 +366,12 @@ export default function IndividualExamResultsPage() {
       columnStyles: {
         0: { cellWidth: 10, halign: 'center' },
         1: { cellWidth: 25, halign: 'center' },
-        2: { cellWidth: 40, halign: 'left' },
-        3: { cellWidth: 50, halign: 'left' },
-        4: { cellWidth: 30, halign: 'left' },
+        2: { cellWidth: 35, halign: 'left' },
+        3: { cellWidth: 40, halign: 'left' },
+        4: { cellWidth: 25, halign: 'left' },
         5: { cellWidth: 20, halign: 'center' },
-        6: { cellWidth: 15, halign: 'center' }
+        6: { cellWidth: 20, halign: 'center' },
+        7: { cellWidth: 20, halign: 'center' }
       },
       margin: { left: 10, right: 10 },
       tableLineColor: [200, 200, 200],
@@ -403,7 +400,6 @@ export default function IndividualExamResultsPage() {
     }
 
     const data = filteredResults.map((r, i) => {
-      const percentage = r.percentage || Math.round((r.total_marks_obtained / r.exam_total_marks) * 100)
       return {
         "#": i + 1,
         "Student ID": r.student_student_id,
@@ -413,7 +409,8 @@ export default function IndividualExamResultsPage() {
         "Score Obtained": r.total_marks_obtained,
         "Total Marks": r.exam_total_marks,
         "Score": `${r.total_marks_obtained}/${r.exam_total_marks}`,
-        "Grade": calculateGrade(percentage)
+        "Gender": r.student_gender,
+        "Stream": r.student_stream
       }
     })
 
@@ -447,7 +444,8 @@ export default function IndividualExamResultsPage() {
       { wch: 15 },  // Score Obtained
       { wch: 12 },  // Total Marks
       { wch: 15 },  // Score
-      { wch: 8 }    // Grade
+      { wch: 12 },  // Gender
+      { wch: 12 }   // Stream
     ]
     ws['!cols'] = wscols
 
@@ -486,20 +484,33 @@ export default function IndividualExamResultsPage() {
             <th style="padding: 12px; border: 1px solid #ddd; text-align: left;">Exam Name</th>
             <th style="padding: 12px; border: 1px solid #ddd; text-align: left;">Subject</th>
             <th style="padding: 12px; border: 1px solid #ddd; text-align: center;">Score</th>
-            <th style="padding: 12px; border: 1px solid #ddd; text-align: center;">Grade</th>
+            <th style="padding: 12px; border: 1px solid #ddd; text-align: center;">Gender</th>
+            <th style="padding: 12px; border: 1px solid #ddd; text-align: center;">Stream</th>
           </tr>
         </thead>
         <tbody>`
 
     const tableBody = filteredResults
       .map((r, i) => {
-        const percentage = r.percentage || Math.round((r.total_marks_obtained / r.exam_total_marks) * 100)
-        const grade = calculateGrade(percentage)
-        const gradeColor = grade === 'A+' ? '#10B981' : 
-                          grade === 'A' ? '#3B82F6' : 
-                          grade === 'B' ? '#8B5CF6' : 
-                          grade === 'C' ? '#F59E0B' : 
-                          grade === 'D' ? '#EF4444' : '#6B7280'
+        const getGenderColor = (gender: string) => {
+          switch(gender.toLowerCase()) {
+            case 'male': return '#3B82F6'
+            case 'female': return '#EC4899'
+            default: return '#6B7280'
+          }
+        }
+
+        const getStreamColor = (stream: string) => {
+          switch(stream) {
+            case 'Natural': return '#10B981'
+            case 'Social': return '#8B5CF6'
+            case 'Common': return '#F59E0B'
+            default: return '#6B7280'
+          }
+        }
+        
+        const genderColor = getGenderColor(r.student_gender)
+        const streamColor = getStreamColor(r.student_stream)
         
         return `
           <tr style="${i % 2 === 0 ? 'background-color: #F8FAFC;' : 'background-color: #FFFFFF;'}">
@@ -512,8 +523,13 @@ export default function IndividualExamResultsPage() {
               ${r.total_marks_obtained}/${r.exam_total_marks}
             </td>
             <td style="padding: 10px; border: 1px solid #E5E7EB; text-align: center;">
-              <span style="color: ${gradeColor}; font-weight: bold; padding: 4px 8px; border-radius: 4px; background-color: ${gradeColor}15;">
-                ${grade}
+              <span style="color: ${genderColor}; font-weight: bold; padding: 4px 8px; border-radius: 4px; background-color: ${genderColor}15;">
+                ${r.student_gender}
+              </span>
+            </td>
+            <td style="padding: 10px; border: 1px solid #E5E7EB; text-align: center;">
+              <span style="color: ${streamColor}; font-weight: bold; padding: 4px 8px; border-radius: 4px; background-color: ${streamColor}15;">
+                ${r.student_stream || 'N/A'}
               </span>
             </td>
           </tr>`
@@ -869,21 +885,28 @@ export default function IndividualExamResultsPage() {
                       Score
                     </th>
                     <th className="min-w-[80px] text-xs font-medium text-center p-4 border border-gray-200">
-                      Grade
+                      Gender
+                    </th>
+                    <th className="min-w-[80px] text-xs font-medium text-center p-4 border border-gray-200">
+                      Stream
                     </th>
                   </tr>
                 </thead>
                 <tbody>
                   {paginatedResults.map((result, index) => {
-                    const percentage = result.percentage || Math.round((result.total_marks_obtained / result.exam_total_marks) * 100)
-                    const grade = calculateGrade(percentage)
-                    const getGradeColor = (grade: string) => {
-                      switch(grade) {
-                        case 'A+': return 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                        case 'A': return 'bg-blue-50 text-blue-700 border-blue-200'
-                        case 'B': return 'bg-violet-50 text-violet-700 border-violet-200'
-                        case 'C': return 'bg-amber-50 text-amber-700 border-amber-200'
-                        case 'D': return 'bg-red-50 text-red-700 border-red-200'
+                    const getGenderColor = (gender: string) => {
+                      switch(gender.toLowerCase()) {
+                        case 'male': return 'bg-blue-50 text-blue-700 border-blue-200'
+                        case 'female': return 'bg-pink-50 text-pink-700 border-pink-200'
+                        default: return 'bg-gray-50 text-gray-700 border-gray-200'
+                      }
+                    }
+
+                    const getStreamColor = (stream: string) => {
+                      switch(stream) {
+                        case 'Natural': return 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                        case 'Social': return 'bg-violet-50 text-violet-700 border-violet-200'
+                        case 'Common': return 'bg-amber-50 text-amber-700 border-amber-200'
                         default: return 'bg-gray-50 text-gray-700 border-gray-200'
                       }
                     }
@@ -896,23 +919,28 @@ export default function IndividualExamResultsPage() {
                         <td className="p-4 text-sm font-mono font-medium">
                           {result.student_student_id}
                         </td>
-                        <td className="p-4 text-sm font-medium">
+                        <td className="p-4 text-sm font-medium truncate max-w-[150px]" title={result.student_name}>
                           {result.student_name}
                         </td>
                         <td className="p-4 text-sm">
-                          <div className="truncate max-w-[200px]" title={result.exam_title}>
+                          <div className="truncate max-w-[180px]" title={result.exam_title}>
                             {result.exam_title}
                           </div>
                         </td>
-                        <td className="p-4 text-sm">
+                        <td className="p-4 text-sm truncate max-w-[100px]" title={result.exam_subject_name}>
                           {result.exam_subject_name}
                         </td>
                         <td className="p-4 text-sm text-center font-bold">
                           {result.total_marks_obtained}/{result.exam_total_marks}
                         </td>
                         <td className="p-4 text-sm text-center">
-                          <Badge className={`${getGradeColor(grade)} text-xs font-bold px-3 py-1`}>
-                            {grade}
+                          <Badge className={`${getGenderColor(result.student_gender)} text-xs font-bold px-3 py-1 truncate max-w-[80px]`}>
+                            {result.student_gender}
+                          </Badge>
+                        </td>
+                        <td className="p-4 text-sm text-center">
+                          <Badge className={`${getStreamColor(result.student_stream)} text-xs font-bold px-3 py-1 truncate max-w-[80px]`}>
+                            {result.student_stream || 'N/A'}
                           </Badge>
                         </td>
                       </tr>

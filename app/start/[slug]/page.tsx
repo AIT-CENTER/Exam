@@ -105,19 +105,19 @@ const getBrowserFingerprint = async (): Promise<string> => {
       new Date().getTimezoneOffset(),
       !!navigator.cookieEnabled,
       !!navigator.doNotTrack,
-      navigator.hardwareConcurrency || 'unknown',
+      navigator.hardwareConcurrency || "unknown",
       navigator.platform,
     ];
-    
-    const fingerprintString = components.join('|');
-    
+
+    const fingerprintString = components.join("|");
+
     let hash = 0;
     for (let i = 0; i < fingerprintString.length; i++) {
       const char = fingerprintString.charCodeAt(i);
-      hash = ((hash << 5) - hash) + char;
+      hash = (hash << 5) - hash + char;
       hash = hash & hash;
     }
-    
+
     return `device_${Math.abs(hash).toString(16).substring(0, 16)}`;
   } catch (error) {
     return `device_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -156,7 +156,7 @@ class EnhancedSessionMonitor {
   async start() {
     // Send immediate heartbeat to claim session
     await this.sendHeartbeat(true);
-    
+
     // Start heartbeat every 3 seconds
     this.heartbeatInterval = setInterval(async () => {
       await this.sendHeartbeat();
@@ -180,49 +180,52 @@ class EnhancedSessionMonitor {
 
     try {
       this.lastHeartbeatTime = Date.now();
-      
+
       // Update both tables atomically
       const updates = [
         supabase
-          .from('exam_sessions')
+          .from("exam_sessions")
           .update({
             last_activity_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
             time_remaining: this.getTimeRemainingCallback?.(),
           })
-          .eq('id', this.sessionId)
-          .eq('security_token', this.securityToken),
+          .eq("id", this.sessionId)
+          .eq("security_token", this.securityToken),
 
         supabase
-          .from('session_security')
+          .from("session_security")
           .update({
             last_verified: new Date().toISOString(),
             device_fingerprint: this.deviceFingerprint,
-            is_active: true
+            is_active: true,
           })
-          .eq('session_id', this.sessionId)
-          .eq('token', this.securityToken)
+          .eq("session_id", this.sessionId)
+          .eq("token", this.securityToken),
       ];
 
       const results = await Promise.all(updates);
-      
+
       // Check for errors
-      const hasError = results.some(result => result.error);
+      const hasError = results.some((result) => result.error);
       if (hasError) {
         throw new Error("Heartbeat update failed");
       }
 
       this.heartbeatFailedCount = 0;
-      
+
       if (isInitial) {
-        console.log("Initial heartbeat sent, session claimed by device:", this.deviceFingerprint);
+        console.log(
+          "Initial heartbeat sent, session claimed by device:",
+          this.deviceFingerprint
+        );
       }
     } catch (error) {
-      console.error('Heartbeat failed:', error);
+      console.error("Heartbeat failed:", error);
       this.heartbeatFailedCount++;
-      
+
       if (this.heartbeatFailedCount >= 3) {
-        this.terminateSession('Connection lost. Multiple heartbeat failures.');
+        this.terminateSession("Connection lost. Multiple heartbeat failures.");
       }
     }
   }
@@ -233,26 +236,28 @@ class EnhancedSessionMonitor {
     try {
       // Check if this device still owns the session
       const { data: security, error } = await supabase
-        .from('session_security')
-        .select('device_fingerprint, is_active, last_verified')
-        .eq('session_id', this.sessionId)
-        .eq('token', this.securityToken)
+        .from("session_security")
+        .select("device_fingerprint, is_active, last_verified")
+        .eq("session_id", this.sessionId)
+        .eq("token", this.securityToken)
         .single();
 
       if (error || !security) {
-        this.terminateSession('Security record not found or invalid.');
+        this.terminateSession("Security record not found or invalid.");
         return;
       }
 
       if (!security.is_active) {
-        this.terminateSession('Session deactivated by system.');
+        this.terminateSession("Session deactivated by system.");
         return;
       }
 
       // Check if device fingerprint matches
       if (security.device_fingerprint !== this.deviceFingerprint) {
         this.deviceChanged = true;
-        this.terminateSession('Device changed. Session taken over by another device.');
+        this.terminateSession(
+          "Device changed. Session taken over by another device."
+        );
         return;
       }
 
@@ -260,13 +265,13 @@ class EnhancedSessionMonitor {
       const lastVerified = new Date(security.last_verified);
       const now = new Date();
       const diffInSeconds = (now.getTime() - lastVerified.getTime()) / 1000;
-      
+
       if (diffInSeconds > 15) {
         // Session might have issues, try to reclaim
         await this.reclaimSession();
       }
     } catch (error) {
-      console.error('Device ownership check error:', error);
+      console.error("Device ownership check error:", error);
     }
   }
 
@@ -275,57 +280,59 @@ class EnhancedSessionMonitor {
 
     try {
       const { data: session, error } = await supabase
-        .from('exam_sessions')
-        .select('status, security_token')
-        .eq('id', this.sessionId)
+        .from("exam_sessions")
+        .select("status, security_token")
+        .eq("id", this.sessionId)
         .single();
 
       if (error || !session) {
-        this.terminateSession('Session not found in database.');
+        this.terminateSession("Session not found in database.");
         return;
       }
 
-      if (session.status !== 'in_progress') {
+      if (session.status !== "in_progress") {
         this.terminateSession(`Exam session ${session.status}.`);
         return;
       }
 
       if (session.security_token !== this.securityToken) {
-        this.terminateSession('Security token invalid. Session may have been taken over.');
+        this.terminateSession(
+          "Security token invalid. Session may have been taken over."
+        );
         return;
       }
     } catch (error) {
-      console.error('Session status check error:', error);
+      console.error("Session status check error:", error);
     }
   }
 
   private async reclaimSession() {
     try {
       await supabase
-        .from('session_security')
+        .from("session_security")
         .update({
           device_fingerprint: this.deviceFingerprint,
           last_verified: new Date().toISOString(),
-          is_active: true
+          is_active: true,
         })
-        .eq('session_id', this.sessionId)
-        .eq('token', this.securityToken);
-      
+        .eq("session_id", this.sessionId)
+        .eq("token", this.securityToken);
+
       console.log("Session reclaimed by device:", this.deviceFingerprint);
     } catch (error) {
-      console.error('Failed to reclaim session:', error);
+      console.error("Failed to reclaim session:", error);
     }
   }
 
   private terminateSession(reason: string) {
     if (!this.isActive) return;
-    
+
     this.isActive = false;
     this.stop();
-    
+
     console.log("Session terminated:", reason);
     this.onSessionTerminated(reason);
-    
+
     // Small delay before redirecting
     setTimeout(() => {
       this.onRedirectHome();
@@ -349,7 +356,7 @@ class EnhancedSessionMonitor {
 
   // Callback to get current time remaining
   private getTimeRemainingCallback: (() => number) | null = null;
-  
+
   setTimeRemainingCallback(callback: () => number) {
     this.getTimeRemainingCallback = callback;
   }
@@ -671,7 +678,9 @@ const ModernPassageDisplay = ({
         <div className="mt-2 text-center">
           <div className="inline-flex items-center gap-1 text-xs md:text-sm text-blue-600 bg-blue-50 px-2 py-1 md:px-3 md:py-1 rounded-full">
             <ScrollText className="h-3 w-3" />
-            <span className="hidden sm:inline">Click "Expand" to read full passage</span>
+            <span className="hidden sm:inline">
+              Click "Expand" to read full passage
+            </span>
             <span className="sm:hidden">Tap to expand passage</span>
           </div>
         </div>
@@ -693,7 +702,8 @@ function FullscreenWarningModal({ onRetry }: { onRetry: () => void }) {
           Fullscreen Required
         </h2>
         <p className="text-gray-600 mb-6 text-sm md:text-base">
-          Exam setting requires fullscreen mode. Please enter fullscreen to continue.
+          Exam setting requires fullscreen mode. Please enter fullscreen to
+          continue.
         </p>
         <Button
           onClick={onRetry}
@@ -706,10 +716,10 @@ function FullscreenWarningModal({ onRetry }: { onRetry: () => void }) {
   );
 }
 
-function SessionTerminatedModal({ 
+function SessionTerminatedModal({
   onClose,
-  reason = "Session terminated due to security violation"
-}: { 
+  reason = "Session terminated due to security violation",
+}: {
   onClose: () => void;
   reason?: string;
 }) {
@@ -754,7 +764,9 @@ function PassageModal({
             <div className="flex items-center gap-2 md:gap-3">
               <BookText className="h-5 w-5 md:h-6 md:w-6" />
               <div>
-                <DialogTitle className="text-lg md:text-xl">Reading Passage</DialogTitle>
+                <DialogTitle className="text-lg md:text-xl">
+                  Reading Passage
+                </DialogTitle>
                 <DialogDescription className="text-blue-100">
                   For Question {questionNumber}
                 </DialogDescription>
@@ -803,7 +815,7 @@ const FloatingMobileNavBar = ({
   isOpen: boolean;
   setIsOpen: (open: boolean) => void;
 }) => {
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
 
   return (
     <>
@@ -817,8 +829,11 @@ const FloatingMobileNavBar = ({
 
       {/* Navigation Panel */}
       {isOpen && (
-        <div className="fixed inset-0 z-40 bg-black/50" onClick={() => setIsOpen(false)}>
-          <div 
+        <div
+          className="fixed inset-0 z-40 bg-black/50"
+          onClick={() => setIsOpen(false)}
+        >
+          <div
             className="absolute bottom-0 left-0 right-0 bg-white rounded-t-3xl shadow-2xl max-h-[80vh] overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
@@ -826,37 +841,51 @@ const FloatingMobileNavBar = ({
             <div className="p-4 border-b bg-gradient-to-r from-blue-600 to-indigo-600 text-white">
               <div className="flex items-center justify-between">
                 <h3 className="font-bold text-lg">Question Navigator</h3>
-                <button 
+                <button
                   onClick={() => setIsOpen(false)}
                   className="text-white hover:text-gray-200"
                 >
                   <X className="h-5 w-5" />
                 </button>
               </div>
-              
+
               {/* Stats Bar */}
               <div className="flex items-center justify-between mt-3 text-sm">
                 <div className="flex items-center gap-4">
                   <div className="flex items-center gap-1">
                     <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                    <span>Answered: {questions.filter((_, i) => true).length}</span>
+                    <span>
+                      Answered: {questions.filter((_, i) => true).length}
+                    </span>
                   </div>
                   <div className="flex items-center gap-1">
                     <div className="w-2 h-2 rounded-full bg-gray-400"></div>
-                    <span>Unanswered: {questions.length - questions.filter((_, i) => true).length}</span>
+                    <span>
+                      Unanswered:{" "}
+                      {questions.length -
+                        questions.filter((_, i) => true).length}
+                    </span>
                   </div>
                 </div>
-                
+
                 <div className="flex gap-2">
                   <button
-                    onClick={() => setViewMode('grid')}
-                    className={`px-3 py-1 rounded-full text-xs ${viewMode === 'grid' ? 'bg-white text-blue-600' : 'bg-blue-500/30 text-white'}`}
+                    onClick={() => setViewMode("grid")}
+                    className={`px-3 py-1 rounded-full text-xs ${
+                      viewMode === "grid"
+                        ? "bg-white text-blue-600"
+                        : "bg-blue-500/30 text-white"
+                    }`}
                   >
                     Grid
                   </button>
                   <button
-                    onClick={() => setViewMode('list')}
-                    className={`px-3 py-1 rounded-full text-xs ${viewMode === 'list' ? 'bg-white text-blue-600' : 'bg-blue-500/30 text-white'}`}
+                    onClick={() => setViewMode("list")}
+                    className={`px-3 py-1 rounded-full text-xs ${
+                      viewMode === "list"
+                        ? "bg-white text-blue-600"
+                        : "bg-blue-500/30 text-white"
+                    }`}
                   >
                     List
                   </button>
@@ -866,7 +895,7 @@ const FloatingMobileNavBar = ({
 
             {/* Questions Grid/List */}
             <div className="p-4 overflow-y-auto max-h-[60vh]">
-              {viewMode === 'grid' ? (
+              {viewMode === "grid" ? (
                 <div className="grid grid-cols-5 gap-2">
                   {questions.map((_, i) => {
                     const isAnswered = true;
@@ -922,14 +951,16 @@ const FloatingMobileNavBar = ({
                         )}
                       >
                         <div className="flex items-center gap-3">
-                          <div className={cn(
-                            "h-8 w-8 rounded-full flex items-center justify-center font-medium",
-                            isCurrent 
-                              ? "bg-blue-600 text-white"
-                              : isAnswered
-                              ? "bg-green-500 text-white"
-                              : "bg-gray-400 text-white"
-                          )}>
+                          <div
+                            className={cn(
+                              "h-8 w-8 rounded-full flex items-center justify-center font-medium",
+                              isCurrent
+                                ? "bg-blue-600 text-white"
+                                : isAnswered
+                                ? "bg-green-500 text-white"
+                                : "bg-gray-400 text-white"
+                            )}
+                          >
                             {i + 1}
                           </div>
                           <span className="font-medium">Question {i + 1}</span>
@@ -937,10 +968,14 @@ const FloatingMobileNavBar = ({
                             <Flag className="h-4 w-4 text-amber-500" />
                           )}
                         </div>
-                        <div className={cn(
-                          "text-xs px-2 py-1 rounded-full",
-                          isAnswered ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-800"
-                        )}>
+                        <div
+                          className={cn(
+                            "text-xs px-2 py-1 rounded-full",
+                            isAnswered
+                              ? "bg-green-100 text-green-800"
+                              : "bg-gray-100 text-gray-800"
+                          )}
+                        >
                           {isAnswered ? "Answered" : "Not answered"}
                         </div>
                       </button>
@@ -964,7 +999,9 @@ const FloatingMobileNavBar = ({
               </button>
               <button
                 onClick={() => {
-                  onQuestionSelect(Math.min(questions.length - 1, currentQuestionIndex + 1));
+                  onQuestionSelect(
+                    Math.min(questions.length - 1, currentQuestionIndex + 1)
+                  );
                   setIsOpen(false);
                 }}
                 disabled={currentQuestionIndex === questions.length - 1}
@@ -1004,7 +1041,8 @@ export default function ExamTakingPage() {
   const [ipAddress, setIpAddress] = useState<string>("");
   const [securityToken, setSecurityToken] = useState<string>("");
   const [securityInitialized, setSecurityInitialized] = useState(false);
-  const [sessionMonitor, setSessionMonitor] = useState<EnhancedSessionMonitor | null>(null);
+  const [sessionMonitor, setSessionMonitor] =
+    useState<EnhancedSessionMonitor | null>(null);
 
   // Timer States
   const [timeLeft, setTimeLeft] = useState(0);
@@ -1027,7 +1065,9 @@ export default function ExamTakingPage() {
   const [passageExpanded, setPassageExpanded] = useState(false);
   const [showSessionTerminated, setShowSessionTerminated] = useState(false);
   const [terminationReason, setTerminationReason] = useState("");
-  const [connectionStatus, setConnectionStatus] = useState<"connected" | "disconnected" | "poor">("connected");
+  const [connectionStatus, setConnectionStatus] = useState<
+    "connected" | "disconnected" | "poor"
+  >("connected");
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   // Refs
@@ -1062,16 +1102,16 @@ export default function ExamTakingPage() {
       try {
         const fingerprint = await getBrowserFingerprint();
         setDeviceFingerprint(fingerprint);
-        
+
         // Check stored fingerprint (from login)
-        const storedFingerprint = localStorage.getItem('device_fingerprint');
-        const storedToken = localStorage.getItem('security_token');
-        
+        const storedFingerprint = localStorage.getItem("device_fingerprint");
+        const storedToken = localStorage.getItem("security_token");
+
         if (storedFingerprint && storedToken) {
           setSecurityToken(storedToken);
           securityTokenRef.current = storedToken;
         }
-        
+
         setSecurityInitialized(true);
       } catch (error) {
         console.error("Failed to initialize security:", error);
@@ -1084,26 +1124,31 @@ export default function ExamTakingPage() {
 
   // Initialize Session Monitor
   useEffect(() => {
-    if (sessionId && securityToken && deviceFingerprint && examStatus === 'in-progress') {
+    if (
+      sessionId &&
+      securityToken &&
+      deviceFingerprint &&
+      examStatus === "in-progress"
+    ) {
       const monitor = new EnhancedSessionMonitor(
         sessionId,
         securityToken,
         deviceFingerprint,
         handleSessionInvalidation,
         () => {
-          router.push('/');
+          router.push("/");
         }
       );
-      
+
       // Set time remaining callback
       monitor.setTimeRemainingCallback(() => timeLeftRef.current);
-      
+
       monitor.start();
       sessionMonitorRef.current = monitor;
       setSessionMonitor(monitor);
-      
+
       console.log("Session monitor initialized for device:", deviceFingerprint);
-      
+
       return () => {
         if (sessionMonitorRef.current) {
           sessionMonitorRef.current.stop();
@@ -1117,19 +1162,19 @@ export default function ExamTakingPage() {
   const handleSessionInvalidation = async (reason: string) => {
     setTerminationReason(reason);
     setShowSessionTerminated(true);
-    setExamStatus('terminated');
-    
+    setExamStatus("terminated");
+
     // Clean up
     if (sessionMonitorRef.current) {
       sessionMonitorRef.current.stop();
     }
-    
+
     // Stop timer
     if (timerIntervalRef.current) {
       clearInterval(timerIntervalRef.current);
       timerIntervalRef.current = null;
     }
-    
+
     // Exit fullscreen if active
     if (document.fullscreenElement) {
       try {
@@ -1138,43 +1183,43 @@ export default function ExamTakingPage() {
         console.log("Fullscreen exit failed:", err);
       }
     }
-    
+
     // Clear session data
-    localStorage.removeItem('examSession');
-    localStorage.removeItem('security_token');
+    localStorage.removeItem("examSession");
+    localStorage.removeItem("security_token");
   };
 
   // Check device ownership on load
   const checkDeviceOwnership = async (sessionId: string, token: string) => {
     try {
       const { data: security, error } = await supabase
-        .from('session_security')
-        .select('device_fingerprint, is_active')
-        .eq('session_id', sessionId)
-        .eq('token', token)
+        .from("session_security")
+        .select("device_fingerprint, is_active")
+        .eq("session_id", sessionId)
+        .eq("token", token)
         .single();
 
       if (error || !security) {
-        return { valid: false, reason: 'Security record not found' };
+        return { valid: false, reason: "Security record not found" };
       }
 
       if (!security.is_active) {
-        return { valid: false, reason: 'Session is not active' };
+        return { valid: false, reason: "Session is not active" };
       }
 
       // Check if device fingerprint matches
-      const storedFingerprint = localStorage.getItem('device_fingerprint');
+      const storedFingerprint = localStorage.getItem("device_fingerprint");
       if (security.device_fingerprint !== storedFingerprint) {
-        return { 
-          valid: false, 
-          reason: 'Device mismatch. This session belongs to another device.' 
+        return {
+          valid: false,
+          reason: "Device mismatch. This session belongs to another device.",
         };
       }
 
       return { valid: true };
     } catch (error) {
-      console.error('Device ownership check error:', error);
-      return { valid: false, reason: 'Check failed' };
+      console.error("Device ownership check error:", error);
+      return { valid: false, reason: "Check failed" };
     }
   };
 
@@ -1343,7 +1388,9 @@ export default function ExamTakingPage() {
         });
 
         // Create unique seed for this student-exam combination
-        const shuffleSeed = `${student.id}-${exam.id}-${exam.exam_code}-${Date.now()}`;
+        const shuffleSeed = `${student.id}-${exam.id}-${
+          exam.exam_code
+        }-${Date.now()}`;
         let finalQuestions = processedQuestions;
 
         // SHUFFLE QUESTIONS if enabled in exam settings
@@ -1422,7 +1469,7 @@ export default function ExamTakingPage() {
         // Check for existing session (resume or new)
         let activeSession = null;
         let sessionToken = tokenParam;
-        
+
         // If session ID is provided in URL, try to resume that specific session
         if (sessionParam) {
           const { data: session } = await supabase
@@ -1435,7 +1482,7 @@ export default function ExamTakingPage() {
             .single();
 
           activeSession = session;
-          
+
           if (activeSession && !sessionToken) {
             sessionToken = activeSession.security_token;
           }
@@ -1448,10 +1495,11 @@ export default function ExamTakingPage() {
             .eq("exam_id", exam.id)
             .eq("status", "in_progress");
 
-          activeSession = activeSessions && activeSessions.length > 0
-            ? activeSessions[0]
-            : null;
-            
+          activeSession =
+            activeSessions && activeSessions.length > 0
+              ? activeSessions[0]
+              : null;
+
           if (activeSession && !sessionToken) {
             sessionToken = activeSession.security_token;
           }
@@ -1467,7 +1515,10 @@ export default function ExamTakingPage() {
 
           // Validate device ownership
           if (sessionToken) {
-            const deviceCheck = await checkDeviceOwnership(activeSession.id, sessionToken);
+            const deviceCheck = await checkDeviceOwnership(
+              activeSession.id,
+              sessionToken
+            );
             if (!deviceCheck.valid) {
               toast.error(deviceCheck.reason || "Device validation failed");
               router.push("/");
@@ -1479,7 +1530,7 @@ export default function ExamTakingPage() {
           if (sessionToken) {
             setSecurityToken(sessionToken);
             securityTokenRef.current = sessionToken;
-            localStorage.setItem('security_token', sessionToken);
+            localStorage.setItem("security_token", sessionToken);
           }
 
           // Resume existing session
@@ -1703,7 +1754,7 @@ export default function ExamTakingPage() {
   // --- Submit Function (used by both manual and auto-submit) ---
   const submitExam = async (isAutoSubmit = false) => {
     if (isSubmitting) return;
-    
+
     setIsSubmitting(true);
     try {
       // Get current data from refs to ensure we have latest
@@ -1714,25 +1765,35 @@ export default function ExamTakingPage() {
       const currentSessionId = sessionIdRef.current;
       const currentSecurityToken = securityTokenRef.current;
 
-      if (!currentQuestions || !currentAnswers || !currentExamData || !currentStudentInfo || !currentSessionId || !currentSecurityToken) {
+      if (
+        !currentQuestions ||
+        !currentAnswers ||
+        !currentExamData ||
+        !currentStudentInfo ||
+        !currentSessionId ||
+        !currentSecurityToken
+      ) {
         console.error("Missing data for submission");
         toast.error("Cannot submit: missing exam data");
         return;
       }
 
       // Validate session before submission
-      if (sessionMonitorRef.current && !sessionMonitorRef.current.isSessionActive()) {
+      if (
+        sessionMonitorRef.current &&
+        !sessionMonitorRef.current.isSessionActive()
+      ) {
         toast.error("Session is no longer active");
         return;
       }
 
       // Calculate score using current data
       const result = calculateScore(currentQuestions, currentAnswers);
-      
+
       if (isAutoSubmit) {
         console.log("Auto-submitting with score:", result.totalMarks);
       }
-      
+
       setSubmissionResult(result);
 
       // Stop session monitor first
@@ -1760,8 +1821,8 @@ export default function ExamTakingPage() {
       await supabase
         .from("session_security")
         .update({ is_active: false })
-        .eq('session_id', currentSessionId)
-        .eq('token', currentSecurityToken);
+        .eq("session_id", currentSessionId)
+        .eq("token", currentSecurityToken);
 
       // Save Results (NO GRADE COLUMN)
       const { error: resultError } = await supabase.from("results").upsert(
@@ -1782,28 +1843,30 @@ export default function ExamTakingPage() {
       }
 
       // Update question answers with correctness
-      const updatePromises = result.questionResults.map(async (questionResult) => {
-        const q = currentQuestions[questionResult.questionIndex];
-        const studentAns = currentAnswers[questionResult.questionIndex];
+      const updatePromises = result.questionResults.map(
+        async (questionResult) => {
+          const q = currentQuestions[questionResult.questionIndex];
+          const studentAns = currentAnswers[questionResult.questionIndex];
 
-        if (currentSessionId) {
-          let isCorrect = false;
+          if (currentSessionId) {
+            let isCorrect = false;
 
-          if (q.type === "mcq" || q.type === "tf" || q.type === "passage") {
-            isCorrect = studentAns === q.correct_option_id;
-          } else if (q.type === "matching") {
-            isCorrect = questionResult.isFullyCorrect;
-          } else if (q.type === "blank") {
-            isCorrect = questionResult.isFullyCorrect;
+            if (q.type === "mcq" || q.type === "tf" || q.type === "passage") {
+              isCorrect = studentAns === q.correct_option_id;
+            } else if (q.type === "matching") {
+              isCorrect = questionResult.isFullyCorrect;
+            } else if (q.type === "blank") {
+              isCorrect = questionResult.isFullyCorrect;
+            }
+
+            return supabase
+              .from("student_answers")
+              .update({ is_correct: isCorrect })
+              .eq("session_id", currentSessionId)
+              .eq("question_id", q.id);
           }
-
-          return supabase
-            .from("student_answers")
-            .update({ is_correct: isCorrect })
-            .eq("session_id", currentSessionId)
-            .eq("question_id", q.id);
         }
-      });
+      );
 
       await Promise.all(updatePromises);
 
@@ -1820,15 +1883,15 @@ export default function ExamTakingPage() {
       }
 
       // Clear session data
-      localStorage.removeItem('examSession');
-      localStorage.removeItem('security_token');
+      localStorage.removeItem("examSession");
+      localStorage.removeItem("security_token");
 
       if (isAutoSubmit) {
         toast.info("Exam auto-submitted due to time expiration");
       } else {
         toast.success("Exam submitted successfully!");
       }
-      
+
       console.log("Submission successful. Score:", result.totalMarks);
     } catch (e) {
       console.error("Error submitting exam:", e);
@@ -1848,22 +1911,22 @@ export default function ExamTakingPage() {
       timerIntervalRef.current = setInterval(() => {
         setTimeLeft((prev) => {
           const newValue = Math.max(0, prev - 1);
-          
+
           // Check for auto-submit when time reaches 0
           if (newValue === 0 && !autoSubmitTriggeredRef.current) {
             autoSubmitTriggeredRef.current = true;
-            
+
             // Clear the timer interval immediately
             if (timerIntervalRef.current) {
               clearInterval(timerIntervalRef.current);
               timerIntervalRef.current = null;
             }
-            
+
             // Auto-submit with current data
             console.log("Time's up! Auto-submitting...");
             submitExam(true);
           }
-          
+
           return newValue;
         });
       }, 1000);
@@ -1904,12 +1967,12 @@ export default function ExamTakingPage() {
       setConnectionStatus("disconnected");
     };
 
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
 
     return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
     };
   }, []);
 
@@ -1920,7 +1983,7 @@ export default function ExamTakingPage() {
       // Generate security token
       const newSecurityToken = [...Array(32)]
         .map(() => Math.random().toString(36)[2])
-        .join('');
+        .join("");
 
       const { data: newSession, error } = await supabase
         .from("exam_sessions")
@@ -1931,7 +1994,7 @@ export default function ExamTakingPage() {
           status: "in_progress",
           time_remaining: examDurationRef.current,
           security_token: newSecurityToken,
-          device_takeover_count: 0
+          device_takeover_count: 0,
         })
         .select()
         .single();
@@ -1945,11 +2008,11 @@ export default function ExamTakingPage() {
           session_id: newSession.id,
           student_id: studentInfo.id,
           device_fingerprint: deviceFingerprint,
-          ip_address: ipAddress || 'unknown',
+          ip_address: ipAddress || "unknown",
           user_agent: navigator.userAgent,
           token: newSecurityToken,
           is_active: true,
-          last_verified: new Date().toISOString()
+          last_verified: new Date().toISOString(),
         });
 
       if (securityError) {
@@ -1961,7 +2024,7 @@ export default function ExamTakingPage() {
       // Store security token
       setSecurityToken(newSecurityToken);
       securityTokenRef.current = newSecurityToken;
-      localStorage.setItem('security_token', newSecurityToken);
+      localStorage.setItem("security_token", newSecurityToken);
 
       setSessionId(newSession.id);
       sessionIdRef.current = newSession.id;
@@ -1984,7 +2047,10 @@ export default function ExamTakingPage() {
 
   const handleAnswerChange = async (val: any) => {
     // Check session validity
-    if (sessionMonitorRef.current && !sessionMonitorRef.current.isSessionActive()) {
+    if (
+      sessionMonitorRef.current &&
+      !sessionMonitorRef.current.isSessionActive()
+    ) {
       handleSessionInvalidation("Session no longer active");
       return;
     }
@@ -2030,7 +2096,10 @@ export default function ExamTakingPage() {
 
   const handleToggleFlag = async () => {
     // Check session validity
-    if (sessionMonitorRef.current && !sessionMonitorRef.current.isSessionActive()) {
+    if (
+      sessionMonitorRef.current &&
+      !sessionMonitorRef.current.isSessionActive()
+    ) {
       handleSessionInvalidation("Session no longer active");
       return;
     }
@@ -2061,7 +2130,10 @@ export default function ExamTakingPage() {
 
   const handleFinalSubmit = async () => {
     // Validate session before submission
-    if (sessionMonitorRef.current && !sessionMonitorRef.current.isSessionActive()) {
+    if (
+      sessionMonitorRef.current &&
+      !sessionMonitorRef.current.isSessionActive()
+    ) {
       toast.error("Session is no longer active");
       return;
     }
@@ -2166,13 +2238,17 @@ export default function ExamTakingPage() {
           <CardContent className="space-y-6 p-4 md:p-8">
             <div className="grid grid-cols-2 gap-4 text-center">
               <div className="p-3 md:p-4 bg-blue-50 rounded-lg border border-blue-100">
-                <p className="text-xs md:text-sm font-medium text-blue-600">Duration</p>
+                <p className="text-xs md:text-sm font-medium text-blue-600">
+                  Duration
+                </p>
                 <p className="text-lg md:text-2xl font-bold text-gray-900">
                   {examData?.duration} Min
                 </p>
               </div>
               <div className="p-3 md:p-4 bg-indigo-50 rounded-lg border border-indigo-100">
-                <p className="text-xs md:text-sm font-medium text-indigo-600">Questions</p>
+                <p className="text-xs md:text-sm font-medium text-indigo-600">
+                  Questions
+                </p>
                 <p className="text-lg md:text-2xl font-bold text-gray-900">
                   {questions.length}
                 </p>
@@ -2183,23 +2259,30 @@ export default function ExamTakingPage() {
               <div className="text-gray-600 bg-amber-50 p-3 md:p-4 rounded-lg border border-amber-200">
                 <div className="flex items-center gap-2">
                   <AlertCircle className="h-4 w-4 md:h-5 md:w-5 text-amber-600" />
-                  <p className="font-semibold text-amber-800 text-sm md:text-base">Instructions</p>
+                  <p className="font-semibold text-amber-800 text-sm md:text-base">
+                    Instructions
+                  </p>
                 </div>
-                <p className="text-sm md:text-base mt-1">{examData.description}</p>
+                <p className="text-sm md:text-base mt-1">
+                  {examData.description}
+                </p>
               </div>
             )}
 
             <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 p-3 md:p-4 rounded-lg">
               <div className="flex items-center gap-2 mb-2 md:mb-3">
                 <AlertTriangle className="h-4 w-4 md:h-5 md:w-5 text-blue-600" />
-                <p className="font-bold text-blue-800 text-sm md:text-base">Exam Settings:</p>
+                <p className="font-bold text-blue-800 text-sm md:text-base">
+                  Exam Settings:
+                </p>
               </div>
               <ul className="space-y-1 md:space-y-2 text-xs md:text-sm text-blue-800">
                 {examData?.questions_shuffled && (
                   <li className="flex items-center gap-2">
                     <div className="h-1 w-1 md:h-2 md:w-2 rounded-full bg-blue-600"></div>
                     <span>
-                      <strong>Questions are randomized</strong> - Each student gets different order
+                      <strong>Questions are randomized</strong> - Each student
+                      gets different order
                     </span>
                   </li>
                 )}
@@ -2207,7 +2290,8 @@ export default function ExamTakingPage() {
                   <li className="flex items-center gap-2">
                     <div className="h-1 w-1 md:h-2 md:w-2 rounded-full bg-blue-600"></div>
                     <span>
-                      <strong>Options are shuffled</strong> - Answer choices appear in different order
+                      <strong>Options are shuffled</strong> - Answer choices
+                      appear in different order
                     </span>
                   </li>
                 )}
@@ -2215,27 +2299,31 @@ export default function ExamTakingPage() {
                   <li className="flex items-center gap-2">
                     <div className="h-1 w-1 md:h-2 md:w-2 rounded-full bg-blue-600"></div>
                     <span>
-                      <strong>Fullscreen required</strong> - You must stay in fullscreen mode
+                      <strong>Fullscreen required</strong> - You must stay in
+                      fullscreen mode
                     </span>
                   </li>
                 )}
                 <li className="flex items-center gap-2">
                   <div className="h-1 w-1 md:h-2 md:w-2 rounded-full bg-blue-600"></div>
                   <span>
-                    <strong>Device locking enabled</strong> - One device per student only
+                    <strong>Device locking enabled</strong> - One device per
+                    student only
                   </span>
                 </li>
                 <li className="flex items-center gap-2">
                   <div className="h-1 w-1 md:h-2 md:w-2 rounded-full bg-blue-600"></div>
                   <span>
-                    <strong>Auto-save enabled</strong> - Answers are saved automatically
+                    <strong>Auto-save enabled</strong> - Answers are saved
+                    automatically
                   </span>
                 </li>
                 {examData?.show_results && (
                   <li className="flex items-center gap-2">
                     <div className="h-1 w-1 md:h-2 md:w-2 rounded-full bg-green-600"></div>
                     <span>
-                      <strong>Results will be shown</strong> - You'll see your score after submission
+                      <strong>Results will be shown</strong> - You'll see your
+                      score after submission
                     </span>
                   </li>
                 )}
@@ -2247,7 +2335,9 @@ export default function ExamTakingPage() {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Shield className="h-4 w-4 md:h-5 md:w-5 text-green-600" />
-                    <span className="font-medium text-green-800 text-sm md:text-base">Device Verified</span>
+                    <span className="font-medium text-green-800 text-sm md:text-base">
+                      Device Verified
+                    </span>
                   </div>
                   <div className="flex items-center gap-1">
                     <div className="w-1 h-1 md:w-2 md:h-2 bg-green-500 rounded-full animate-pulse"></div>
@@ -2268,7 +2358,8 @@ export default function ExamTakingPage() {
             >
               {securityInitialized ? (
                 <>
-                  Start Exam Now <ChevronRight className="ml-2 h-4 w-4 md:h-5 md:w-5" />
+                  Start Exam Now{" "}
+                  <ChevronRight className="ml-2 h-4 w-4 md:h-5 md:w-5" />
                 </>
               ) : (
                 <>
@@ -2279,7 +2370,8 @@ export default function ExamTakingPage() {
             </Button>
 
             <p className="text-center text-xs md:text-sm text-gray-500">
-              By starting the exam, you agree to follow all exam rules and guidelines.
+              By starting the exam, you agree to follow all exam rules and
+              guidelines.
             </p>
           </CardContent>
         </Card>
@@ -2313,7 +2405,8 @@ export default function ExamTakingPage() {
                       Score Obtained
                     </p>
                     <p className="text-lg md:text-2xl font-bold text-gray-900">
-                      {submissionResult.totalMarks} / {submissionResult.totalPossibleMarks}
+                      {submissionResult.totalMarks} /{" "}
+                      {submissionResult.totalPossibleMarks}
                     </p>
                   </div>
                   <div className="p-3 md:p-4 bg-blue-50 rounded-lg border border-blue-200">
@@ -2332,7 +2425,8 @@ export default function ExamTakingPage() {
                       Correct Answers
                     </p>
                     <p className="text-lg md:text-2xl font-bold text-gray-900">
-                      {submissionResult.correctCount} / {submissionResult.totalQuestions}
+                      {submissionResult.correctCount} /{" "}
+                      {submissionResult.totalQuestions}
                     </p>
                   </div>
                   <div className="p-3 md:p-4 bg-indigo-50 rounded-lg border border-indigo-200">
@@ -2353,7 +2447,7 @@ export default function ExamTakingPage() {
                     </h3>
                   </div>
                   <div className="mt-3 md:mt-4 w-full bg-gray-200 rounded-full h-2 md:h-4">
-                    <div 
+                    <div
                       className="bg-gradient-to-r from-green-500 to-emerald-600 h-2 md:h-4 rounded-full transition-all duration-500"
                       style={{ width: `${submissionResult.percent}%` }}
                     ></div>
@@ -2372,7 +2466,9 @@ export default function ExamTakingPage() {
                   </h3>
                 </div>
                 <p className="text-gray-600 text-sm md:text-base">
-                  Your exam has been submitted successfully. Results are not shown immediately as per the exam settings. Your teacher will notify you when results are available.
+                  Your exam has been submitted successfully. Results are not
+                  shown immediately as per the exam settings. Your teacher will
+                  notify you when results are available.
                 </p>
               </div>
             )}
@@ -2436,7 +2532,9 @@ export default function ExamTakingPage() {
         <aside
           className={cn(
             "bg-white border-r flex flex-col transition-all duration-300 ease-in-out shadow-lg",
-            isSidebarOpen ? "w-64 md:w-80 p-3 md:p-4" : "w-0 p-0 border-0 overflow-hidden"
+            isSidebarOpen
+              ? "w-64 md:w-80 p-3 md:p-4"
+              : "w-0 p-0 border-0 overflow-hidden"
           )}
         >
           <div className="flex items-center justify-between mb-4 md:mb-6">
@@ -2495,30 +2593,38 @@ export default function ExamTakingPage() {
               <span className="flex items-center gap-1 md:gap-2 font-medium text-sm md:text-base">
                 <CheckCircle2 className="h-3 w-3 md:h-4 md:w-4" /> Answered
               </span>
-              <span className="font-bold text-base md:text-lg">{stats.answered}</span>
+              <span className="font-bold text-base md:text-lg">
+                {stats.answered}
+              </span>
             </div>
             <div className="flex justify-between items-center text-gray-600 bg-gray-50 p-2 md:p-3 rounded-lg">
               <span className="flex items-center gap-1 md:gap-2 font-medium text-sm md:text-base">
                 <HelpCircle className="h-3 w-3 md:h-4 md:w-4" /> Unanswered
               </span>
-              <span className="font-bold text-base md:text-lg">{stats.unanswered}</span>
+              <span className="font-bold text-base md:text-lg">
+                {stats.unanswered}
+              </span>
             </div>
             <div className="flex justify-between items-center text-amber-600 bg-amber-50 p-2 md:p-3 rounded-lg">
               <span className="flex items-center gap-1 md:gap-2 font-medium text-sm md:text-base">
                 <Flag className="h-3 w-3 md:h-4 md:w-4" /> Flagged
               </span>
-              <span className="font-bold text-base md:text-lg">{stats.flagged}</span>
+              <span className="font-bold text-base md:text-lg">
+                {stats.flagged}
+              </span>
             </div>
-            
+
             {/* Security Status */}
-            <div className={cn(
-              "flex justify-between items-center p-2 md:p-3 rounded-lg text-sm md:text-base",
-              connectionStatus === "connected" 
-                ? "text-blue-600 bg-blue-50" 
-                : connectionStatus === "disconnected"
-                ? "text-red-600 bg-red-50"
-                : "text-amber-600 bg-amber-50"
-            )}>
+            <div
+              className={cn(
+                "flex justify-between items-center p-2 md:p-3 rounded-lg text-sm md:text-base",
+                connectionStatus === "connected"
+                  ? "text-blue-600 bg-blue-50"
+                  : connectionStatus === "disconnected"
+                  ? "text-red-600 bg-red-50"
+                  : "text-amber-600 bg-amber-50"
+              )}
+            >
               <span className="flex items-center gap-1 md:gap-2 font-medium">
                 {connectionStatus === "connected" ? (
                   <Activity className="h-3 w-3 md:h-4 md:w-4" />
@@ -2527,14 +2633,22 @@ export default function ExamTakingPage() {
                 ) : (
                   <AlertTriangle className="h-3 w-3 md:h-4 md:w-4" />
                 )}
-                {connectionStatus === "connected" ? "Connected" : 
-                 connectionStatus === "disconnected" ? "Disconnected" : "Poor Connection"}
+                {connectionStatus === "connected"
+                  ? "Connected"
+                  : connectionStatus === "disconnected"
+                  ? "Disconnected"
+                  : "Poor Connection"}
               </span>
-              <div className={cn(
-                "w-2 h-2 rounded-full",
-                connectionStatus === "connected" ? "bg-green-500 animate-pulse" :
-                connectionStatus === "disconnected" ? "bg-red-500" : "bg-amber-500"
-              )}></div>
+              <div
+                className={cn(
+                  "w-2 h-2 rounded-full",
+                  connectionStatus === "connected"
+                    ? "bg-green-500 animate-pulse"
+                    : connectionStatus === "disconnected"
+                    ? "bg-red-500"
+                    : "bg-amber-500"
+                )}
+              ></div>
             </div>
           </div>
         </aside>
@@ -2609,7 +2723,9 @@ export default function ExamTakingPage() {
                 </AvatarFallback>
               </Avatar>
               <div className="hidden sm:block">
-                <p className="font-semibold text-xs md:text-sm">{studentInfo?.name}</p>
+                <p className="font-semibold text-xs md:text-sm">
+                  {studentInfo?.name}
+                </p>
                 <p className="text-xs text-gray-500">
                   {studentInfo?.student_id}
                 </p>
@@ -2808,81 +2924,8 @@ export default function ExamTakingPage() {
 
                 {/* Matching UI - Side by Side on all devices */}
                 {currentQ.type === "matching" && currentQ.matchingPairs && (
-                  <div className="space-y-4 md:space-y-6">
-                    {/* Main Container - Side by Side Layout */}
-                    <div className="bg-white rounded-xl border-2 border-gray-200 overflow-hidden shadow-sm">
-                      <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-gray-200">
-                        {/* COLUMN A - Questions */}
-                        <div className="flex flex-col">
-                          <div className="p-3 md:p-4 border-b bg-gradient-to-r from-blue-50 to-indigo-50">
-                            <h3 className="text-center font-bold text-gray-800 uppercase tracking-wider text-sm md:text-base">
-                              Column A
-                            </h3>
-                          </div>
-                          <div className="flex-1">
-                            {currentQ.matchingPairs.map((pair: any, idx: number) => {
-                              const currentAnswer = getMatchingAnswer();
-                              const answerLetter = currentAnswer[idx] || "";
-
-                              return (
-                                <div
-                                  key={idx}
-                                  className="p-3 md:p-4 min-h-[80px] md:min-h-[90px] border-b border-gray-100 last:border-b-0 hover:bg-gray-50/50 flex items-center"
-                                >
-                                  <div className="flex items-center gap-2 md:gap-4 w-full">
-                                    <div className="flex items-center gap-2 md:gap-3 flex-shrink-0">
-                                      <MatchingAnswerInput
-                                        value={answerLetter}
-                                        onChange={(val) => handleMatchSelect(idx, val)}
-                                        maxLetters={currentQ.matchingPairs.length}
-                                      />
-                                      <div className="w-8 h-8 md:w-9 md:h-9 rounded-full bg-blue-600 text-white font-bold flex items-center justify-center text-sm md:text-base">
-                                        {idx + 1}
-                                      </div>
-                                    </div>
-                                    <div className="flex-1 min-w-0">
-                                      <div className="text-sm md:text-base text-gray-800 font-medium leading-relaxed">
-                                        {renderWithMath(pair.sideA)}
-                                      </div>
-                                    </div>
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-
-                        {/* COLUMN B - Options */}
-                        <div className="flex flex-col bg-gray-50/20">
-                          <div className="p-3 md:p-4 border-b bg-gradient-to-r from-emerald-50 to-green-50">
-                            <h3 className="text-center font-bold text-gray-800 uppercase tracking-wider text-sm md:text-base">
-                              Column B
-                            </h3>
-                          </div>
-                          <div className="flex-1">
-                            {currentQ.matchingPairs.map((pair: any, idx: number) => (
-                              <div
-                                key={idx}
-                                className="p-3 md:p-4 min-h-[80px] md:min-h-[90px] border-b border-gray-100 last:border-b-0 hover:bg-gray-50/50 flex items-center"
-                              >
-                                <div className="flex items-start gap-3 md:gap-4 w-full">
-                                  <div className="w-8 h-8 md:w-9 md:h-9 rounded-lg bg-emerald-100 text-emerald-700 border border-emerald-200 font-bold flex items-center justify-center text-sm md:text-base flex-shrink-0">
-                                    {String.fromCharCode(65 + idx)}
-                                  </div>
-                                  <div className="flex-1 min-w-0">
-                                    <div className="text-sm md:text-base text-gray-700 leading-relaxed pt-1">
-                                      {renderWithMath(pair.sideB)}
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Helpful Instruction Box */}
+                  <div className="w-full space-y-4 md:space-y-6 overflow-hidden">
+                    {/* Instruction Box - Full width, stays visible */}
                     <div className="bg-blue-50 p-3 md:p-4 rounded-lg border border-blue-200 flex gap-3 md:gap-4 items-center">
                       <div className="bg-blue-100 p-1.5 md:p-2 rounded-full flex-shrink-0">
                         <svg
@@ -2900,11 +2943,87 @@ export default function ExamTakingPage() {
                         </svg>
                       </div>
                       <div className="text-xs md:text-sm text-blue-800">
-                        <span className="font-bold">Instructions:</span>{" "}
-                        Carefully match each item from <strong>Column A</strong>{" "}
-                        with its corresponding match in{" "}
-                        <strong>Column B</strong>. Type the correct letter into
-                        the input box provided next to each number.
+                        <span className="font-bold">Instructions:</span> Match
+                        items from A to B.
+                      </div>
+                    </div>
+
+                    {/* Scrollable Wrapper - Only this part scrolls horizontally if needed */}
+                    <div className="relative border-2 border-gray-200 rounded-xl bg-white shadow-sm overflow-hidden">
+                      <div className="overflow-x-auto custom-scrollbar">
+                        {/* Set a fixed minimum width only for the grid content to force internal scroll */}
+                        <div className="min-w-[650px] md:min-w-full grid grid-cols-2 divide-x divide-gray-200">
+                          {/* COLUMN A */}
+                          <div className="flex flex-col">
+                            <div className="p-3 md:p-4 border-b bg-gradient-to-r from-blue-50 to-indigo-50">
+                              <h3 className="text-center font-bold text-gray-800 uppercase tracking-wider text-xs md:text-base">
+                                Column A
+                              </h3>
+                            </div>
+                            <div className="flex-1 divide-y divide-gray-100">
+                              {currentQ.matchingPairs.map(
+                                (pair: any, idx: number) => {
+                                  const currentAnswer = getMatchingAnswer();
+                                  const answerLetter = currentAnswer[idx] || "";
+                                  return (
+                                    <div
+                                      key={idx}
+                                      className="p-3 md:p-4 min-h-[90px] flex items-center hover:bg-gray-50/50"
+                                    >
+                                      <div className="flex items-center gap-2 md:gap-4 w-full">
+                                        <div className="flex items-center gap-2 flex-shrink-0">
+                                          <MatchingAnswerInput
+                                            value={answerLetter}
+                                            onChange={(val) =>
+                                              handleMatchSelect(idx, val)
+                                            }
+                                            maxLetters={
+                                              currentQ.matchingPairs.length
+                                            }
+                                          />
+                                          <div className="w-8 h-8 rounded-full bg-blue-600 text-white font-bold flex items-center justify-center text-sm">
+                                            {idx + 1}
+                                          </div>
+                                        </div>
+                                        <div className="flex-1 min-w-0 text-sm md:text-base text-gray-800 font-medium">
+                                          {renderWithMath(pair.sideA)}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  );
+                                }
+                              )}
+                            </div>
+                          </div>
+
+                          {/* COLUMN B */}
+                          <div className="flex flex-col bg-gray-50/20">
+                            <div className="p-3 md:p-4 border-b bg-gradient-to-r from-emerald-50 to-green-50">
+                              <h3 className="text-center font-bold text-gray-800 uppercase tracking-wider text-xs md:text-base">
+                                Column B
+                              </h3>
+                            </div>
+                            <div className="flex-1 divide-y divide-gray-100">
+                              {currentQ.matchingPairs.map(
+                                (pair: any, idx: number) => (
+                                  <div
+                                    key={idx}
+                                    className="p-3 md:p-4 min-h-[90px] flex items-center hover:bg-gray-50/50"
+                                  >
+                                    <div className="flex items-start gap-3 w-full">
+                                      <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 border border-emerald-200 font-bold flex items-center justify-center text-sm flex-shrink-0">
+                                        {String.fromCharCode(65 + idx)}
+                                      </div>
+                                      <div className="flex-1 min-w-0 text-sm md:text-base text-gray-700 pt-1">
+                                        {renderWithMath(pair.sideB)}
+                                      </div>
+                                    </div>
+                                  </div>
+                                )
+                              )}
+                            </div>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -2922,7 +3041,8 @@ export default function ExamTakingPage() {
               disabled={currentQuestionIndex === 0}
               className="px-3 md:px-6 py-2 md:py-3 border-blue-200 hover:bg-blue-50 text-xs md:text-sm"
             >
-              <ChevronLeft className="mr-1 md:mr-2 h-3 w-3 md:h-5 md:w-5" /> Previous
+              <ChevronLeft className="mr-1 md:mr-2 h-3 w-3 md:h-5 md:w-5" />{" "}
+              Previous
             </Button>
 
             <div className="flex items-center gap-3 md:gap-4">
@@ -2935,7 +3055,8 @@ export default function ExamTakingPage() {
                 disabled={currentQuestionIndex === questions.length - 1}
                 className="px-3 md:px-6 py-2 md:py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-xs md:text-sm"
               >
-                Next <ChevronRight className="ml-1 md:ml-2 h-3 w-3 md:h-5 md:w-5" />
+                Next{" "}
+                <ChevronRight className="ml-1 md:ml-2 h-3 w-3 md:h-5 md:w-5" />
               </Button>
             </div>
           </div>
@@ -2956,7 +3077,8 @@ export default function ExamTakingPage() {
               </AlertDialogTitle>
             </div>
             <AlertDialogDescription className="text-gray-600 text-sm md:text-base">
-              You're about to submit your exam. Make sure you've answered all questions before proceeding.
+              You're about to submit your exam. Make sure you've answered all
+              questions before proceeding.
             </AlertDialogDescription>
           </AlertDialogHeader>
 
