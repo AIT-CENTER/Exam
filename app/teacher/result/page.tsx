@@ -630,43 +630,62 @@ export default function IndividualExamResultsPage() {
 
   if (loading) {
     return (
-      <div className="flex-1 space-y-8 p-4 md:p-8 bg-gray-50 min-h-screen">
-        <div className="flex items-center justify-between">
-          <div className="space-y-2">
-            <Skeleton className="h-8 w-64 bg-gray-200 rounded animate-pulse" />
-            <Skeleton className="h-4 w-96 bg-gray-200 rounded animate-pulse" />
-          </div>
-          <Skeleton className="h-10 w-32 bg-gray-200 rounded animate-pulse" />
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {[...Array(4)].map((_, i) => (
-            <Card key={i}>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <Skeleton className="h-4 w-24 bg-gray-200 rounded animate-pulse" />
-              </CardHeader>
-              <CardContent>
-                <Skeleton className="h-8 w-16 bg-gray-200 rounded animate-pulse" />
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-        <Card>
-          <div className="p-6 space-y-4">
-            {[...Array(5)].map((_, i) => (
-              <Skeleton key={i} className="h-12 w-full bg-gray-200 rounded animate-pulse" />
-            ))}
-          </div>
-        </Card>
+      <div className="flex items-center justify-center min-h-[70vh] w-full bg-transparent">
+        <style>{`
+          .spinner-svg {
+            animation: spinner-rotate 2s linear infinite;
+          }
+          .spinner-circle {
+            stroke-dasharray: 1, 200;
+            stroke-dashoffset: 0;
+            animation: spinner-stretch 1.5s ease-in-out infinite;
+            stroke-linecap: round;
+          }
+          @keyframes spinner-rotate {
+            100% {
+              transform: rotate(360deg);
+            }
+          }
+          @keyframes spinner-stretch {
+            0% {
+              stroke-dasharray: 1, 200;
+              stroke-dashoffset: 0;
+            }
+            50% {
+              stroke-dasharray: 90, 200;
+              stroke-dashoffset: -35px;
+            }
+            100% {
+              stroke-dasharray: 90, 200;
+              stroke-dashoffset: -124px;
+            }
+          }
+        `}</style>
+        
+        <svg
+          className="h-10 w-10 text-zinc-800 dark:text-zinc-200 spinner-svg"
+          viewBox="25 25 50 50"
+        >
+          <circle
+            className="spinner-circle"
+            cx="50"
+            cy="50"
+            r="20"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="4"
+          />
+        </svg>
       </div>
     )
   }
 
   return (
-    <div className="flex-1 space-y-6 p-4 md:p-8 pb-24 bg-gray-50 min-h-screen">
+    <div className="flex-1 space-y-6 pt-0 p-4 md:p-8 pb-24 bg-transparent min-h-screen">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-gray-900">Individual Exam Results</h1>
+          <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground">Individual Exam Results</h1>
           <p className="text-muted-foreground mt-1 text-sm">View student exam performance by individual exam</p>
         </div>
         <Button variant="outline" onClick={() => router.back()} className="gap-2">
@@ -825,7 +844,7 @@ export default function IndividualExamResultsPage() {
       {/* Results Count */}
       <div className="flex items-center justify-between">
         <div className="text-sm text-muted-foreground">
-          Showing <span className="font-semibold text-gray-900">{filteredResults.length}</span> results
+          Showing <span className="font-semibold text-foreground">{filteredResults.length}</span> results
           {(searchQuery || examFilter !== "all" || sectionFilter !== "all") && (
             <span className="ml-2">
               (filtered from <span className="font-semibold">{results.length}</span> total)
@@ -841,10 +860,10 @@ export default function IndividualExamResultsPage() {
       {filteredResults.length === 0 ? (
         <Card className="border shadow-sm overflow-hidden">
           <div className="p-8 text-center">
-            <div className="mx-auto w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mb-4">
-              <Filter className="h-8 w-8 text-gray-400" />
+            <div className="mx-auto w-16 h-16 rounded-full bg-zinc-100 dark:bg-zinc-800/50 flex items-center justify-center mb-4">
+              <Filter className="h-8 w-8 text-muted-foreground opacity-50" />
             </div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">
+            <h3 className="text-lg font-semibold text-foreground mb-2">
               {results.length === 0
                 ? "No exam results found"
                 : "No matching results"}
@@ -866,28 +885,28 @@ export default function IndividualExamResultsPage() {
           <Card className="border shadow-sm overflow-hidden">
             <div className="overflow-auto">
               <table className="w-full border-collapse text-sm">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="w-12 text-xs font-medium text-center p-4 border border-gray-200">#</th>
-                    <th className="min-w-[120px] text-xs font-medium text-left p-4 border border-gray-200">
+                <thead className="bg-zinc-50 dark:bg-zinc-900/40">
+                  <tr className="border-b dark:border-zinc-800">
+                    <th className="w-12 text-xs font-medium text-center p-4 text-muted-foreground">#</th>
+                    <th className="min-w-[120px] text-xs font-medium text-left p-4 text-muted-foreground">
                       Student ID
                     </th>
-                    <th className="min-w-[180px] text-xs font-medium text-left p-4 border border-gray-200">
+                    <th className="min-w-[180px] text-xs font-medium text-left p-4 text-muted-foreground">
                       Student Name
                     </th>
-                    <th className="min-w-[200px] text-xs font-medium text-left p-4 border border-gray-200">
+                    <th className="min-w-[200px] text-xs font-medium text-left p-4 text-muted-foreground">
                       Exam Name
                     </th>
-                    <th className="min-w-[120px] text-xs font-medium text-left p-4 border border-gray-200">
+                    <th className="min-w-[120px] text-xs font-medium text-left p-4 text-muted-foreground">
                       Subject
                     </th>
-                    <th className="min-w-[100px] text-xs font-medium text-center p-4 border border-gray-200">
+                    <th className="min-w-[100px] text-xs font-medium text-center p-4 text-muted-foreground">
                       Score
                     </th>
-                    <th className="min-w-[80px] text-xs font-medium text-center p-4 border border-gray-200">
+                    <th className="min-w-[80px] text-xs font-medium text-center p-4 text-muted-foreground">
                       Gender
                     </th>
-                    <th className="min-w-[80px] text-xs font-medium text-center p-4 border border-gray-200">
+                    <th className="min-w-[80px] text-xs font-medium text-center p-4 text-muted-foreground">
                       Stream
                     </th>
                   </tr>
@@ -896,24 +915,24 @@ export default function IndividualExamResultsPage() {
                   {paginatedResults.map((result, index) => {
                     const getGenderColor = (gender: string) => {
                       switch(gender.toLowerCase()) {
-                        case 'male': return 'bg-blue-50 text-blue-700 border-blue-200'
-                        case 'female': return 'bg-pink-50 text-pink-700 border-pink-200'
-                        default: return 'bg-gray-50 text-gray-700 border-gray-200'
+                        case 'male': return 'bg-blue-50 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-800'
+                        case 'female': return 'bg-pink-50 dark:bg-pink-900/40 text-pink-700 dark:text-pink-400 border-pink-200 dark:border-pink-800'
+                        default: return 'bg-zinc-50 dark:bg-zinc-900/40 text-zinc-700 dark:text-zinc-400 border-zinc-200 dark:border-zinc-800'
                       }
                     }
 
                     const getStreamColor = (stream: string) => {
                       switch(stream) {
-                        case 'Natural': return 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                        case 'Social': return 'bg-violet-50 text-violet-700 border-violet-200'
-                        case 'Common': return 'bg-amber-50 text-amber-700 border-amber-200'
-                        default: return 'bg-gray-50 text-gray-700 border-gray-200'
+                        case 'Natural': return 'bg-emerald-50 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800'
+                        case 'Social': return 'bg-violet-50 dark:bg-violet-900/40 text-violet-700 dark:text-violet-400 border-violet-200 dark:border-violet-800'
+                        case 'Common': return 'bg-amber-50 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800'
+                        default: return 'bg-zinc-50 dark:bg-zinc-900/40 text-zinc-700 dark:text-zinc-400 border-zinc-200 dark:border-zinc-800'
                       }
                     }
                     
                     return (
-                      <tr key={result.id} className="hover:bg-gray-50 transition-colors border-b border-gray-100 last:border-b-0">
-                        <td className="text-center text-xs font-medium p-4">
+                      <tr key={result.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors border-b dark:border-zinc-800 last:border-b-0">
+                        <td className="text-center text-xs font-medium p-4 text-foreground">
                           {(currentPage - 1) * RESULTS_PER_PAGE + index + 1}
                         </td>
                         <td className="p-4 text-sm font-mono font-medium">

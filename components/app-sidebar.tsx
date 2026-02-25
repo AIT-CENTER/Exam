@@ -25,6 +25,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarRail,
+  useSidebar,
 } from "@/components/ui/sidebar"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { usePathname } from "next/navigation"
@@ -55,7 +56,8 @@ interface Team {
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const pathname = usePathname();
   const [isLoading, setIsLoading] = React.useState(true);
-  const [isCollapsed, setIsCollapsed] = React.useState(false);
+  const { state } = useSidebar();
+  const isCollapsed = state === "collapsed";
   const [teacherData, setTeacherData] = React.useState<any>(null);
   const [teams, setTeams] = React.useState<Team[]>([]);
   const [activeTeam, setActiveTeam] = React.useState<Team | null>(null);
@@ -159,22 +161,10 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     </div>
   );
 
-  // Tooltip component for collapsed sidebar
-  const TooltipWrapper = ({ children, title }: { children: React.ReactNode; title: string }) => (
-    <div className="relative group">
-      {children}
-      {isCollapsed && (
-        <div className="absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 bg-gray-900 text-white text-xs rounded-md opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap z-50">
-          {title}
-          <div className="absolute right-full top-1/2 -translate-y-1/2 border-4 border-transparent border-r-gray-900"></div>
-        </div>
-      )}
-    </div>
-  );
 
   if (isLoading) {
     return (
-      <Sidebar collapsible="icon" className="border-r border-gray-200/60" {...props}>
+      <Sidebar collapsible="icon" className="!border-r-0 border-none bg-transparent" {...props}>
         <SidebarHeader className="p-3">
           <div className="flex items-center space-x-3">
             <div className="h-10 w-10 bg-gray-200 rounded-lg animate-pulse"></div>
@@ -210,8 +200,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   return (
     <Sidebar 
       collapsible="icon" 
-      className="border-r border-gray-200/60 flex flex-col"
-      onCollapseChange={setIsCollapsed}
+      className="!border-r-0 border-none bg-transparent flex flex-col"
       {...props}
     >
       <SidebarHeader className="p-3">
@@ -227,10 +216,10 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                     {activeTeam ? <activeTeam.logo className="size-4" /> : <GraduationCap className="size-4" />}
                   </div>
                   <div className="grid flex-1 text-left text-sm leading-tight">
-                    <span className="truncate font-semibold text-sm">
+                    <span className="truncate font-semibold">
                       {activeTeam ? activeTeam.name : "Teacher"}
                     </span>
-                    <span className="truncate text-xs text-gray-600">
+                    <span className="truncate text-xs text-muted-foreground">
                       {activeTeam ? activeTeam.plan : "Loading..."}
                     </span>
                   </div>
@@ -286,7 +275,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         </SidebarMenu>
       </SidebarHeader>
       
-      <SidebarContent className="flex-1">
+      <SidebarContent className="flex-1 px-0 gap-4 mt-2">
         {/* Platform Section */}
         <SidebarGroup>
           <SidebarGroupLabel className="text-xs font-medium text-gray-600 mb-1">
@@ -295,18 +284,17 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           <SidebarMenu>
             {data.navMain.map((item) => (
               <SidebarMenuItem key={item.title}>
-                <TooltipWrapper title={item.title}>
-                  <SidebarMenuButton 
-                    asChild 
-                    isActive={item.isActive} 
-                    className="hover:bg-gray-200/80 hover:text-gray-800 transition-all duration-200 h-8 text-sm"
-                  >
-                    <Link href={item.url}>
-                      <item.icon className="h-5 w-5" />
-                      <span>{item.title}</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </TooltipWrapper>
+                <SidebarMenuButton 
+                  asChild 
+                  isActive={item.isActive} 
+                  tooltip={item.title}
+                  className="hover:bg-gray-200/80 hover:text-gray-800 transition-all duration-200 h-9 text-sm font-medium dark:hover:bg-zinc-800 dark:hover:text-zinc-50"
+                >
+                  <Link href={item.url}>
+                    <item.icon className="h-5 w-5 shrink-0" />
+                    <span className="truncate">{item.title}</span>
+                  </Link>
+                </SidebarMenuButton>
               </SidebarMenuItem>
             ))}
           </SidebarMenu>
@@ -321,17 +309,16 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             <SidebarMenu>
               {data.quickAccess.map((item) => (
                 <SidebarMenuItem key={item.title}>
-                  <TooltipWrapper title={item.title}>
-                    <SidebarMenuButton 
-                      asChild 
-                      className="hover:bg-[#EEEDEC] hover:text-[#282828] transition-all duration-200 h-8 text-sm"
-                    >
-                      <Link href={item.url}>
-                        <item.icon className="size-4" />
-                        <span>{item.title}</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </TooltipWrapper>
+                  <SidebarMenuButton 
+                    asChild 
+                    tooltip={item.title}
+                    className="hover:bg-gray-200/80 hover:text-gray-800 transition-all duration-200 h-9 text-sm font-medium dark:hover:bg-zinc-800 dark:hover:text-zinc-50"
+                  >
+                    <Link href={item.url}>
+                      <item.icon className="h-4 w-4 shrink-0" />
+                      <span className="truncate">{item.title}</span>
+                    </Link>
+                  </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
             </SidebarMenu>
@@ -340,7 +327,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       </SidebarContent>
 
       {/* System Section - Always at bottom */}
-      <div className="mt-auto">
+      <div className="mt-auto px-0">
         <SidebarGroup>
           <SidebarGroupLabel className="text-xs font-medium text-gray-600 mb-1">
             {!isCollapsed && "System"}
@@ -348,18 +335,17 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           <SidebarMenu>
             {data.system.map((item) => (
               <SidebarMenuItem key={item.title}>
-                <TooltipWrapper title={item.title}>
-                  <SidebarMenuButton 
-                    asChild 
-                    isActive={item.isActive} 
-                    className="hover:bg-gray-200/80 hover:text-gray-800 transition-all duration-200 h-8 text-sm"
-                  >
-                    <Link href={item.url}>
-                      <item.icon className="h-5 w-5" />
-                      <span>{item.title}</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </TooltipWrapper>
+                <SidebarMenuButton 
+                  asChild 
+                  isActive={item.isActive} 
+                  tooltip={item.title}
+                  className="hover:bg-gray-200/80 hover:text-gray-800 transition-all duration-200 h-9 text-sm font-medium dark:hover:bg-zinc-800 dark:hover:text-zinc-50"
+                >
+                  <Link href={item.url}>
+                    <item.icon className="h-5 w-5 shrink-0" />
+                    <span className="truncate">{item.title}</span>
+                  </Link>
+                </SidebarMenuButton>
               </SidebarMenuItem>
             ))}
           </SidebarMenu>

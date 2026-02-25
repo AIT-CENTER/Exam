@@ -523,90 +523,52 @@ export default function ExamsPage() {
   // Loading State
   if (isLoading) {
     return (
-      <div className="flex-1 space-y-8 p-8 bg-gray-50 min-h-screen">
-        {/* Header Skeleton */}
-        <div className="flex items-center justify-between">
-          <div className="space-y-2">
-            <Skeleton className="h-8 w-64 bg-gray-200 rounded animate-pulse" />
-            <Skeleton className="h-4 w-96 bg-gray-200 rounded animate-pulse" />
-          </div>
-          <Skeleton className="h-10 w-32 bg-gray-200 rounded animate-pulse" />
-        </div>
-
-        {/* Stats Skeleton */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {[...Array(4)].map((_, i) => (
-            <Card key={i}>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <Skeleton className="h-4 w-32 bg-gray-200 rounded animate-pulse" />
-                <Skeleton className="h-5 w-5 bg-gray-200 rounded animate-pulse" />
-              </CardHeader>
-              <CardContent>
-                <Skeleton className="h-8 w-20 bg-gray-200 rounded animate-pulse" />
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-
-        {/* Exams Grid Skeleton */}
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-          {[...Array(6)].map((_, i) => (
-            <Card key={i} className="flex flex-col hover:shadow-lg transition-all duration-200 border border-gray-200">
-              <CardHeader className="pb-3">
-                <div className="flex items-start justify-between">
-                  <div className="flex-1 space-y-2">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <Skeleton className="h-6 w-48 bg-gray-200 rounded animate-pulse" />
-                      <Skeleton className="h-5 w-16 bg-gray-200 rounded animate-pulse" />
-                    </div>
-                    <Skeleton className="h-4 w-32 bg-gray-200 rounded animate-pulse" />
-                    <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                      <Skeleton className="h-3 w-24 bg-gray-200 rounded animate-pulse" />
-                      <Skeleton className="h-3 w-20 bg-gray-200 rounded animate-pulse" />
-                    </div>
-                  </div>
-                  <Skeleton className="h-8 w-8 bg-gray-200 rounded animate-pulse" />
-                </div>
-              </CardHeader>
-              
-              <CardContent className="flex-grow space-y-4 pb-3">
-                <div className="grid grid-cols-3 gap-3 text-center">
-                  {[...Array(3)].map((_, j) => (
-                    <div key={j} className="bg-gray-50 rounded-lg p-3 border border-gray-100">
-                      <Skeleton className="h-5 w-5 bg-gray-200 rounded animate-pulse mx-auto mb-1" />
-                      <Skeleton className="h-3 w-16 bg-gray-200 rounded animate-pulse mx-auto mb-1" />
-                      <Skeleton className="h-6 w-12 bg-gray-200 rounded animate-pulse mx-auto" />
-                    </div>
-                  ))}
-                </div>
-
-                <div className="grid grid-cols-2 gap-3 text-sm">
-                  {[...Array(2)].map((_, j) => (
-                    <div key={j} className="flex items-center gap-2 text-gray-600">
-                      <Skeleton className="h-4 w-4 bg-gray-200 rounded animate-pulse" />
-                      <Skeleton className="h-4 w-32 bg-gray-200 rounded animate-pulse" />
-                    </div>
-                  ))}
-                </div>
-
-                <div className="bg-gray-50 rounded-lg p-2 border">
-                  <div className="flex items-center justify-between text-sm">
-                    <Skeleton className="h-4 w-20 bg-gray-200 rounded animate-pulse" />
-                    <Skeleton className="h-4 w-24 bg-gray-200 rounded animate-pulse" />
-                  </div>
-                </div>
-              </CardContent>
-              
-              <CardFooter className="flex items-center justify-between bg-gradient-to-r from-gray-50 to-gray-100 py-3 px-4 border-t">
-                <Skeleton className="h-4 w-24 bg-gray-200 rounded animate-pulse" />
-                <div className="flex items-center gap-2">
-                  <Skeleton className="h-3 w-10 bg-gray-200 rounded animate-pulse" />
-                  <Skeleton className="h-5 w-9 bg-gray-200 rounded animate-pulse" />
-                </div>
-              </CardFooter>
-            </Card>
-          ))}
-        </div>
+      <div className="flex items-center justify-center min-h-[70vh] w-full bg-transparent">
+        <style>{`
+          .spinner-svg {
+            animation: spinner-rotate 2s linear infinite;
+          }
+          .spinner-circle {
+            stroke-dasharray: 1, 200;
+            stroke-dashoffset: 0;
+            animation: spinner-stretch 1.5s ease-in-out infinite;
+            stroke-linecap: round;
+          }
+          @keyframes spinner-rotate {
+            100% {
+              transform: rotate(360deg);
+            }
+          }
+          @keyframes spinner-stretch {
+            0% {
+              stroke-dasharray: 1, 200;
+              stroke-dashoffset: 0;
+            }
+            50% {
+              stroke-dasharray: 90, 200;
+              stroke-dashoffset: -35px;
+            }
+            100% {
+              stroke-dasharray: 90, 200;
+              stroke-dashoffset: -124px;
+            }
+          }
+        `}</style>
+        
+        <svg
+          className="h-10 w-10 text-zinc-800 dark:text-zinc-200 spinner-svg"
+          viewBox="25 25 50 50"
+        >
+          <circle
+            className="spinner-circle"
+            cx="50"
+            cy="50"
+            r="20"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="4"
+          />
+        </svg>
       </div>
     );
   }
@@ -631,10 +593,10 @@ export default function ExamsPage() {
   }
 
   return (
-    <div className="flex-1 space-y-8 p-8 bg-gray-50 min-h-screen">
+    <div className="flex-1 space-y-8 bg-transparent p-4 lg:p-8">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-gray-900">
+          <h1 className="text-3xl font-bold tracking-tight text-foreground">
             Exams
           </h1>
           <p className="text-muted-foreground mt-1">
@@ -649,15 +611,15 @@ export default function ExamsPage() {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {stats.map((stat) => (
-          <Card key={stat.title} className="hover:shadow-lg transition-shadow duration-200">
+          <Card key={stat.title} className="hover:shadow-lg transition-shadow duration-200 shadow-sm">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-gray-700">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
                 {stat.title}
               </CardTitle>
               <stat.icon className="h-5 w-5 text-indigo-500" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-gray-900">
+              <div className="text-2xl font-bold text-foreground">
                 {stat.value}
               </div>
             </CardContent>
@@ -689,12 +651,12 @@ export default function ExamsPage() {
           };
 
           return (
-            <Card key={exam.id} className="flex flex-col hover:shadow-lg transition-all duration-200 border border-gray-200">
+            <Card key={exam.id} className="flex flex-col hover:shadow-lg transition-all duration-200 shadow-sm">
               <CardHeader className="pb-3">
                 <div className="flex items-start justify-between">
                   <div className="flex-1 space-y-2">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <CardTitle className="text-xl text-gray-900 line-clamp-1">
+                      <CardTitle className="text-xl text-foreground line-clamp-1">
                         {exam.title}
                       </CardTitle>
                       {getStatusBadge()}
@@ -741,40 +703,40 @@ export default function ExamsPage() {
               <CardContent className="flex-grow space-y-4 pb-3">
 
                 <div className="grid grid-cols-2 gap-3 text-sm">
-                  <div className="flex items-center gap-2 text-gray-600">
-                    <Target className="h-5 w-5 text-gray-400" />
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <Target className="h-5 w-5 text-muted-foreground opacity-70" />
                     <span>{exam.calculated_total_marks || 0} Point</span>
                   </div>
-                  <div className="flex items-center gap-2 text-gray-600">
-                    <FileQuestion className="h-4 w-4 text-gray-400" />
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <FileQuestion className="h-4 w-4 text-muted-foreground opacity-70" />
                     <span>Ques: {exam.questions_count || 0}</span>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3 text-sm">
-                  <div className="flex items-center gap-2 text-gray-600">
-                    <Clock className="h-4 w-4 text-gray-400" />
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <Clock className="h-4 w-4 text-muted-foreground opacity-70" />
                     <span>{exam.duration || 0} min</span>
                   </div>
 
                 </div>
 
-                <div className="bg-gray-50 rounded-lg p-2 border">
+                <div className="bg-zinc-50 dark:bg-zinc-800/50 rounded-lg p-2 border border-zinc-200 dark:border-zinc-800">
                   <div className="flex items-center justify-between text-sm">
-                    <span className="text-gray-600">Exam Date:</span>
-                    <span className="font-medium text-gray-900">
+                    <span className="text-muted-foreground">Exam Date:</span>
+                    <span className="font-medium text-foreground">
                       {formatDate(exam.exam_date)}
                     </span>
                   </div>
                 </div>
               </CardContent>
               
-              <CardFooter className="flex items-center justify-between bg-gradient-to-r from-gray-50 to-gray-100 py-3 px-4 border-t">
+              <CardFooter className="flex items-center justify-between bg-zinc-50/50 dark:bg-zinc-800/20 py-3 px-4 border-t border-zinc-200 dark:border-zinc-800">
                 <div className="text-sm text-muted-foreground">
                   {exam.assigned_count} students assigned
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-gray-500">Active</span>
+                  <span className="text-xs text-muted-foreground">Active</span>
                   <Switch
                     checked={exam.exam_active}
                     onCheckedChange={(checked) =>
@@ -790,11 +752,11 @@ export default function ExamsPage() {
 
       {exams.length === 0 && (
         <div className="text-center py-12">
-          <BookOpen className="mx-auto h-12 w-12 text-gray-400" />
-          <h3 className="mt-4 text-lg font-medium text-gray-900">
+          <BookOpen className="mx-auto h-12 w-12 text-muted-foreground opacity-50" />
+          <h3 className="mt-4 text-lg font-medium text-foreground">
             No exams found
           </h3>
-          <p className="mt-2 text-sm text-gray-500">
+          <p className="mt-2 text-sm text-muted-foreground">
             Get started by creating your first exam.
           </p>
           <Button className="mt-4" onClick={handleCreateExam}>

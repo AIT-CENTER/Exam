@@ -78,6 +78,59 @@ interface DuplicateCheck {
   message: string
 }
 
+// Premium spinner matching the dashboard
+function PageSpinner() {
+  return (
+    <div className="flex items-center justify-center min-h-[70vh] w-full bg-transparent">
+      <style>{`
+        .spinner-svg {
+          animation: spinner-rotate 2s linear infinite;
+        }
+        .spinner-circle {
+          stroke-dasharray: 1, 200;
+          stroke-dashoffset: 0;
+          animation: spinner-stretch 1.5s ease-in-out infinite;
+          stroke-linecap: round;
+        }
+        @keyframes spinner-rotate {
+          100% {
+            transform: rotate(360deg);
+          }
+        }
+        @keyframes spinner-stretch {
+          0% {
+            stroke-dasharray: 1, 200;
+            stroke-dashoffset: 0;
+          }
+          50% {
+            stroke-dasharray: 90, 200;
+            stroke-dashoffset: -35px;
+          }
+          100% {
+            stroke-dasharray: 90, 200;
+            stroke-dashoffset: -124px;
+          }
+        }
+      `}</style>
+      
+      <svg
+        className="h-10 w-10 text-zinc-800 dark:text-zinc-200 spinner-svg"
+        viewBox="25 25 50 50"
+      >
+        <circle
+          className="spinner-circle"
+          cx="50"
+          cy="50"
+          r="20"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="4"
+        />
+      </svg>
+    </div>
+  );
+}
+
 export default function NewStudentPage() {
   const router = useRouter()
 
@@ -961,8 +1014,12 @@ export default function NewStudentPage() {
   const isBulkGrade11or12 =
     bulkSelectedGrade && (bulkSelectedGrade.grade_name.includes("11") || bulkSelectedGrade.grade_name.includes("12"))
 
+  if (gradesLoading) {
+    return <PageSpinner />
+  }
+
   return (
-    <div className="flex-1 space-y-6 p-4 md:p-8 bg-muted/30 min-h-screen">
+    <div className="flex-1 space-y-6 p-4 md:p-8 bg-transparent min-h-screen">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="space-y-1">

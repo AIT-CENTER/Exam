@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import type React from "react";
 import { useState, useEffect, useRef } from "react";
@@ -29,14 +29,6 @@ import {
   XCircle,
   Eye,
   EyeOff,
-  Lock,
-  GraduationCap,
-  Sparkles,
-  ShieldCheck,
-  Calendar,
-  Target,
-  Users,
-  Award,
   ChevronRight,
 } from "lucide-react";
 
@@ -89,7 +81,6 @@ class SessionValidator {
     currentDeviceFingerprint: string
   ) {
     try {
-      // Get active session for this student and exam
       const { data: activeSessions, error } = await supabase
         .from("exam_sessions")
         .select(
@@ -126,13 +117,11 @@ class SessionValidator {
       const lastUpdate = new Date(activeSession.updated_at).getTime();
       const secondsSinceUpdate = (now - lastUpdate) / 1000;
 
-      // Check if same device
       const isSameDevice =
         activeSession.session_security.device_fingerprint ===
         currentDeviceFingerprint;
 
       if (isSameDevice) {
-        // Same device - always allow
         return {
           hasActiveSession: true,
           isSameDevice: true,
@@ -145,9 +134,7 @@ class SessionValidator {
         };
       }
 
-      // Different device - check if active within last 10 seconds
       if (secondsSinceUpdate < 10) {
-        // Device is actively taking exam - BLOCK
         return {
           hasActiveSession: true,
           isSameDevice: false,
@@ -159,7 +146,6 @@ class SessionValidator {
         };
       }
 
-      // Different device, but session is stale (>10 seconds)
       return {
         hasActiveSession: true,
         isSameDevice: false,
@@ -184,7 +170,6 @@ class SessionValidator {
 
   static async terminateOldSession(sessionId: string, securityToken: string) {
     try {
-      // Mark session security as inactive
       await supabase
         .from("session_security")
         .update({
@@ -193,7 +178,6 @@ class SessionValidator {
         })
         .eq("session_id", sessionId);
 
-      // Mark exam session as inactive (but preserve time)
       await supabase
         .from("exam_sessions")
         .update({
@@ -217,21 +201,16 @@ export default function StudentLogin() {
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({ studentId: "", examId: "" });
 
-  // Security states
   const [deviceFingerprint, setDeviceFingerprint] = useState<string>("");
   const [ipAddress, setIpAddress] = useState<string>("");
   const [securityInitialized, setSecurityInitialized] = useState(false);
 
-  // State for dialogs
   const [resumeSession, setResumeSession] = useState<any>(null);
   const [showResumeDialog, setShowResumeDialog] = useState(false);
   const [deviceConflict, setDeviceConflict] = useState<any>(null);
-  const [showDeviceConflictDialog, setShowDeviceConflictDialog] =
-    useState(false);
-  const [showActiveSessionBlockDialog, setShowActiveSessionBlockDialog] =
-    useState(false);
-  const [activeSessionBlockInfo, setActiveSessionBlockInfo] =
-    useState<any>(null);
+  const [showDeviceConflictDialog, setShowDeviceConflictDialog] = useState(false);
+  const [showActiveSessionBlockDialog, setShowActiveSessionBlockDialog] = useState(false);
+  const [activeSessionBlockInfo, setActiveSessionBlockInfo] = useState<any>(null);
   const [showIPWarningDialog, setShowIPWarningDialog] = useState(false);
   const [suspiciousIP, setSuspiciousIP] = useState("");
 
@@ -243,15 +222,12 @@ export default function StudentLogin() {
     maxLength: 20,
   });
 
-  // State for visibility
   const [showStudentId, setShowStudentId] = useState(false);
   const [showExamId, setShowExamId] = useState(false);
 
-  // Refs for inputs
   const studentInputRef = useRef<HTMLInputElement>(null);
   const examInputRef = useRef<HTMLInputElement>(null);
 
-  // Timer for active session block countdown
   const [countdown, setCountdown] = useState(10);
 
   useEffect(() => {
@@ -259,20 +235,6 @@ export default function StudentLogin() {
     initializeSecurity();
   }, []);
 
-  // INPUT TYPE UPDATE - FOCUS GODHAAYIIN SHOW TA'UU QABA
-  useEffect(() => {
-    if (studentInputRef.current) {
-      studentInputRef.current.type = showStudentId ? "text" : "password";
-    }
-  }, [showStudentId]);
-
-  useEffect(() => {
-    if (examInputRef.current) {
-      examInputRef.current.type = showExamId ? "text" : "password";
-    }
-  }, [showExamId]);
-
-  // Countdown timer for active session block
   useEffect(() => {
     let interval: NodeJS.Timeout | null = null;
 
@@ -325,7 +287,6 @@ export default function StudentLogin() {
       setIpAddress(ip);
       setSecurityInitialized(true);
 
-      // Store in localStorage for session recovery
       localStorage.setItem("device_fingerprint", fingerprint);
       localStorage.setItem("ip_address", ip);
 
@@ -338,19 +299,9 @@ export default function StudentLogin() {
 
   const checkSuspiciousActivity = async (ip: string) => {
     try {
-      // Check for multiple active sessions from same IP
-      const { data: ipSessions, error } = await supabase
+      const { data: ipSessions } = await supabase
         .from("exam_sessions")
-        .select(
-          `
-          id,
-          status,
-          students!inner (
-            student_id,
-            name
-          )
-        `
-        )
+        .select("id, status, students!inner(student_id, name)")
         .eq("status", "in_progress")
         .like("session_security->>ip_address", `%${ip}%`)
         .limit(5);
@@ -404,53 +355,27 @@ export default function StudentLogin() {
     if (errors.examId) setErrors((prev) => ({ ...prev, examId: "" }));
   };
 
-  // FOCUS GODHAAYIIN VALUE AGARSIISU - INPUT UNIQUE
-  const handleStudentIdFocus = () => {
-    // Yeroo focus godhaniif, value jiraate show ta'uu qaba
-    if (studentId) {
-      setShowStudentId(true);
-    }
-  };
-
-  const handleExamIdFocus = () => {
-    // Yeroo focus godhaniif, value jiraate show ta'uu qaba
-    if (examId) {
-      setShowExamId(true);
-    }
-  };
-
-  // EYE ICON CLICK GODHAAYIIN TOGGLE GODHA - INPUT UNIQUE
+  // Visibility toggles - Amma yeroo click godhan qofa dalaga
   const toggleStudentIdVisibility = (e: React.MouseEvent) => {
-    e.preventDefault(); // Form submit hin godhu
-    e.stopPropagation(); // Event propagation hin godhu
+    e.preventDefault();
+    e.stopPropagation();
     setShowStudentId((prev) => !prev);
   };
 
   const toggleExamIdVisibility = (e: React.MouseEvent) => {
-    e.preventDefault(); // Form submit hin godhu
-    e.stopPropagation(); // Event propagation hin godhu
+    e.preventDefault();
+    e.stopPropagation();
     setShowExamId((prev) => !prev);
   };
 
-  // BLUR GODHAAYIIN HIDE TA'UU QABA (value hin jiraate)
-  const handleStudentIdBlur = () => {
-    // Value hin jiraate yoo ta'e hide godha
-    if (!studentId) {
-      setShowStudentId(false);
-    }
-  };
-
-  const handleExamIdBlur = () => {
-    // Value hin jiraate yoo ta'e hide godha
-    if (!examId) {
-      setShowExamId(false);
-    }
+  // Security: Prevent Copy/Paste to avoid accidental leaks or cheating attempts
+  const handlePreventCopyPaste = (e: React.ClipboardEvent) => {
+    e.preventDefault();
   };
 
   const validateExamAccess = async (studentId: string, examCode: string) => {
     const fullStudentId = studentId.trim().toUpperCase();
 
-    // Check student exists
     const { data: student, error: studentError } = await supabase
       .from("students")
       .select("id, student_id, name, grade_id, section")
@@ -461,12 +386,9 @@ export default function StudentLogin() {
       throw new Error("Student not found. Please check your Student ID.");
     }
 
-    // Check exam exists
     const { data: exam, error: examError } = await supabase
       .from("exams")
-      .select(
-        "id, exam_code, title, grade_id, section, exam_active, duration, total_marks"
-      )
+      .select("id, exam_code, title, grade_id, section, exam_active, duration, total_marks")
       .eq("exam_code", examCode)
       .single();
 
@@ -483,16 +405,13 @@ export default function StudentLogin() {
     }
 
     if (exam.section && exam.section.trim() !== "") {
-      const examSections = exam.section
-        .split(",")
-        .map((s) => s.trim().toUpperCase());
+      const examSections = exam.section.split(",").map((s) => s.trim().toUpperCase());
       const studentSection = student.section?.trim().toUpperCase();
       if (!studentSection || !examSections.includes(studentSection)) {
         throw new Error("This exam is not available for your section.");
       }
     }
 
-    // Check assignment
     const { data: assignment, error: assignmentError } = await supabase
       .from("assign_exams")
       .select("id, teacher_id")
@@ -504,7 +423,6 @@ export default function StudentLogin() {
       throw new Error("This exam is not assigned to you.");
     }
 
-    // Check if already taken
     const { data: existingResult } = await supabase
       .from("results")
       .select("id")
@@ -535,22 +453,15 @@ export default function StudentLogin() {
 
     setLoading(true);
     try {
-      // First validate exam access
       const validationResult = await validateExamAccess(studentId, examId);
 
-      // Check for active sessions with ENHANCED validation
       const sessionCheck = await SessionValidator.checkActiveSession(
         validationResult.student.id,
         validationResult.exam.id,
         deviceFingerprint
       );
 
-      // Case 1: Active session on another device within 10 seconds - BLOCK
-      if (
-        sessionCheck.hasActiveSession &&
-        !sessionCheck.canLogin &&
-        sessionCheck.reason === "active_within_10s"
-      ) {
+      if (sessionCheck.hasActiveSession && !sessionCheck.canLogin && sessionCheck.reason === "active_within_10s") {
         setActiveSessionBlockInfo({
           waitSeconds: sessionCheck.waitSeconds,
           session: sessionCheck.session,
@@ -563,7 +474,6 @@ export default function StudentLogin() {
         return;
       }
 
-      // Case 2: Same device - resume immediately
       if (sessionCheck.hasActiveSession && sessionCheck.isSameDevice) {
         setResumeSession({
           student: validationResult.student,
@@ -577,7 +487,6 @@ export default function StudentLogin() {
         return;
       }
 
-      // Case 3: Stale session on another device (>10 seconds) - takeover required
       if (sessionCheck.hasActiveSession && sessionCheck.requiresTakeover) {
         setDeviceConflict({
           session: sessionCheck.session,
@@ -593,7 +502,6 @@ export default function StudentLogin() {
         return;
       }
 
-      // Case 4: No active session - create new
       const sessionData = await createNewExamSession(validationResult);
       toast.success("Login successful! Starting exam...");
       redirectToExam(sessionData, validationResult);
@@ -608,12 +516,8 @@ export default function StudentLogin() {
   const createNewExamSession = async (validationResult: any) => {
     const { student, exam, assignment, duration } = validationResult;
 
-    // Generate security token
-    const securityToken = [...Array(32)]
-      .map(() => Math.random().toString(36)[2])
-      .join("");
+    const securityToken = [...Array(32)].map(() => Math.random().toString(36)[2]).join("");
 
-    // Create exam session
     const { data: session, error: sessionError } = await supabase
       .from("exam_sessions")
       .insert({
@@ -638,7 +542,6 @@ export default function StudentLogin() {
       throw new Error("Failed to create exam session. Please try again.");
     }
 
-    // Create session security record
     const { error: securityError } = await supabase
       .from("session_security")
       .insert({
@@ -653,7 +556,6 @@ export default function StudentLogin() {
       });
 
     if (securityError) {
-      // Rollback session creation
       await supabase.from("exam_sessions").delete().eq("id", session.id);
       throw new Error("Security setup failed. Please try again.");
     }
@@ -667,7 +569,6 @@ export default function StudentLogin() {
     try {
       setLoading(true);
 
-      // Update session activity
       const { error: updateError } = await supabase
         .from("exam_sessions")
         .update({
@@ -676,9 +577,7 @@ export default function StudentLogin() {
         })
         .eq("id", resumeSession.existingSession.id);
 
-      if (updateError) {
-        throw updateError;
-      }
+      if (updateError) throw updateError;
 
       toast.success("Resuming exam session...");
       redirectToResumeSession(resumeSession);
@@ -694,20 +593,14 @@ export default function StudentLogin() {
 
     setLoading(true);
     try {
-      // 1. Terminate the old session first
       const terminated = await SessionValidator.terminateOldSession(
         deviceConflict.oldSessionId,
         deviceConflict.oldSecurityToken
       );
 
-      if (!terminated) {
-        throw new Error("Failed to terminate old session");
-      }
+      if (!terminated) throw new Error("Failed to terminate old session");
 
-      // 2. Create new session with EXISTING time
-      const securityToken = [...Array(32)]
-        .map(() => Math.random().toString(36)[2])
-        .join("");
+      const securityToken = [...Array(32)].map(() => Math.random().toString(36)[2]).join("");
 
       const { data: session, error: sessionError } = await supabase
         .from("exam_sessions")
@@ -715,10 +608,10 @@ export default function StudentLogin() {
           student_id: deviceConflict.student.id,
           exam_id: deviceConflict.exam.id,
           teacher_id: deviceConflict.assignment.teacher_id,
-          started_at: deviceConflict.session.started_at, // Keep original start time
+          started_at: deviceConflict.session.started_at,
           last_activity_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
-          time_remaining: deviceConflict.timeRemaining, // CONTINUE time from old session
+          time_remaining: deviceConflict.timeRemaining,
           status: "in_progress",
           security_token: securityToken,
           device_takeover_count: 1,
@@ -729,7 +622,6 @@ export default function StudentLogin() {
 
       if (sessionError) throw sessionError;
 
-      // 3. Create security record for new device
       const { error: securityError } = await supabase
         .from("session_security")
         .insert({
@@ -748,7 +640,6 @@ export default function StudentLogin() {
         throw securityError;
       }
 
-      // 4. Copy existing answers from old session if any
       const { data: oldAnswers } = await supabase
         .from("student_answers")
         .select("*")
@@ -768,12 +659,9 @@ export default function StudentLogin() {
         await supabase.from("student_answers").insert(newAnswers);
       }
 
-      toast.warning(
-        "Session taken over. Continuing exam from previous time..."
-      );
+      toast.warning("Session taken over. Continuing exam from previous time...");
       setShowDeviceConflictDialog(false);
 
-      // Redirect to exam with continued time
       const examSession = {
         sessionId: session.id,
         securityToken: securityToken,
@@ -790,14 +678,9 @@ export default function StudentLogin() {
 
       localStorage.setItem("examSession", JSON.stringify(examSession));
 
-      const slug = deviceConflict.exam.title
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "-")
-        .replace(/(^-|-$)+/g, "");
+      const slug = deviceConflict.exam.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)+/g, "");
 
-      router.push(
-        `/start/${slug}?student=${deviceConflict.student.student_id}&exam=${deviceConflict.exam.exam_code}&session=${session.id}&token=${securityToken}`
-      );
+      router.push(`/start/${slug}?student=${deviceConflict.student.student_id}&exam=${deviceConflict.exam.exam_code}&session=${session.id}&token=${securityToken}`);
     } catch (error: any) {
       toast.error(error.message || "Takeover failed. Please try again.");
       setLoading(false);
@@ -824,14 +707,9 @@ export default function StudentLogin() {
 
     localStorage.setItem("examSession", JSON.stringify(examSession));
 
-    const slug = exam.title
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/(^-|-$)+/g, "");
+    const slug = exam.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)+/g, "");
 
-    router.push(
-      `/start/${slug}?student=${student.student_id}&exam=${exam.exam_code}&session=${session.id}&token=${session.security_token}`
-    );
+    router.push(`/start/${slug}?student=${student.student_id}&exam=${exam.exam_code}&session=${session.id}&token=${session.security_token}`);
   };
 
   const redirectToResumeSession = (resumeData: any) => {
@@ -854,54 +732,15 @@ export default function StudentLogin() {
 
     localStorage.setItem("examSession", JSON.stringify(examSession));
 
-    const slug = exam.title
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/(^-|-$)+/g, "");
+    const slug = exam.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)+/g, "");
 
-    router.push(
-      `/start/${slug}?student=${student.student_id}&exam=${exam.exam_code}&session=${existingSession.id}&token=${existingSession.security_token}`
-    );
+    router.push(`/start/${slug}?student=${student.student_id}&exam=${exam.exam_code}&session=${existingSession.id}&token=${existingSession.security_token}`);
   };
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
-    return `${mins.toString().padStart(2, "0")}:${secs
-      .toString()
-      .padStart(2, "0")}`;
-  };
-
-  const formatDateTime = (dateString: string) => {
-    const date = new Date(dateString);
-    return (
-      date.toLocaleTimeString("en-US", {
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: true,
-      }) +
-      " " +
-      date.toLocaleDateString("en-US", {
-        month: "short",
-        day: "numeric",
-      })
-    );
-  };
-
-  const formatLastActivity = (dateString: string) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffInSeconds = (now.getTime() - date.getTime()) / 1000;
-
-    if (diffInSeconds < 10) {
-      return "Just now";
-    } else if (diffInSeconds < 60) {
-      return `${Math.floor(diffInSeconds)} seconds ago`;
-    } else if (diffInSeconds < 3600) {
-      return `${Math.floor(diffInSeconds / 60)} minutes ago`;
-    } else {
-      return formatDateTime(dateString);
-    }
+    return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
   };
 
   const handleRetryAfterBlock = async () => {
@@ -909,7 +748,6 @@ export default function StudentLogin() {
     setLoading(true);
 
     try {
-      // Re-check after countdown
       const validationResult = await validateExamAccess(studentId, examId);
       const sessionCheck = await SessionValidator.checkActiveSession(
         validationResult.student.id,
@@ -918,7 +756,6 @@ export default function StudentLogin() {
       );
 
       if (sessionCheck.hasActiveSession && !sessionCheck.canLogin) {
-        // Still active, update countdown
         setActiveSessionBlockInfo({
           waitSeconds: sessionCheck.waitSeconds,
           session: sessionCheck.session,
@@ -931,7 +768,6 @@ export default function StudentLogin() {
         return;
       }
 
-      // Now can proceed
       if (sessionCheck.hasActiveSession && sessionCheck.requiresTakeover) {
         setDeviceConflict({
           session: sessionCheck.session,
@@ -1033,11 +869,8 @@ export default function StudentLogin() {
         </DialogContent>
       </Dialog>
 
-      {/* Active Session Block Dialog (10-second lock) */}
-      <Dialog
-        open={showActiveSessionBlockDialog}
-        onOpenChange={setShowActiveSessionBlockDialog}
-      >
+      {/* Active Session Block Dialog */}
+      <Dialog open={showActiveSessionBlockDialog} onOpenChange={setShowActiveSessionBlockDialog}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-red-600">
@@ -1068,22 +901,17 @@ export default function StudentLogin() {
             <div className="text-center">
               <div className="inline-flex items-center justify-center w-24 h-24 rounded-full bg-gradient-to-r from-red-100 to-rose-100 mb-4">
                 <div className="text-center">
-                  <div className="text-3xl font-bold text-red-600">
-                    {countdown}
-                  </div>
+                  <div className="text-3xl font-bold text-red-600">{countdown}</div>
                   <div className="text-xs text-red-500">seconds</div>
                 </div>
               </div>
               <p className="text-gray-600 mb-4">
-                Please wait {countdown} second{countdown !== 1 ? "s" : ""}{" "}
-                before trying again.
+                Please wait {countdown} second{countdown !== 1 ? "s" : ""} before trying again.
               </p>
 
               {countdown === 0 ? (
                 <div className="bg-green-50 border border-green-200 p-3 rounded-lg">
-                  <p className="text-green-700 font-medium">
-                    ✓ You can now proceed
-                  </p>
+                  <p className="text-green-700 font-medium">✓ You can now proceed</p>
                   <p className="text-sm text-green-600 mt-1">
                     The other device session is now available for takeover.
                   </p>
@@ -1091,8 +919,7 @@ export default function StudentLogin() {
               ) : (
                 <div className="bg-amber-50 border border-amber-200 p-3 rounded-lg">
                   <p className="text-amber-700">
-                    <span className="font-medium">Note:</span> This prevents
-                    exam sharing and ensures fair assessment.
+                    <span className="font-medium">Note:</span> This prevents exam sharing and ensures fair assessment.
                   </p>
                 </div>
               )}
@@ -1132,11 +959,8 @@ export default function StudentLogin() {
         </DialogContent>
       </Dialog>
 
-      {/* Device Conflict Dialog (Takeover required) */}
-      <Dialog
-        open={showDeviceConflictDialog}
-        onOpenChange={setShowDeviceConflictDialog}
-      >
+      {/* Device Conflict Dialog */}
+      <Dialog open={showDeviceConflictDialog} onOpenChange={setShowDeviceConflictDialog}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-amber-600">
@@ -1168,9 +992,7 @@ export default function StudentLogin() {
               <div className="rounded-lg bg-blue-50 border border-blue-200 p-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="font-medium text-blue-800">
-                      Time Continuation
-                    </p>
+                    <p className="font-medium text-blue-800">Time Continuation</p>
                     <p className="text-sm text-blue-600">
                       Your exam time will continue from where it left off
                     </p>
@@ -1179,24 +1001,9 @@ export default function StudentLogin() {
                 </div>
                 <div className="mt-2 text-center">
                   <div className="text-2xl font-bold text-blue-700">
-                    {deviceConflict?.timeRemaining &&
-                      formatTime(deviceConflict.timeRemaining)}
+                    {deviceConflict?.timeRemaining && formatTime(deviceConflict.timeRemaining)}
                   </div>
                   <p className="text-xs text-blue-600">Time remaining</p>
-                </div>
-              </div>
-
-              <div className="rounded-lg bg-purple-50 border border-purple-200 p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-medium text-purple-800">
-                      Progress Preservation
-                    </p>
-                    <p className="text-sm text-purple-600">
-                      All answered questions will be transferred
-                    </p>
-                  </div>
-                  <CheckCircle2 className="h-5 w-5 text-purple-500" />
                 </div>
               </div>
             </div>
@@ -1255,8 +1062,7 @@ export default function StudentLogin() {
                   </p>
                   <p className="text-sm text-amber-600">
                     Your IP address ({suspiciousIP}) has multiple active exam
-                    sessions. This may indicate account sharing, which is not
-                    allowed.
+                    sessions. This may indicate account sharing, which is not allowed.
                   </p>
                 </div>
               </div>
@@ -1284,311 +1090,256 @@ export default function StudentLogin() {
       </Dialog>
 
       {/* Main Login Page - Professional Split Screen */}
-      <div className="min-h-screen flex">
-        {/* Left Side – Brand / Info Section */}
-        <div
-          className="
-    hidden lg:flex lg:w-1/2
-    bg-gradient-to-br from-gray-50 via-slate-100 to-sky-200
-    shadow-xl backdrop-blur-sm bg-white/90 shadow-lg rounded-2xl
-    p-12 flex-col justify-between
-    text-slate-700
-  "
-        >
+      <div className="min-h-screen flex bg-white">
+        {/* Left Side – Enhanced Professional UI */}
+        <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden bg-slate-50 flex-col justify-between p-12 text-slate-700 border-r border-slate-200">
+          {/* Decorative Background Elements */}
+          <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
+            <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] rounded-full bg-blue-100/50 blur-3xl" />
+            <div className="absolute bottom-[-10%] right-[-10%] w-[60%] h-[60%] rounded-full bg-indigo-50/50 blur-3xl" />
+          </div>
+
           {/* Top Content */}
-          <div>
-            {/* Logo / Brand Area */}
-            <div className="flex items-center gap-4 mb-10">
+          <div className="relative z-10">
+            <div className="flex items-center gap-4 mb-12">
               <div className="relative">
-                <div
-                  className="w-16 h-16 p-3 rounded-2xl bg-white/60 backdrop-blur-md shadow-md ring-1 ring-black/5 flex items-center justify-center overflow-hidden"
-                >
+                <div className="w-16 h-16 p-3 rounded-2xl bg-white shadow-sm border border-slate-100 flex items-center justify-center overflow-hidden">
                   <img src="/icons/icon-192.png" alt="ExamFlow Logo" className="w-full h-full object-cover scale-125" />
                 </div>
-
-                {/* Soft Glow */}
-                <div className="absolute -inset-1 rounded-2xl bg-blue-500/10 blur-xl -z-10" />
               </div>
-
               <div>
-                <h1 className="text-3xl font-bold text-slate-900 tracking-tight">
+                <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">
                   ALPHA
                 </h1>
-                <p className="text-slate-600 text-sm mt-1">
-                  Professional Assessment Platform
+                <p className="text-slate-500 font-medium text-sm mt-0.5 tracking-wide uppercase">
+                  Assessment Platform
                 </p>
               </div>
             </div>
 
-            {/* Motivation Message */}
-            <p className="text-slate-700 text-base leading-relaxed max-w-md">
-              “Success comes from preparation, focus, and confidence. Approach
-              your exam calmly — every question is an opportunity to show what
-              you know.”
-            </p>
-
-            {/* Supporting Information */}
-            <p className="mt-5 text-slate-600 text-sm leading-relaxed max-w-md">
-              This secure online examination system is designed to ensure
-              fairness, accuracy, and a smooth experience for every student.
-              Your progress is saved automatically to keep your work safe.
-            </p>
+            <div className="max-w-md space-y-6">
+              <h2 className="text-2xl font-semibold text-slate-800 leading-snug">
+                Empowering your academic journey through secure evaluations.
+              </h2>
+              <p className="text-slate-600 text-base leading-relaxed">
+                “Success comes from preparation, focus, and confidence. Approach
+                your exam calmly — every question is an opportunity to show what
+                you know.”
+              </p>
+              
+              <div className="pt-6 mt-6 border-t border-slate-200/60">
+                <div className="flex items-center gap-3 text-sm text-slate-600">
+                  <Shield className="w-5 h-5 text-blue-600" />
+                  <p>Secure, monitored, and automated grading system.</p>
+                </div>
+              </div>
+            </div>
           </div>
 
           {/* Bottom Motivation / Footer */}
-          <div className="text-slate-500 text-sm">
+          <div className="relative z-10 text-slate-500 text-sm font-medium">
             <p>Stay calm. Stay focused. Do your best.</p>
-            <p className="mt-1">© 2026 ALPHA COLLEGE. All rights reserved.</p>
+            <p className="mt-2 text-slate-400">© {new Date().getFullYear()} ALPHA COLLEGE. All rights reserved.</p>
           </div>
         </div>
 
         {/* Right Side - Login Form */}
-        <div className="flex-1 flex items-center justify-center p-8">
+        <div className="flex-1 flex items-center justify-center p-6 sm:p-12">
           <div className="w-full max-w-md">
             {/* Mobile Logo */}
             <div className="lg:hidden flex items-center gap-3 mb-10">
-              <div
-                  className="w-16 h-16 p-3 rounded-2xl bg-white/60 backdrop-blur-md shadow-md ring-1 ring-black/5 flex items-center justify-center overflow-hidden"
-                >
+              <div className="w-14 h-14 p-2.5 rounded-2xl bg-white shadow-sm border border-slate-100 flex items-center justify-center overflow-hidden">
                   <img src="/icons/icon-192.png" alt="ExamFlow Logo" className="w-full h-full object-cover scale-125" />
-                </div>
+              </div>
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">ALPHA</h1>
-                <p className="text-gray-500 text-sm">
-                  Professional Assessment Platform
+                <h1 className="text-2xl font-bold text-gray-900 tracking-tight">ALPHA</h1>
+                <p className="text-gray-500 text-xs font-medium uppercase tracking-wide">
+                  Assessment Platform
                 </p>
               </div>
             </div>
 
             {/* Login Header */}
-            <div className="mb-10">
-              <h2 className="text-3xl font-bold text-gray-900 mb-3">
+            <div className="mb-8">
+              <h2 className="text-3xl font-bold text-gray-900 mb-2">
                 Welcome Back
               </h2>
-              <p className="text-gray-600">
+              <p className="text-gray-500">
                 Enter your credentials to access your examination
               </p>
             </div>
 
-            {/* Login Form */}
-            <form onSubmit={handleLogin} className="space-y-8">
+            {/* Login Form with Enhanced Security attributes */}
+            <form onSubmit={handleLogin} className="space-y-6" autoComplete="off">
+              {/* Fake fields to prevent browser auto-fill tricks */}
+              <input type="text" name="fakeusernameremembered" className="hidden" />
+              <input type="password" name="fakepasswordremembered" className="hidden" />
+
               {/* Student ID Input */}
-              <div className="space-y-3">
+              <div className="space-y-2.5">
                 <div className="flex items-center justify-between">
-                  <Label
-                    htmlFor="studentId"
-                    className="text-sm font-medium text-gray-700"
-                  >
+                  <Label htmlFor="studentId" className="text-sm font-semibold text-slate-700">
                     Student ID
                   </Label>
-                  <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
-                    Required
-                  </span>
                 </div>
 
                 <div className="relative">
-                  <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+                  <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400">
                     <User className="h-5 w-5" />
                   </div>
 
                   <Input
                     ref={studentInputRef}
                     id="studentId"
+                    name="student_identifier_secure"
+                    autoComplete="off"
+                    autoCorrect="off"
+                    spellCheck="false"
+                    onCopy={handlePreventCopyPaste}
+                    onPaste={handlePreventCopyPaste}
+                    onCut={handlePreventCopyPaste}
                     value={studentId}
                     onChange={handleStudentIdChange}
-                    onFocus={handleStudentIdFocus}
-                    onBlur={handleStudentIdBlur}
-                    placeholder="XXXXXX"
-                    type="password"
+                    placeholder="Enter your ID"
+                    type={showStudentId ? "text" : "password"}
                     className={`
-                      h-12 pl-10 pr-12 
-                      text-base
-                      border-2
+                      h-12 pl-11 pr-12 
+                      text-base font-medium
+                      border-slate-200
                       ${
                         errors.studentId
                           ? "border-red-300 focus:border-red-500 focus:ring-red-100"
                           : studentId
                           ? "border-green-300 focus:border-green-500 focus:ring-green-100"
-                          : "border-gray-200 focus:border-blue-500 focus:ring-blue-100"
+                          : "focus:border-slate-800 focus:ring-slate-100"
                       }
-                      focus:ring-2
+                      focus:ring-2 shadow-sm
                       transition-all duration-200
                     `}
                     maxLength={studentIdFormat.maxLength}
                     disabled={loading}
                   />
 
-                  <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
                     {studentId && !errors.studentId && (
-                      <CheckCircle2 className="h-5 w-5 text-green-500" />
+                      <CheckCircle2 className="h-4 w-4 text-green-500" />
                     )}
                     <button
                       type="button"
-                      className="p-1 rounded-md hover:bg-gray-100 transition-colors disabled:opacity-50"
+                      className="p-1.5 rounded-md text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors disabled:opacity-50"
                       onClick={toggleStudentIdVisibility}
                       disabled={!studentId || loading}
+                      tabIndex={-1}
                     >
                       {showStudentId ? (
-                        <EyeOff className="h-4 w-4 text-gray-500" />
+                        <EyeOff className="h-4 w-4" />
                       ) : (
-                        <Eye className="h-4 w-4 text-gray-500" />
+                        <Eye className="h-4 w-4" />
                       )}
                     </button>
                   </div>
                 </div>
 
                 <div className="min-h-[20px]">
-                  {errors.studentId ? (
-                    <p className="text-sm text-red-600 flex items-center gap-2">
+                  {errors.studentId && (
+                    <p className="text-sm text-red-600 flex items-center gap-1.5">
                       <AlertCircle className="h-4 w-4 flex-shrink-0" />
                       {errors.studentId}
-                    </p>
-                  ) : studentId ? (
-                    <div className="flex items-center justify-between">
-                      <p className="text-sm text-green-600 flex items-center gap-2">
-                        <CheckCircle2 className="h-4 w-4 flex-shrink-0" />
-                        Valid student ID
-                      </p>
-                      <span className="text-xs text-gray-500">
-                        {studentId.length}/{studentIdFormat.maxLength}
-                      </span>
-                    </div>
-                  ) : (
-                    <p className="text-sm text-gray-500">
-                      Enter your official student identification
                     </p>
                   )}
                 </div>
               </div>
 
               {/* Exam ID Input */}
-              <div className="space-y-3">
+              <div className="space-y-2.5">
                 <div className="flex items-center justify-between">
-                  <Label
-                    htmlFor="examId"
-                    className="text-sm font-medium text-gray-700"
-                  >
+                  <Label htmlFor="examId" className="text-sm font-semibold text-slate-700">
                     Exam Code
                   </Label>
-                  <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
+                  <span className="text-xs font-medium text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md">
                     6 digits
                   </span>
                 </div>
 
                 <div className="relative">
-                  <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+                  <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400">
                     <KeyRound className="h-5 w-5" />
                   </div>
 
                   <Input
                     ref={examInputRef}
                     id="examId"
+                    name="exam_code_secure"
+                    autoComplete="off"
+                    autoCorrect="off"
+                    spellCheck="false"
+                    onCopy={handlePreventCopyPaste}
+                    onPaste={handlePreventCopyPaste}
+                    onCut={handlePreventCopyPaste}
                     value={examId}
                     onChange={handleExamIdChange}
-                    onFocus={handleExamIdFocus}
-                    onBlur={handleExamIdBlur}
-                    placeholder="XXXXXX"
-                    type="password"
+                    placeholder="••••••"
+                    type={showExamId ? "text" : "password"}
                     className={`
-                      h-12 pl-10 pr-12 
-                      text-base tracking-widest
-                      border-2
+                      h-12 pl-11 pr-12 
+                      text-lg tracking-[0.2em] font-medium
+                      border-slate-200
                       ${
                         errors.examId
                           ? "border-red-300 focus:border-red-500 focus:ring-red-100"
                           : examId
                           ? "border-green-300 focus:border-green-500 focus:ring-green-100"
-                          : "border-gray-200 focus:border-blue-500 focus:ring-blue-100"
+                          : "focus:border-slate-800 focus:ring-slate-100"
                       }
-                      focus:ring-2
+                      focus:ring-2 shadow-sm
                       transition-all duration-200
                     `}
                     maxLength={6}
                     disabled={loading}
                   />
 
-                  <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
                     {examId && examId.length === 6 && !errors.examId && (
-                      <CheckCircle2 className="h-5 w-5 text-green-500" />
+                      <CheckCircle2 className="h-4 w-4 text-green-500" />
                     )}
                     <button
                       type="button"
-                      className="p-1 rounded-md hover:bg-gray-100 transition-colors disabled:opacity-50"
+                      className="p-1.5 rounded-md text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors disabled:opacity-50"
                       onClick={toggleExamIdVisibility}
                       disabled={!examId || loading}
+                      tabIndex={-1}
                     >
                       {showExamId ? (
-                        <EyeOff className="h-4 w-4 text-gray-500" />
+                        <EyeOff className="h-4 w-4" />
                       ) : (
-                        <Eye className="h-4 w-4 text-gray-500" />
+                        <Eye className="h-4 w-4" />
                       )}
                     </button>
                   </div>
                 </div>
 
                 <div className="min-h-[20px]">
-                  {errors.examId ? (
-                    <p className="text-sm text-red-600 flex items-center gap-2">
+                  {errors.examId && (
+                    <p className="text-sm text-red-600 flex items-center gap-1.5">
                       <AlertCircle className="h-4 w-4 flex-shrink-0" />
                       {errors.examId}
-                    </p>
-                  ) : examId ? (
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        {examId.length === 6 ? (
-                          <>
-                            <CheckCircle2 className="h-4 w-4 text-green-500" />
-                            <span className="text-sm text-green-600">
-                              Valid exam code
-                            </span>
-                          </>
-                        ) : (
-                          <span className="text-sm text-amber-600">
-                            {6 - examId.length} digit(s) remaining
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-1">
-                        {Array.from({ length: 6 }).map((_, i) => (
-                          <div
-                            key={i}
-                            className={`w-2 h-2 rounded-full ${
-                              i < examId.length
-                                ? examId.length === 6
-                                  ? "bg-green-500"
-                                  : "bg-blue-500"
-                                : "bg-gray-300"
-                            }`}
-                          />
-                        ))}
-                      </div>
-                    </div>
-                  ) : (
-                    <p className="text-sm text-gray-500">
-                      Enter the 6-digit exam code from your instructor
                     </p>
                   )}
                 </div>
               </div>
 
-              {/* Submit Button */}
-              <div>
+              {/* Submit Button - Dark Theme */}
+              <div className="pt-4">
                 <Button
                   type="submit"
                   className={`
-                    w-full 
-                    h-12 
-                    text-base
-                    font-semibold
-                    transition-all duration-300
+                    w-full h-12 text-base font-semibold text-white
+                    transition-all duration-300 rounded-lg
                     ${
-                      loading
-                        ? "bg-gray-400 cursor-not-allowed"
-                        : !securityInitialized
-                        ? "bg-gray-500 cursor-not-allowed"
-                        : "bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 shadow-lg hover:shadow-xl"
+                      loading || !securityInitialized || !studentId || !examId || studentId.length < studentIdFormat.minLength || examId.length !== 6
+                        ? "bg-slate-300 text-slate-500 cursor-not-allowed shadow-none"
+                        : "bg-slate-900 hover:bg-slate-800 shadow-md hover:shadow-lg hover:-translate-y-0.5"
                     }
-                    relative overflow-hidden group
                   `}
                   disabled={
                     loading ||
@@ -1599,7 +1350,7 @@ export default function StudentLogin() {
                     examId.length !== 6
                   }
                 >
-                  <span className="relative z-10 flex items-center justify-center">
+                  <span className="flex items-center justify-center">
                     {loading ? (
                       <>
                         <Loader2 className="mr-2 h-5 w-5 animate-spin" />
@@ -1613,30 +1364,13 @@ export default function StudentLogin() {
                     ) : (
                       <>
                         Start Exam Session
-                        <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
+                        <ArrowRight className="ml-2 h-5 w-5 transition-transform group-hover:translate-x-1" />
                       </>
                     )}
                   </span>
                 </Button>
               </div>
             </form>
-
-            {/* Security Footer */}
-            <div className="mt-8 pt-6 border-t border-gray-200">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                  <span className="text-xs text-gray-500">
-                    Secure Connection
-                  </span>
-                </div>
-                <span className="text-xs text-gray-500">
-                  {deviceFingerprint
-                    ? "Device Verified"
-                    : "Verifying Device..."}
-                </span>
-              </div>
-            </div>
           </div>
         </div>
       </div>

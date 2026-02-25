@@ -35,6 +35,7 @@ import {
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { useTheme } from "next-themes";
 
 // --- PROPS INTERFACE ---
 interface ModernHeaderProps {
@@ -52,6 +53,8 @@ export function Header({ title }: ModernHeaderProps) {
     subjectName?: string;
     sections?: string[];
   } | null>(null);
+  const { theme, setTheme } = useTheme();
+  const toggleTheme = () => setTheme(theme === "dark" ? "light" : "dark");
 
   useEffect(() => {
     // Get teacher data from cookie
@@ -107,26 +110,32 @@ export function Header({ title }: ModernHeaderProps) {
 
   return (
     <TooltipProvider delayDuration={100}>
-      <header className="sticky top-0 z-50 w-full border-b bg-background border-gray-200/60 backdrop-blur-xl supports-[backdrop-filter]:bg-white/80 animate-slide-in-left">
-        <div className="flex h-14 items-center gap-4 px-4 sm:px-6">
-          <div className="flex flex-1 items-center gap-4">
-            <SidebarTrigger className="-ml-1 h-8 w-8 hover:bg-gray-100/80 transition-all duration-200" />
-            <h1 className="text-xl font-semibold tracking-tight text-gray-800">
-              {title}
-            </h1>
-          </div>
+      <header className="w-full bg-transparent border-none flex-none h-16 flex items-center px-4 sm:px-6">
+        <div className="flex flex-1 items-center gap-4">
+          <SidebarTrigger className="-ml-2 h-9 w-9 hover:bg-black/5 dark:hover:bg-white/5 transition-all duration-200" />
+          <h1 className="text-lg font-semibold tracking-tight text-foreground">
+            {title}
+          </h1>
+        </div>
 
-          {/* Right Section - User Menu */}
-          <div className="flex items-center gap-3 ml-auto">
+        {/* Right Section - User Menu */}
+        <div className="ml-auto flex items-center gap-2">
+          
+          <Button
+            variant="ghost"
+            size="icon"
+            className="relative h-9 w-9 rounded-full hover:bg-black/5 dark:hover:bg-white/5"
+            onClick={toggleTheme}
+          >
+            <Sun className="absolute h-4 w-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
+            <Moon className="absolute h-4 w-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+          </Button>
             
-            {/* User Menu Dropdown */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="ghost"
-                  className="relative h-9 w-9 rounded-full hover:bg-gray-100/80 transition-all duration-200"
-                >
-                  <Avatar className="h-8 w-8">
+          {/* User Menu Dropdown */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" className="relative h-9 w-9 rounded-full p-0 ml-2 hover:bg-black/5 dark:hover:bg-white/5">
+                <Avatar className="h-9 w-9 rounded-full border border-zinc-200 dark:border-zinc-800">
                     <AvatarImage src={user.avatar} alt={user.name} />
                     <AvatarFallback className="bg-gradient-to-br from-blue-500 to-indigo-600 text-white">
                       {getInitials(user.name)}
@@ -213,8 +222,7 @@ export function Header({ title }: ModernHeaderProps) {
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
-        </div>
-      </header>
+        </header>
     </TooltipProvider>
   );
 }

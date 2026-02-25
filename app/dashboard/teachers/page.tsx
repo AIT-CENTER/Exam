@@ -1,7 +1,6 @@
 "use client"
 
 import type React from "react"
-
 import { useState, useMemo, useEffect } from "react"
 import { createClient } from "@supabase/supabase-js"
 import { useRouter } from "next/navigation"
@@ -38,7 +37,6 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { Skeleton } from "@/components/ui/skeleton"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import {
   UserPlus,
@@ -98,6 +96,59 @@ interface Teacher {
   assignedSubject: string
   assignedSections: string[]
   created_at: string
+}
+
+// Premium spinner matching the dashboard
+function PageSpinner() {
+  return (
+    <div className="flex items-center justify-center min-h-[70vh] w-full bg-transparent">
+      <style>{`
+        .spinner-svg {
+          animation: spinner-rotate 2s linear infinite;
+        }
+        .spinner-circle {
+          stroke-dasharray: 1, 200;
+          stroke-dashoffset: 0;
+          animation: spinner-stretch 1.5s ease-in-out infinite;
+          stroke-linecap: round;
+        }
+        @keyframes spinner-rotate {
+          100% {
+            transform: rotate(360deg);
+          }
+        }
+        @keyframes spinner-stretch {
+          0% {
+            stroke-dasharray: 1, 200;
+            stroke-dashoffset: 0;
+          }
+          50% {
+            stroke-dasharray: 90, 200;
+            stroke-dashoffset: -35px;
+          }
+          100% {
+            stroke-dasharray: 90, 200;
+            stroke-dashoffset: -124px;
+          }
+        }
+      `}</style>
+      
+      <svg
+        className="h-10 w-10 text-zinc-800 dark:text-zinc-200 spinner-svg"
+        viewBox="25 25 50 50"
+      >
+        <circle
+          className="spinner-circle"
+          cx="50"
+          cy="50"
+          r="20"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="4"
+        />
+      </svg>
+    </div>
+  );
 }
 
 export default function TeacherManagementPage() {
@@ -537,62 +588,15 @@ export default function TeacherManagementPage() {
   }
 
   if (loading) {
-    return (
-      <div className="flex-1 space-y-8 p-8 bg-gray-50 min-h-screen">
-        <div className="flex items-center justify-between">
-          <div className="space-y-2">
-            <Skeleton className="h-8 w-64 bg-gray-200 rounded animate-pulse" />
-            <Skeleton className="h-4 w-96 bg-gray-200 rounded animate-pulse" />
-          </div>
-          <Skeleton className="h-10 w-40 bg-gray-200 rounded animate-pulse" />
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {[...Array(3)].map((_, i) => (
-            <Card key={i}>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <Skeleton className="h-4 w-24 bg-gray-200 rounded animate-pulse" />
-                <Skeleton className="h-5 w-5 bg-gray-200 rounded animate-pulse" />
-              </CardHeader>
-              <CardContent>
-                <Skeleton className="h-8 w-16 bg-gray-200 rounded animate-pulse" />
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-        <Card>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                {[...Array(8)].map((_, i) => (
-                  <TableHead key={i}>
-                    <Skeleton className="h-4 w-20 bg-gray-200 rounded animate-pulse" />
-                  </TableHead>
-                ))}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {[...Array(5)].map((_, rowIndex) => (
-                <TableRow key={rowIndex}>
-                  {[...Array(8)].map((_, cellIndex) => (
-                    <TableCell key={cellIndex}>
-                      <Skeleton className="h-4 w-full bg-gray-200 rounded animate-pulse" />
-                    </TableCell>
-                  ))}
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </Card>
-      </div>
-    )
+    return <PageSpinner />;
   }
 
   return (
-    <div className="flex-1 space-y-8 p-8 bg-gray-50 min-h-screen">
+    <div className="flex-1 space-y-8 p-4 lg:p-8 bg-transparent">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-gray-900">Teacher Management</h1>
+          <h1 className="text-3xl font-bold tracking-tight text-foreground">Teacher Management</h1>
         </div>
         <Button onClick={openCreate} className="gap-2">
           <UserPlus className="h-4 w-4" />
@@ -603,9 +607,9 @@ export default function TeacherManagementPage() {
       {/* Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {stats.map((stat, i) => (
-          <Card key={i}>
+          <Card key={i} className="shadow-sm hover:shadow-lg transition-shadow duration-200">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">{stat.title}</CardTitle>
+              <CardTitle className="text-sm font-medium text-muted-foreground">{stat.title}</CardTitle>
               <stat.icon className="h-5 w-5 text-muted-foreground" />
             </CardHeader>
             <CardContent>
@@ -618,7 +622,7 @@ export default function TeacherManagementPage() {
       {/* Filters */}
       <div className="space-y-4">
         <div className="flex flex-col sm:flex-row gap-4 items-center">
-          <div className="relative flex-1 max-w-md">
+          <div className="relative flex-1 max-w-md w-full">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
               placeholder="Search by name, ID, email, phone, or subject..."
@@ -630,7 +634,7 @@ export default function TeacherManagementPage() {
         </div>
 
         {/* Table */}
-        <Card>
+        <Card className="shadow-sm">
           <Table>
             <TableHeader>
               <TableRow>
@@ -653,7 +657,7 @@ export default function TeacherManagementPage() {
                 </TableRow>
               ) : (
                 paginatedUsers.map((user) => (
-                  <TableRow key={user.id}>
+                  <TableRow key={user.id} className="transition-colors hover:bg-muted/40">
 
                     <TableCell title={user.username}>{truncateText(user.username)}</TableCell>
                     <TableCell title={user.fullName}>{truncateText(user.fullName)}</TableCell>
@@ -694,7 +698,7 @@ export default function TeacherManagementPage() {
                             <Key className="mr-2 h-4 w-4" /> Reset Password
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
-                          <DropdownMenuItem onClick={() => openDelete(user)} className="text-red-600">
+                          <DropdownMenuItem onClick={() => openDelete(user)} className="text-red-600 focus:bg-red-50 dark:focus:bg-red-950">
                             <Trash2 className="mr-2 h-4 w-4" /> Delete
                           </DropdownMenuItem>
                         </DropdownMenuContent>
@@ -709,7 +713,7 @@ export default function TeacherManagementPage() {
 
         {/* Pagination */}
         {totalPages > 1 && (
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
             <p className="text-sm text-muted-foreground">
               Showing {(currentPage - 1) * USERS_PER_PAGE + 1} to{" "}
               {Math.min(currentPage * USERS_PER_PAGE, filteredUsers.length)} of {filteredUsers.length} teachers
@@ -1095,7 +1099,7 @@ export default function TeacherManagementPage() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDeleteUser} className="bg-red-600 hover:bg-red-700">
+            <AlertDialogAction onClick={handleDeleteUser} className="bg-red-600 hover:bg-red-700 text-white">
               Delete
             </AlertDialogAction>
           </AlertDialogFooter>

@@ -16,12 +16,12 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import {
-  Sheet,
-  SheetContent,
-  SheetTrigger,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
+  Drawer,
+  DrawerContent,
+  DrawerTrigger,
+  DrawerHeader,
+  DrawerTitle,
+} from "@/components/ui/drawer";
 import {
   Dialog,
   DialogContent,
@@ -1053,29 +1053,29 @@ const MatchingPreview = ({
   const totalPoints = pointsPerMatch ? pointsPerMatch * pairs.length : 0;
 
   return (
-    <div className="rounded-lg p-4 bg-white border shadow-sm">
+    <div className="rounded-lg p-4 bg-background border shadow-sm">
       {instructions && (
-        <div className="mb-4 p-3 bg-slate-50 rounded border-l-4 border-slate-300">
-          <p className="text-sm font-bold mb-1 text-slate-700">Instructions:</p>
-          <p className="text-sm text-slate-600">{instructions}</p>
+        <div className="mb-4 p-3 bg-slate-50 dark:bg-slate-900/50 rounded border-l-4 border-slate-300 dark:border-slate-700">
+          <p className="text-sm font-bold mb-1 text-slate-700 dark:text-slate-300">Instructions:</p>
+          <p className="text-sm text-slate-600 dark:text-slate-400">{instructions}</p>
         </div>
       )}
 
       {pointsPerMatch && (
-        <div className="mb-4 p-2 bg-blue-50 rounded border border-blue-100">
-          <p className="text-xs font-semibold text-blue-700 uppercase tracking-wider">
+        <div className="mb-4 p-2 bg-blue-50 dark:bg-blue-900/20 rounded border border-blue-100 dark:border-blue-900">
+          <p className="text-xs font-semibold text-blue-700 dark:text-blue-400 uppercase tracking-wider">
             Scoring: {pointsPerMatch.toFixed(1)} pts per match | Total:{" "}
             {totalPoints.toFixed(1)} pts
           </p>
         </div>
       )}
 
-      <div className="bg-white rounded-lg border overflow-hidden">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-0 divide-x divide-gray-200">
+      <div className="bg-background rounded-lg border overflow-hidden">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-0 divide-x divide-border">
           {/* Column A */}
           <div className="flex flex-col">
-            <div className="p-3 border-b bg-gray-50/50">
-              <h3 className="text-center font-bold text-gray-800 uppercase tracking-tight">
+            <div className="p-3 border-b bg-muted/50">
+              <h3 className="text-center font-bold text-foreground uppercase tracking-tight">
                 Column A
               </h3>
             </div>
@@ -1083,7 +1083,7 @@ const MatchingPreview = ({
               {pairs.map((pair, idx) => (
                 <div
                   key={idx}
-                  className="p-4 hover:bg-gray-50/30 transition-colors"
+                  className="p-4 hover:bg-muted/30 transition-colors border-b last:border-0"
                 >
                   <div className="flex items-center gap-3">
                     {/* Input and Numbering - Perfectly Aligned */}
@@ -1105,7 +1105,7 @@ const MatchingPreview = ({
 
                     {/* Text A with KaTeX support */}
                     <div className="flex-1 min-w-0">
-                      <div className="text-base text-gray-700 leading-relaxed break-words whitespace-pre-wrap">
+                      <div className="text-base text-foreground leading-relaxed break-words whitespace-pre-wrap">
                         {renderWithMath(pair.sideA)}
                       </div>
                     </div>
@@ -1117,8 +1117,8 @@ const MatchingPreview = ({
 
           {/* Column B */}
           <div className="flex flex-col">
-            <div className="p-3 border-b bg-gray-50/50">
-              <h3 className="text-center font-bold text-gray-800 uppercase tracking-tight">
+            <div className="p-3 border-b bg-muted/50">
+              <h3 className="text-center font-bold text-foreground uppercase tracking-tight">
                 Column B
               </h3>
             </div>
@@ -1126,7 +1126,7 @@ const MatchingPreview = ({
               {pairs.map((pair, idx) => (
                 <div
                   key={idx}
-                  className="p-4 hover:bg-gray-50/30 transition-colors"
+                  className="p-4 hover:bg-muted/30 transition-colors border-b last:border-0"
                 >
                   <div className="flex items-center gap-3">
                     {/* Lettering (A, B, C...) */}
@@ -1136,7 +1136,7 @@ const MatchingPreview = ({
 
                     {/* Text B with KaTeX support */}
                     <div className="flex-1 min-w-0">
-                      <div className="text-base text-gray-700 leading-relaxed break-words whitespace-pre-wrap">
+                      <div className="text-base text-foreground leading-relaxed break-words whitespace-pre-wrap">
                         {renderWithMath(pair.sideB)}
                       </div>
                     </div>
@@ -2003,18 +2003,58 @@ export default function CreateExamPage() {
     });
   };
 
-  if (loading && currentStep === 1)
+  if (loading && currentStep === 1) {
     return (
-      <div className="flex flex-col w-full items-center p-4 bg-background min-h-screen">
-        <div className="flex flex-col justify-center items-center h-64 gap-4">
-          <Loader2 className="h-10 w-10 animate-spin text-primary" />
-          <div className="text-center space-y-1">
-            <p className="font-medium">Loading teacher data...</p>
-            <p className="text-sm text-muted-foreground">Please wait</p>
-          </div>
-        </div>
+      <div className="flex flex-col items-center justify-center min-h-[70vh] w-full bg-transparent">
+        <style>{`
+          .spinner-svg {
+            animation: spinner-rotate 2s linear infinite;
+          }
+          .spinner-circle {
+            stroke-dasharray: 1, 200;
+            stroke-dashoffset: 0;
+            animation: spinner-stretch 1.5s ease-in-out infinite;
+            stroke-linecap: round;
+          }
+          @keyframes spinner-rotate {
+            100% {
+              transform: rotate(360deg);
+            }
+          }
+          @keyframes spinner-stretch {
+            0% {
+              stroke-dasharray: 1, 200;
+              stroke-dashoffset: 0;
+            }
+            50% {
+              stroke-dasharray: 90, 200;
+              stroke-dashoffset: -35px;
+            }
+            100% {
+              stroke-dasharray: 90, 200;
+              stroke-dashoffset: -124px;
+            }
+          }
+        `}</style>
+        
+        <svg
+          className="h-10 w-10 text-zinc-800 dark:text-zinc-200 spinner-svg mb-4"
+          viewBox="25 25 50 50"
+        >
+          <circle
+            className="spinner-circle"
+            cx="50"
+            cy="50"
+            r="20"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="4"
+          />
+        </svg>
+        <p className="font-medium text-foreground">Loading teacher data...</p>
       </div>
     );
+  }
 
   return (
     <>
@@ -2031,8 +2071,8 @@ export default function CreateExamPage() {
       />
       <div className="flex flex-col w-full items-center p-4 bg-background min-h-screen">
         {currentStep === 2 && (
-          <Sheet open={isSidebarOpen} onOpenChange={setIsSidebarOpen}>
-            <SheetTrigger asChild>
+          <Drawer direction="left" open={isSidebarOpen} onOpenChange={setIsSidebarOpen}>
+            <DrawerTrigger asChild>
               <Button
                 variant="outline"
                 className="fixed top-4 left-4 z-50 shadow-md"
@@ -2041,14 +2081,14 @@ export default function CreateExamPage() {
                 <Menu className="h-4 w-4 mr-2" />
                 Questions ({questions.length})
               </Button>
-            </SheetTrigger>
-            <SheetContent side="left" className="w-80 p-0">
-              <SheetHeader className="px-4 py-4 border-b">
-                <SheetTitle className="flex items-center gap-2">
+            </DrawerTrigger>
+            <DrawerContent className="w-80 h-full max-w-sm rounded-none border-r border-border bg-background flex flex-col m-0 p-0">
+              <DrawerHeader className="px-4 py-4 border-b text-left">
+                <DrawerTitle className="flex items-center gap-2">
                   <Eye className="h-5 w-5" /> Question Bank ({questions.length})
-                </SheetTitle>
-              </SheetHeader>
-              <div className="p-4 space-y-2 overflow-y-auto max-h-[calc(100vh-100px)]">
+                </DrawerTitle>
+              </DrawerHeader>
+              <div className="p-4 space-y-2 overflow-y-auto flex-1">
                 {questions.length === 0 ? (
                   <div className="text-center py-8 text-muted-foreground">
                     <p className="font-medium mb-2">No questions yet</p>
@@ -2066,8 +2106,8 @@ export default function CreateExamPage() {
                   ))
                 )}
               </div>
-            </SheetContent>
-          </Sheet>
+            </DrawerContent>
+          </Drawer>
         )}
 
         <Card className="w-full max-w-7xl shadow-lg">

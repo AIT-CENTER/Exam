@@ -5,6 +5,7 @@ import { Inter, Poppins } from "next/font/google";
 import { ThemeProvider } from "next-themes";
 import "./globals.css";
 import { Toaster } from "@/components/ui/sonner";
+import { TooltipProvider } from "@/components/ui/tooltip"; // Itti dabalamee jira
 import Script from "next/script";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 
@@ -21,11 +22,10 @@ const poppins = Poppins({
   display: "swap",
 });
 
-// Metadata: tab icon + openGraph info
 export const metadata: Metadata = {
   title: "Student & Exam Management Platform",
   icons: {
-    icon: "/favicon.ico", // favicon file location in public/
+    icon: "/favicon.ico",
   },
   openGraph: {
     title: "School data Managing and monitoring",
@@ -43,11 +43,8 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        {/* PWA manifest */}
         <link rel="manifest" href="/manifest-student.json" />
         <meta name="theme-color" content="#1a73e8" />
-
-        {/* Fonts CSS variables */}
         <style>{`
           html {
             font-family: ${inter.style.fontFamily}, system-ui, sans-serif;
@@ -60,9 +57,12 @@ export default function RootLayout({
         className={`${inter.variable} ${poppins.variable} font-inter antialiased`}
       >
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false}>
-          {children}
-          <Toaster richColors position="top-center" />
-          {/* 3Dmol.js */}
+          {/* TooltipProvider ashaaraa haaraatiif asitti dabalameera */}
+          <TooltipProvider>
+            {children}
+            <Toaster richColors position="top-center" />
+          </TooltipProvider>
+
           <Script
             src="https://3Dmol.org/build/3Dmol-min.js"
             strategy="afterInteractive"

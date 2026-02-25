@@ -93,6 +93,25 @@ import { supabase } from "@/lib/supabaseClient";
 import { InlineMath, BlockMath } from "react-katex";
 import "katex/dist/katex.min.css";
 
+// --- Security: Validate URL params against tampered values ──────────────────
+const isValidSessionId = (id: string | null): boolean =>
+  !!id && /^[0-9a-f-]{36}$/i.test(id); // UUID format
+
+const isValidToken = (token: string | null): boolean =>
+  !!token && /^[a-z0-9]{32}$/i.test(token);
+
+const isValidStudentId = (id: string | null): boolean =>
+  !!id && /^[A-Z0-9\-_]{1,25}$/i.test(id);
+
+const isValidExamCode = (code: string | null): boolean =>
+  !!code && /^\d{6}$/.test(code);
+
+// --- Security: Prevent clickjacking ─────────────────────────────────────────
+if (typeof window !== "undefined" && window.top !== window.self) {
+  // Bust out of iframes
+  window.top!.location.href = window.location.href;
+}
+
 // --- Device Fingerprinting ---
 const getBrowserFingerprint = async (): Promise<string> => {
   try {
@@ -376,6 +395,35 @@ function Spinner({ className, ...props }: React.ComponentProps<"svg">) {
       className={cn("size-4 animate-spin", className)}
       {...props}
     />
+  );
+}
+
+// Admin dashboard style spinner for full-screen loading
+function ExamPageSpinner() {
+  return (
+    <div className="flex h-screen items-center justify-center bg-white">
+      <style>{`
+        .exam-spinner-svg { animation: exam-spinner-rotate 2s linear infinite; }
+        .exam-spinner-circle {
+          stroke-dasharray: 1, 200; stroke-dashoffset: 0;
+          animation: exam-spinner-stretch 1.5s ease-in-out infinite;
+          stroke-linecap: round;
+        }
+        @keyframes exam-spinner-rotate { 100% { transform: rotate(360deg); } }
+        @keyframes exam-spinner-stretch {
+          0%   { stroke-dasharray: 1, 200;  stroke-dashoffset: 0; }
+          50%  { stroke-dasharray: 90, 200; stroke-dashoffset: -35px; }
+          100% { stroke-dasharray: 90, 200; stroke-dashoffset: -124px; }
+        }
+      `}</style>
+      <svg className="h-10 w-10 text-zinc-800 exam-spinner-svg" viewBox="25 25 50 50">
+        <circle
+          className="exam-spinner-circle"
+          cx="50" cy="50" r="20"
+          fill="none" stroke="currentColor" strokeWidth="4"
+        />
+      </svg>
+    </div>
   );
 }
 
@@ -789,7 +837,7 @@ function PassageModal({
         <div className="border-t p-4 bg-gray-50 flex justify-end">
           <Button
             onClick={onClose}
-            className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-sm md:text-base"
+            className="bg-zinc-900 hover:bg-zinc-700 text-white text-sm md:text-base transition-colors"
           >
             Return to Question
           </Button>
@@ -822,7 +870,7 @@ const FloatingMobileNavBar = ({
       {/* Floating Toggle Button */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="fixed bottom-4 right-4 z-50 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-full p-3 shadow-2xl"
+        className="fixed bottom-4 right-4 z-50 bg-zinc-900 hover:bg-zinc-700 text-white rounded-full p-3 shadow-2xl transition-colors"
       >
         <Navigation className="h-6 w-6" />
       </button>
@@ -1005,7 +1053,7 @@ const FloatingMobileNavBar = ({
                   setIsOpen(false);
                 }}
                 disabled={currentQuestionIndex === questions.length - 1}
-                className="px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg disabled:opacity-50"
+                className="px-4 py-2 bg-zinc-900 hover:bg-zinc-700 text-white rounded-lg disabled:opacity-50 transition-colors"
               >
                 Next
               </button>
@@ -2215,12 +2263,7 @@ export default function ExamTakingPage() {
   // --- Render Views ---
 
   if (examStatus === "loading") {
-    return (
-      <div className="flex h-screen items-center justify-center">
-        <Spinner className="h-10 w-10 text-blue-600" />
-        <p className="ml-3 text-gray-600">Loading exam...</p>
-      </div>
-    );
+    return <ExamPageSpinner />;
   }
 
   if (examStatus === "instructions") {
@@ -2352,7 +2395,7 @@ export default function ExamTakingPage() {
 
             <Button
               size="lg"
-              className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold py-3 text-base md:text-lg"
+              className="w-full bg-zinc-900 hover:bg-zinc-700 text-white font-bold py-3 text-base md:text-lg transition-colors"
               onClick={handleStartExam}
               disabled={!securityInitialized}
             >
@@ -2475,7 +2518,7 @@ export default function ExamTakingPage() {
 
             <Button
               onClick={() => router.push("/")}
-              className="mt-4 md:mt-6 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 w-full py-3 text-base md:text-lg"
+              className="mt-4 md:mt-6 bg-zinc-900 hover:bg-zinc-700 text-white w-full py-3 text-base md:text-lg transition-colors"
             >
               Return to Home
             </Button>
@@ -2735,7 +2778,7 @@ export default function ExamTakingPage() {
             <Button
               variant="destructive"
               onClick={() => setIsConfirmModalOpen(true)}
-              className="bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 text-xs md:text-sm px-3 md:px-4 py-1.5 md:py-2"
+              className="bg-zinc-900 hover:bg-zinc-700 text-white text-xs md:text-sm px-3 md:px-4 py-1.5 md:py-2 transition-colors"
             >
               Submit
             </Button>
@@ -3053,7 +3096,7 @@ export default function ExamTakingPage() {
                 onClick={() => setCurrentQuestionIndex((p) => p + 1)}
                 size={isMobile ? "default" : "lg"}
                 disabled={currentQuestionIndex === questions.length - 1}
-                className="px-3 md:px-6 py-2 md:py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-xs md:text-sm"
+                className="px-3 md:px-6 py-2 md:py-3 bg-zinc-900 hover:bg-zinc-700 text-white text-xs md:text-sm transition-colors"
               >
                 Next{" "}
                 <ChevronRight className="ml-1 md:ml-2 h-3 w-3 md:h-5 md:w-5" />
@@ -3128,7 +3171,7 @@ export default function ExamTakingPage() {
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={handleFinalSubmit}
-              className="w-full sm:w-auto bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 text-sm md:text-base"
+              className="w-full sm:w-auto bg-zinc-900 hover:bg-zinc-700 text-white text-sm md:text-base transition-colors"
               disabled={isSubmitting}
             >
               {isSubmitting ? (

@@ -13,97 +13,73 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Users, Book, TrendingUp, Plus, Shield, Settings, UserCheck } from 'lucide-react';
+import { Users, Book, Plus, Shield, Settings, UserCheck } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import type { CookieOptions } from '@supabase/ssr';
-import { Skeleton } from "@/components/ui/skeleton";
 import { Suspense } from 'react';
 
-// Loading skeleton component
-function DashboardSkeleton() {
+// Advanced spinner that rotates and changes the arc length dynamically
+function DashboardSpinner() {
   return (
-    <div className="flex-1 space-y-8 p-4 lg:p-8 bg-gradient-to-b from-gray-50 to-white min-h-screen">
-      {/* Header Skeleton */}
-      <div className="space-y-2">
-        <Skeleton className="h-8 w-64 bg-gray-200 rounded animate-pulse" />
-        <Skeleton className="h-4 w-96 bg-gray-200 rounded animate-pulse" />
-      </div>
-
-      {/* Stats Cards Skeleton */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-4">
-        {[...Array(3)].map((_, i) => (
-          <Card key={i}>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <Skeleton className="h-4 w-24 bg-gray-200 rounded animate-pulse" />
-              <Skeleton className="h-5 w-5 bg-gray-200 rounded animate-pulse" />
-            </CardHeader>
-            <CardContent>
-              <Skeleton className="h-8 w-16 bg-gray-200 rounded animate-pulse" />
-              <Skeleton className="h-3 w-24 bg-gray-200 rounded animate-pulse mt-2" />
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      {/* Teachers Table Skeleton */}
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <div className="space-y-2">
-            <Skeleton className="h-6 w-32 bg-gray-200 rounded animate-pulse" />
-            <Skeleton className="h-4 w-48 bg-gray-200 rounded animate-pulse" />
-          </div>
-          <Skeleton className="h-9 w-24 bg-gray-200 rounded animate-pulse" />
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                {[...Array(6)].map((_, i) => (
-                  <TableHead key={i}>
-                    <Skeleton className="h-4 w-20 bg-gray-200 rounded animate-pulse" />
-                  </TableHead>
-                ))}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {[...Array(5)].map((_, rowIndex) => (
-                <TableRow key={rowIndex}>
-                  {[...Array(6)].map((_, cellIndex) => (
-                    <TableCell key={cellIndex}>
-                      <Skeleton className="h-4 w-full bg-gray-200 rounded animate-pulse" />
-                    </TableCell>
-                  ))}
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
-
-      {/* Quick Access Skeleton */}
-      <div className="space-y-4">
-        <Skeleton className="h-7 w-32 bg-gray-200 rounded animate-pulse" />
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {[...Array(3)].map((_, i) => (
-            <Card key={i}>
-              <CardContent className="flex flex-col items-center justify-center py-8 gap-3">
-                <Skeleton className="h-8 w-8 bg-gray-200 rounded animate-pulse" />
-                <Skeleton className="h-5 w-24 bg-gray-200 rounded animate-pulse" />
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      </div>
+    <div className="flex items-center justify-center min-h-[70vh] w-full bg-transparent">
+      {/* 
+        The outer SVG rotates linearly.
+        The inner circle's stroke expands and contracts using dasharray and dashoffset.
+      */}
+      <style>{`
+        .spinner-svg {
+          animation: spinner-rotate 2s linear infinite;
+        }
+        .spinner-circle {
+          stroke-dasharray: 1, 200;
+          stroke-dashoffset: 0;
+          animation: spinner-stretch 1.5s ease-in-out infinite;
+          stroke-linecap: round;
+        }
+        @keyframes spinner-rotate {
+          100% {
+            transform: rotate(360deg);
+          }
+        }
+        @keyframes spinner-stretch {
+          0% {
+            stroke-dasharray: 1, 200;
+            stroke-dashoffset: 0;
+          }
+          50% {
+            stroke-dasharray: 90, 200;
+            stroke-dashoffset: -35px;
+          }
+          100% {
+            stroke-dasharray: 90, 200;
+            stroke-dashoffset: -124px;
+          }
+        }
+      `}</style>
+      
+      <svg
+        className="h-10 w-10 text-zinc-800 dark:text-zinc-200 spinner-svg"
+        viewBox="25 25 50 50"
+      >
+        <circle
+          className="spinner-circle"
+          cx="50"
+          cy="50"
+          r="20"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="4"
+        />
+      </svg>
     </div>
   );
 }
 
 async function DashboardContent() {
-  // Move cookies() call inside the component function
   const cookieStore = cookies();
 
   const supabase = createServerClient(
@@ -203,10 +179,10 @@ async function DashboardContent() {
   ];
 
   return (
-    <div className="flex-1 space-y-8 p-4 lg:p-8 bg-gradient-to-b from-gray-50 to-white min-h-screen">
+    <div className="flex-1 space-y-8 bg-transparent p-4 lg:p-8">
       <div className="flex items-center justify-between space-y-2">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-gray-900">Dashboard Overview</h1>
+          <h1 className="text-3xl font-bold tracking-tight text-foreground">Dashboard Overview</h1>
           <p className="text-muted-foreground mt-1">
             A comprehensive summary of student performance, exam activity, and system metrics.
           </p>
@@ -214,15 +190,15 @@ async function DashboardContent() {
       </div>
 
       {/* Stat Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3">
         {adminStats.map((stat, index) => (
-          <Card key={stat.title} className="hover:shadow-lg transition-shadow duration-200">
+          <Card key={stat.title} className="transition-shadow duration-200 hover:shadow-lg shadow-sm">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-gray-700">{stat.title}</CardTitle>
+              <CardTitle className="text-sm font-medium text-muted-foreground">{stat.title}</CardTitle>
               <stat.icon className="h-5 w-5 text-indigo-500" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-gray-900">{stat.value}</div>
+              <div className="text-2xl font-bold text-foreground">{stat.value}</div>
               <p className="text-xs text-muted-foreground mt-1">{stat.change}</p>
             </CardContent>
           </Card>
@@ -230,16 +206,16 @@ async function DashboardContent() {
       </div>
 
       {/* Teachers Table */}
-      <Card className="hover:shadow-lg transition-shadow duration-200">
+      <Card className="transition-shadow duration-200 hover:shadow-lg shadow-sm">
         <CardHeader className="flex flex-row items-center justify-between">
           <div>
-            <CardTitle className="text-xl text-gray-900">Teachers</CardTitle>
+            <CardTitle className="text-xl text-foreground">Teachers</CardTitle>
             <CardDescription className="text-muted-foreground">
               List of active teachers in the system ({totalTeachers} total)
             </CardDescription>
           </div>
           <Link href="/dashboard/teachers">
-            <Button variant="outline" className="text-indigo-600 border-indigo-200 hover:bg-indigo-50">
+            <Button variant="outline" className="text-indigo-600 border-indigo-200 hover:bg-indigo-50 dark:hover:bg-indigo-950/50">
               View All
             </Button>
           </Link>
@@ -253,39 +229,39 @@ async function DashboardContent() {
             <Table>
               <TableHeader>
                 <TableRow className="border-b">
-                  <TableHead className="text-gray-700">Full Name</TableHead>
-                  <TableHead className="text-gray-700">Username</TableHead>
-                  <TableHead className="text-gray-700">Phone Number</TableHead>
-                  <TableHead className="text-gray-700">Section</TableHead>
-                  <TableHead className="text-gray-700">Grade</TableHead>
-                  <TableHead className="text-gray-700">Subject</TableHead>
+                  <TableHead>Full Name</TableHead>
+                  <TableHead>Username</TableHead>
+                  <TableHead>Phone Number</TableHead>
+                  <TableHead>Section</TableHead>
+                  <TableHead>Grade</TableHead>
+                  <TableHead>Subject</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {teachers.map((teacher) => (
-                  <TableRow key={teacher.id} className="hover:bg-gray-50 transition-colors">
-                    <TableCell className="font-medium text-gray-900 truncate max-w-[150px]">
+                  <TableRow key={teacher.id} className="transition-colors hover:bg-muted/40">
+                    <TableCell className="max-w-[150px] truncate font-medium">
                       {teacher.full_name}
                     </TableCell>
-                   <TableCell className="text-muted-foreground truncate max-w-[120px] overflow-hidden whitespace-nowrap">
-                    {teacher.username}
-                  </TableCell>
+                    <TableCell className="max-w-[120px] overflow-hidden whitespace-nowrap text-muted-foreground">
+                      {teacher.username}
+                    </TableCell>
 
-                  <TableCell className="text-muted-foreground truncate max-w-[120px] overflow-hidden whitespace-nowrap">
-                    {teacher.phone_number}
-                  </TableCell>
+                    <TableCell className="max-w-[120px] overflow-hidden whitespace-nowrap text-muted-foreground">
+                      {teacher.phone_number}
+                    </TableCell>
 
-                  <TableCell className="text-muted-foreground truncate max-w-[120px] overflow-hidden whitespace-nowrap">
-                    {teacher.section}
-                  </TableCell>
+                    <TableCell className="max-w-[120px] overflow-hidden whitespace-nowrap text-muted-foreground">
+                      {teacher.section}
+                    </TableCell>
 
-                  <TableCell className="text-muted-foreground truncate max-w-[120px] overflow-hidden whitespace-nowrap">
-                    {teacher.grade_name}
-                  </TableCell>
+                    <TableCell className="max-w-[120px] overflow-hidden whitespace-nowrap text-muted-foreground">
+                      {teacher.grade_name}
+                    </TableCell>
 
-                  <TableCell className="text-muted-foreground truncate max-w-[120px] overflow-hidden whitespace-nowrap">
-                    {teacher.subject_name}
-                  </TableCell>
+                    <TableCell className="text-muted-foreground truncate max-w-[120px] overflow-hidden whitespace-nowrap">
+                      {teacher.subject_name}
+                    </TableCell>
 
                   </TableRow>
                 ))}
@@ -296,14 +272,14 @@ async function DashboardContent() {
       </Card>
 
       <div className="space-y-4">
-        <h2 className="text-2xl font-bold tracking-tight text-gray-900">Quick Access</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <h2 className="text-2xl font-bold tracking-tight text-foreground">Quick Access</h2>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           {quickAccessLinks.map((link) => (
             <Link key={link.href} href={link.href}>
-              <Card className="hover:shadow-lg transition-shadow duration-200 cursor-pointer hover:bg-indigo-50">
-                <CardContent className="flex flex-col items-center justify-center py-8 gap-3">
+              <Card className="cursor-pointer transition-shadow duration-200 hover:bg-muted/60 hover:shadow-lg shadow-sm">
+                <CardContent className="flex flex-col items-center justify-center gap-3 py-8">
                   <link.icon className="h-8 w-8 text-indigo-500" />
-                  <p className="text-center font-medium text-gray-900">{link.label}</p>
+                  <p className="text-center font-medium text-foreground">{link.label}</p>
                 </CardContent>
               </Card>
             </Link>
@@ -317,8 +293,10 @@ async function DashboardContent() {
 // Main page component
 export default async function AdminDashboardPage() {
   return (
-    <Suspense fallback={<DashboardSkeleton />}>
-      <DashboardContent />
-    </Suspense>
+    <div className="bg-transparent h-full w-full">
+      <Suspense fallback={<DashboardSpinner />}>
+        <DashboardContent />
+      </Suspense>
+    </div>
   );
 }

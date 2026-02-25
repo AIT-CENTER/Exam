@@ -7,6 +7,7 @@ import {
   CardHeader,
   CardTitle,
   CardDescription,
+  CardFooter,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -47,13 +48,25 @@ import {
   BookMarked,
   Users,
   Loader2,
+  ChevronLeft,
+  ChevronRight,
+  Layers,
+  Eye,
+  ArrowRight,
 } from "lucide-react";
 import { toast } from "sonner";
 import { createBrowserClient } from "@supabase/ssr";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Separator } from "@/components/ui/separator";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
 
 const supabase = createBrowserClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -79,47 +92,105 @@ interface GradeSection {
 }
 
 const emptyGrade: Grade = { id: null, name: "", description: "" };
+const ITEMS_PER_PAGE = 6;
+
+// Premium spinner matching the dashboard
+function PageSpinner() {
+  return (
+    <div className="flex items-center justify-center min-h-[70vh] w-full bg-transparent">
+      <style>{`
+        .spinner-svg {
+          animation: spinner-rotate 2s linear infinite;
+        }
+        .spinner-circle {
+          stroke-dasharray: 1, 200;
+          stroke-dashoffset: 0;
+          animation: spinner-stretch 1.5s ease-in-out infinite;
+          stroke-linecap: round;
+        }
+        @keyframes spinner-rotate {
+          100% {
+            transform: rotate(360deg);
+          }
+        }
+        @keyframes spinner-stretch {
+          0% {
+            stroke-dasharray: 1, 200;
+            stroke-dashoffset: 0;
+          }
+          50% {
+            stroke-dasharray: 90, 200;
+            stroke-dashoffset: -35px;
+          }
+          100% {
+            stroke-dasharray: 90, 200;
+            stroke-dashoffset: -124px;
+          }
+        }
+      `}</style>
+      
+      <svg
+        className="h-10 w-10 text-zinc-800 dark:text-zinc-200 spinner-svg"
+        viewBox="25 25 50 50"
+      >
+        <circle
+          className="spinner-circle"
+          cx="50"
+          cy="50"
+          r="20"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="4"
+        />
+      </svg>
+    </div>
+  );
+}
 
 export default function GradesPage() {
   const [grades, setGrades] = useState<Grade[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
-  const [sections, setSections] = useState<GradeSection[]>([]);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isSubjectModalOpen, setIsSubjectModalOpen] = useState(false);
+  const [isViewSubjectsModalOpen, setIsViewSubjectsModalOpen] = useState(false);
   const [isSectionModalOpen, setIsSectionModalOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [currentGrade, setCurrentGrade] = useState<Grade>(emptyGrade);
   const [gradeToDelete, setGradeToDelete] = useState<Grade | null>(null);
-  const [selectedGradeForSubjects, setSelectedGradeForSubjects] =
-    useState<Grade | null>(null);
-  const [selectedGradeForSections, setSelectedGradeForSections] =
-    useState<Grade | null>(null);
+  
+  // Selection states for modals
+  const [selectedGradeForSubjects, setSelectedGradeForSubjects] = useState<Grade | null>(null);
+  const [selectedGradeForViewSubjects, setSelectedGradeForViewSubjects] = useState<Grade | null>(null);
+  const [selectedGradeForSections, setSelectedGradeForSections] = useState<Grade | null>(null);
+  
   const [selectedSubjectIds, setSelectedSubjectIds] = useState<number[]>([]);
   const [sectionInput, setSectionInput] = useState("");
-  const [assignedSubjects, setAssignedSubjects] = useState<
-    Record<number, number[]>
-  >({});
-  const [assignedSections, setAssignedSections] = useState<
-    Record<number, GradeSection[]>
-  >({});
+  
+  // Data Maps
+  const [assignedSubjects, setAssignedSubjects] = useState<Record<number, number[]>>({});
+  const [assignedSections, setAssignedSections] = useState<Record<number, GradeSection[]>>({});
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
 
   useEffect(() => {
-    fetchGrades();
-    fetchSubjects();
-    fetchSections();
-    fetchAssignedSubjects();
+    fetchAllData();
   }, []);
 
-  useEffect(() => {
-    if (selectedGradeForSections) {
-      fetchSectionsForGrade(selectedGradeForSections.id!);
-    }
-  }, [selectedGradeForSections]);
+  const fetchAllData = async () => {
+    setIsLoading(true);
+    await Promise.all([
+      fetchGrades(),
+      fetchSubjects(),
+      fetchSections(),
+      fetchAssignedSubjects()
+    ]);
+    setIsLoading(false);
+  };
 
   const fetchGrades = async () => {
-    setIsLoading(true);
     try {
       const { data, error } = await supabase
         .from("grades")
@@ -127,7 +198,6 @@ export default function GradesPage() {
         .order("id", { ascending: true });
 
       if (error) {
-        console.error("Error fetching grades:", error);
         toast.error(`Failed to load grades: ${error.message}`);
         return;
       }
@@ -140,10 +210,7 @@ export default function GradesPage() {
         }))
       );
     } catch (error) {
-      console.error("Unexpected error fetching grades:", error);
-      toast.error("Unexpected error loading grades. Please try again.");
-    } finally {
-      setIsLoading(false);
+      console.error("Error fetching grades:", error);
     }
   };
 
@@ -154,54 +221,35 @@ export default function GradesPage() {
         .select("*")
         .order("subject_name", { ascending: true });
 
-      if (error) {
-        console.error("Error fetching subjects:", error);
-        return;
-      }
-
+      if (error) return;
       setSubjects(data || []);
     } catch (error) {
-      console.error("Unexpected error fetching subjects:", error);
+      console.error("Error fetching subjects:", error);
     }
   };
 
   const fetchSections = async () => {
     try {
+      // Fetch ALL sections at once to populate cards correctly
       const { data, error } = await supabase
         .from("grade_sections")
         .select("*")
         .order("section_name", { ascending: true });
 
-      if (error) {
-        console.error("Error fetching sections:", error);
-        return;
-      }
+      if (error) return;
 
-      setSections(data || []);
+      // Group sections by grade_id
+      const grouped: Record<number, GradeSection[]> = {};
+      (data || []).forEach(section => {
+        if (!grouped[section.grade_id]) {
+          grouped[section.grade_id] = [];
+        }
+        grouped[section.grade_id].push(section);
+      });
+
+      setAssignedSections(grouped);
     } catch (error) {
-      console.error("Unexpected error fetching sections:", error);
-    }
-  };
-
-  const fetchSectionsForGrade = async (gradeId: number) => {
-    try {
-      const { data, error } = await supabase
-        .from("grade_sections")
-        .select("*")
-        .eq("grade_id", gradeId)
-        .order("section_name", { ascending: true });
-
-      if (error) {
-        console.error("Error fetching sections for grade:", error);
-        return;
-      }
-
-      setAssignedSections((prev) => ({
-        ...prev,
-        [gradeId]: data || [],
-      }));
-    } catch (error) {
-      console.error("Unexpected error fetching sections for grade:", error);
+      console.error("Error fetching sections:", error);
     }
   };
 
@@ -211,10 +259,7 @@ export default function GradesPage() {
         .from("grade_subjects")
         .select("grade_id, subject_id");
 
-      if (error) {
-        console.error("Error fetching assigned subjects:", error);
-        return;
-      }
+      if (error) return;
 
       const grouped: Record<number, number[]> = {};
       data.forEach((assignment) => {
@@ -226,21 +271,9 @@ export default function GradesPage() {
 
       setAssignedSubjects(grouped);
     } catch (error) {
-      console.error("Unexpected error fetching assigned subjects:", error);
+      console.error("Error fetching assigned subjects:", error);
     }
   };
-
-  const naturalSubjects = useMemo(() => {
-    return subjects.filter((s) => s.stream === "Natural");
-  }, [subjects]);
-
-  const socialSubjects = useMemo(() => {
-    return subjects.filter((s) => s.stream === "Social");
-  }, [subjects]);
-
-  const commonSubjects = useMemo(() => {
-    return subjects.filter((s) => !s.stream || s.stream === "Common");
-  }, [subjects]);
 
   const allSubjects = useMemo(() => {
     return subjects;
@@ -267,6 +300,18 @@ export default function GradesPage() {
     return assignedSections[gradeId] || [];
   };
 
+  // Pagination logic
+  const totalPages = Math.ceil(grades.length / ITEMS_PER_PAGE);
+  const paginatedGrades = grades.slice(
+    (currentPage - 1) * ITEMS_PER_PAGE,
+    currentPage * ITEMS_PER_PAGE
+  );
+
+  const handlePageChange = (nextPage: number) => {
+    if (nextPage < 1 || nextPage > totalPages || nextPage === currentPage) return;
+    setCurrentPage(nextPage);
+  };
+
   const handleCreate = () => {
     setCurrentGrade(emptyGrade);
     setIsFormOpen(true);
@@ -290,6 +335,11 @@ export default function GradesPage() {
     setSelectedGradeForSubjects(grade);
     setSelectedSubjectIds(assignedSubjects[grade.id!] || []);
     setIsSubjectModalOpen(true);
+  };
+
+  const handleOpenViewSubjects = (grade: Grade) => {
+    setSelectedGradeForViewSubjects(grade);
+    setIsViewSubjectsModalOpen(true);
   };
 
   const handleOpenAssignSections = (grade: Grade) => {
@@ -328,7 +378,6 @@ export default function GradesPage() {
       }
 
       if (error) {
-        console.error("Save error:", error);
         toast.error(`Failed to save grade: ${error.message}`);
       } else {
         toast.success(
@@ -341,8 +390,7 @@ export default function GradesPage() {
         setCurrentGrade(emptyGrade);
       }
     } catch (err) {
-      console.error("Unexpected save error:", err);
-      toast.error("Unexpected error saving grade. Please try again.");
+      toast.error("Unexpected error saving grade.");
     } finally {
       setIsSaving(false);
     }
@@ -358,16 +406,18 @@ export default function GradesPage() {
         .eq("id", gradeToDelete.id);
 
       if (deleteError) {
-        console.error("Delete error:", deleteError);
         toast.error(`Failed to delete grade: ${deleteError.message}`);
       } else {
         toast.success("Grade deleted successfully");
         fetchGrades();
         fetchAssignedSubjects();
+        // Reset to first page if current page becomes empty
+        if (paginatedGrades.length === 1 && currentPage > 1) {
+          setCurrentPage(currentPage - 1);
+        }
       }
     } catch (err) {
-      console.error("Unexpected delete error:", err);
-      toast.error("Unexpected error deleting grade. Please try again.");
+      toast.error("Unexpected error deleting grade.");
     } finally {
       setIsDeleteDialogOpen(false);
       setGradeToDelete(null);
@@ -378,13 +428,11 @@ export default function GradesPage() {
     if (!selectedGradeForSubjects) return;
 
     try {
-      // Delete existing assignments
       await supabase
         .from("grade_subjects")
         .delete()
         .eq("grade_id", selectedGradeForSubjects.id);
 
-      // Insert new assignments if any
       if (selectedSubjectIds.length > 0) {
         const newAssignments = selectedSubjectIds.map((subjectId) => ({
           grade_id: selectedGradeForSubjects.id,
@@ -396,7 +444,6 @@ export default function GradesPage() {
           .insert(newAssignments);
 
         if (error) {
-          console.error("Error assigning subjects:", error);
           toast.error(`Failed to assign subjects: ${error.message}`);
           return;
         }
@@ -407,8 +454,7 @@ export default function GradesPage() {
       setIsSubjectModalOpen(false);
       setSelectedGradeForSubjects(null);
     } catch (error) {
-      console.error("Unexpected error saving subjects:", error);
-      toast.error("Unexpected error assigning subjects. Please try again.");
+      toast.error("Unexpected error assigning subjects.");
     }
   };
 
@@ -425,18 +471,15 @@ export default function GradesPage() {
       });
 
       if (error) {
-        console.error("Error adding section:", error);
         toast.error(`Failed to add section: ${error.message}`);
         return;
       }
 
       toast.success("Section added successfully");
       setSectionInput("");
-      fetchSectionsForGrade(selectedGradeForSections.id!);
-      fetchSections();
+      fetchSections(); // Re-fetch all to update state
     } catch (error) {
-      console.error("Unexpected error adding section:", error);
-      toast.error("Unexpected error adding section. Please try again.");
+      toast.error("Unexpected error adding section.");
     }
   };
 
@@ -448,19 +491,14 @@ export default function GradesPage() {
         .eq("id", sectionId);
 
       if (error) {
-        console.error("Error deleting section:", error);
         toast.error(`Failed to delete section: ${error.message}`);
         return;
       }
 
       toast.success("Section deleted successfully");
-      if (selectedGradeForSections) {
-        fetchSectionsForGrade(selectedGradeForSections.id!);
-      }
-      fetchSections();
+      fetchSections(); // Re-fetch all to update state
     } catch (error) {
-      console.error("Unexpected error deleting section:", error);
-      toast.error("Unexpected error deleting section. Please try again.");
+      toast.error("Unexpected error deleting section.");
     }
   };
 
@@ -472,57 +510,19 @@ export default function GradesPage() {
     );
   };
 
-  // Loading State
   if (isLoading) {
-    return (
-      <div className="flex-1 space-y-8 p-4 lg:p-8 bg-gradient-to-b from-gray-50 to-white min-h-screen">
-        <div className="flex items-center justify-between">
-          <div className="space-y-2">
-            <Skeleton className="h-8 w-64 bg-gray-200 rounded animate-pulse" />
-            <Skeleton className="h-4 w-96 bg-gray-200 rounded animate-pulse" />
-          </div>
-          <Skeleton className="h-10 w-40 bg-gray-200 rounded animate-pulse" />
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {[...Array(6)].map((_, index) => (
-            <Card key={index} className="flex flex-col">
-              <CardHeader>
-                <div className="flex items-start justify-between">
-                  <div className="space-y-2 flex-1">
-                    <Skeleton className="h-6 w-3/4 bg-gray-200 rounded animate-pulse" />
-                    <Skeleton className="h-4 w-full bg-gray-200 rounded animate-pulse" />
-                  </div>
-                  <Skeleton className="h-8 w-8 bg-gray-200 rounded animate-pulse" />
-                </div>
-              </CardHeader>
-              <CardContent className="flex-grow space-y-4">
-                <div className="space-y-2">
-                  <Skeleton className="h-4 w-32 bg-gray-200 rounded animate-pulse" />
-                  <div className="flex flex-wrap gap-1">
-                    {[...Array(3)].map((_, i) => (
-                      <Skeleton
-                        key={i}
-                        className="h-6 w-16 bg-gray-200 rounded-full animate-pulse"
-                      />
-                    ))}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      </div>
-    );
+    return <PageSpinner />;
   }
 
   return (
-    <div className="flex-1 space-y-8 p-4 lg:p-8 bg-gradient-to-b from-gray-50 to-white min-h-screen">
+    <div className="flex-1 space-y-8 p-4 lg:p-8 bg-transparent min-h-screen">
+      {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="min-w-0">
-          <h1 className="text-3xl font-bold tracking-tight text-gray-900 truncate">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight text-foreground">
             Grades
           </h1>
-          <p className="text-muted-foreground mt-1 truncate">
+          <p className="text-muted-foreground mt-1">
             Manage your grades and assign subjects and sections to them.
           </p>
         </div>
@@ -533,247 +533,262 @@ export default function GradesPage() {
       </div>
 
       {grades.length === 0 ? (
-        <Card className="text-center py-12">
-          <BookMarked className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+        <Card className="py-16 text-center border-dashed border-2 rounded-xl bg-muted/30 shadow-sm">
+          <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
+            <BookMarked className="h-8 w-8 text-primary" />
+          </div>
           <CardTitle className="text-xl">No grades yet</CardTitle>
-          <CardDescription>
-            Create your first grade to get started.
+          <CardDescription className="mt-2 max-w-sm mx-auto">
+            Create your first grade to get started managing subjects and sections.
           </CardDescription>
-          <Button onClick={handleCreate} className="mt-4">
+          <Button onClick={handleCreate} className="mt-6">
             Create First Grade
           </Button>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {grades.map((grade) => {
-            const {
-              natural,
-              social,
-              common,
-              all: allAssigned,
-            } = getAssignedSubjectsByStream(grade.id!);
-            const gradeSections = getAssignedSections(grade.id!);
-            return (
-              <Card
-                key={grade.id}
-                className="flex flex-col hover:shadow-lg transition-shadow duration-200"
-              >
-                <CardHeader className="pb-3">
-                  <div className="flex items-start justify-between">
-                    <div className="min-w-0 flex-1 pr-2">
-                      <CardTitle className="text-xl text-gray-900 truncate">
-                        {grade.name}
-                      </CardTitle>
-                      <CardDescription className="text-muted-foreground truncate block w-[200px]">
-                        {grade.description || "No description"}
-                      </CardDescription>
-                    </div>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          className="h-8 w-8 p-0 flex-shrink-0"
-                        >
-                          <span className="sr-only">Open menu</span>
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-48">
-                        <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                        <DropdownMenuItem
-                          onSelect={(e) => {
-                            e.preventDefault();
-                            handleEdit(grade);
-                          }}
-                          className="cursor-pointer"
-                        >
-                          <Edit className="mr-2 h-4 w-4" />
-                          <span className="truncate">Update</span>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onSelect={(e) => {
-                            e.preventDefault();
-                            handleOpenAssignSubjects(grade);
-                          }}
-                          className="cursor-pointer"
-                        >
-                          <BookMarked className="mr-2 h-4 w-4" />
-                          <span className="truncate">Assign Subjects</span>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onSelect={(e) => {
-                            e.preventDefault();
-                            handleOpenAssignSections(grade);
-                          }}
-                          className="cursor-pointer"
-                        >
-                          <Users className="mr-2 h-4 w-4" />
-                          <span className="truncate">Manage Sections</span>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onSelect={(e) => {
-                            e.preventDefault();
-                            handleDelete(grade);
-                          }}
-                          className="text-red-600 focus:text-red-600 cursor-pointer"
-                        >
-                          <Trash2 className="mr-2 h-4 w-4" />
-                          <span className="truncate">Delete</span>
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                </CardHeader>
-                <CardContent className="flex-grow space-y-4 pt-0">
-                  {/* Assigned Subjects Section */}
-                  <div className="space-y-2">
-                    {/* Header Section */}
-                    <div className="flex items-center justify-between gap-2">
-                      <h4 className="text-sm font-semibold text-gray-900 truncate min-w-0">
-                        Assigned Subjects
-                      </h4>
-                      {allAssigned.length > 0 && (
-                        <Badge variant="secondary" className="text-xs shrink-0">
-                          {allAssigned.length}
-                        </Badge>
-                      )}
-                    </div>
-
-                    {allAssigned.length === 0 ? (
-                      <p className="text-xs text-muted-foreground italic truncate">
-                        No subjects assigned
-                      </p>
-                    ) : (
-                      <div className="space-y-3">
-                        {/* Natural Science Subjects */}
-                        {natural.length > 0 && (
-                          <div className="space-y-1">
-                            <p className="text-xs font-medium text-green-700 flex items-center gap-1">
-                              <span className="w-2 h-2 rounded-full bg-green-500 shrink-0" />
-                              <span className="truncate">Natural Science</span>
-                            </p>
-                            <div className="flex flex-wrap gap-1">
-                              {natural.map((subject) => (
-                                <Badge
-                                  key={subject.id}
-                                  variant="outline"
-                                  className="text-xs bg-green-50 text-green-700 border-green-200 max-w-[120px]"
-                                >
-                                  <span className="truncate block w-full">
-                                    {subject.subject_name}
-                                  </span>
-                                </Badge>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Social Science Subjects - Akka kan Natural Science oliitti sirreessi */}
-                        {social.length > 0 && (
-                          <div className="space-y-1">
-                            <p className="text-xs font-medium text-blue-700 flex items-center gap-1">
-                              <span className="w-2 h-2 rounded-full bg-blue-500 shrink-0" />
-                              <span className="truncate">Social Science</span>
-                            </p>
-                            <div className="flex flex-wrap gap-1">
-                              {social.map((subject) => (
-                                <Badge
-                                  key={subject.id}
-                                  variant="outline"
-                                  className="text-xs bg-blue-50 text-blue-700 border-blue-200 max-w-[120px]"
-                                >
-                                  <span className="truncate block w-full">
-                                    {subject.subject_name}
-                                  </span>
-                                </Badge>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Common Subjects */}
-                        {common.length > 0 && (
-                          <div className="space-y-1">
-                            <p className="text-xs font-medium text-gray-700 flex items-center gap-1">
-                              <span className="w-2 h-2 rounded-full bg-gray-500 shrink-0" />
-                              <span className="truncate">Common</span>
-                            </p>
-                            <div className="flex flex-wrap gap-1">
-                              {common.map((subject) => (
-                                <Badge
-                                  key={subject.id}
-                                  variant="outline"
-                                  className="text-xs bg-gray-50 text-gray-700 border-gray-200 max-w-[120px]"
-                                >
-                                  <span className="truncate block w-full">
-                                    {subject.subject_name}
-                                  </span>
-                                </Badge>
-                              ))}
-                            </div>
-                          </div>
-                        )}
+        <>
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
+            {paginatedGrades.map((grade) => {
+              const {
+                natural,
+                social,
+                common,
+                all: allAssigned,
+              } = getAssignedSubjectsByStream(grade.id!);
+              const gradeSections = getAssignedSections(grade.id!);
+              
+              return (
+                <Card
+                  key={grade.id}
+                  className="flex flex-col transition-all duration-200 hover:shadow-lg shadow-sm border-muted/60"
+                >
+                  <CardHeader className="pb-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="space-y-1">
+                        <CardTitle className="text-xl font-semibold text-foreground line-clamp-1">
+                          {grade.name}
+                        </CardTitle>
+                        <CardDescription className="line-clamp-2 min-h-[40px]">
+                          {grade.description || "No description provided"}
+                        </CardDescription>
                       </div>
-                    )}
-                  </div>
-
-                  {/* Assigned Sections Section */}
-                  <div className="space-y-2 pt-4 border-t">
-                    <div className="flex items-center justify-between">
-                      <h4 className="text-sm font-semibold text-gray-900 truncate">
-                        Assigned Sections
-                      </h4>
-                      {gradeSections.length > 0 && (
-                        <Badge variant="secondary" className="text-xs">
-                          {gradeSections.length}
-                        </Badge>
-                      )}
-                    </div>
-                    {gradeSections.length === 0 ? (
-                      <p className="text-xs text-muted-foreground italic truncate">
-                        No sections assigned
-                      </p>
-                    ) : (
-                      <div className="flex flex-wrap gap-1">
-                        {gradeSections.map((section) => (
-                          <Badge
-                            key={section.id}
-                            variant="secondary"
-                            className="text-xs bg-indigo-50 text-indigo-700 border-indigo-200 max-w-[100px] truncate"
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            className="h-8 w-8 p-0 -mr-2"
                           >
-                            {section.section_name}
-                          </Badge>
-                        ))}
+                            <span className="sr-only">Open menu</span>
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-48 rounded-lg">
+                          <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                          <DropdownMenuItem
+                            onClick={() => handleEdit(grade)}
+                            className="cursor-pointer"
+                          >
+                            <Edit className="mr-2 h-4 w-4" />
+                            Update
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => handleOpenAssignSubjects(grade)}
+                            className="cursor-pointer"
+                          >
+                            <BookMarked className="mr-2 h-4 w-4" />
+                            Assign Subjects
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => handleOpenAssignSections(grade)}
+                            className="cursor-pointer"
+                          >
+                            <Users className="mr-2 h-4 w-4" />
+                            Manage Sections
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => handleOpenViewSubjects(grade)}
+                            className="cursor-pointer"
+                          >
+                            <Eye className="mr-2 h-4 w-4" />
+                            View Details
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => handleDelete(grade)}
+                            className="text-destructive focus:text-destructive focus:bg-red-50 dark:focus:bg-red-950/50 cursor-pointer"
+                          >
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                  </CardHeader>
+
+                  <CardContent className="grow pt-0">
+                    <div className="space-y-4">
+                      {/* Stat Row */}
+                      <div className="flex justify-between items-center text-sm py-2 border-t border-b border-muted/40">
+                        <div className="flex items-center gap-2 text-muted-foreground">
+                          <BookMarked className="h-4 w-4" />
+                          <span>Total Subjects</span>
+                        </div>
+                        <span className="font-semibold bg-muted px-2 py-0.5 rounded text-xs">
+                          {allAssigned.length}
+                        </span>
                       </div>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
+                      
+                      {/* Overview List (Replacing Recent Exams list style) */}
+                      <div>
+                        <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                          Overview
+                        </h4>
+                        <div className="space-y-2">
+                           {/* Natural */}
+                           <div className="text-sm flex justify-between items-center group">
+                             <span className="text-foreground/80 group-hover:text-foreground transition-colors">Natural Sciences</span>
+                             <Badge variant="outline" className="text-[10px] bg-emerald-50 text-emerald-700 border-emerald-200">
+                               {natural.length} Subj.
+                             </Badge>
+                           </div>
+
+                           {/* Social */}
+                           <div className="text-sm flex justify-between items-center group">
+                             <span className="text-foreground/80 group-hover:text-foreground transition-colors">Social Sciences</span>
+                             <Badge variant="outline" className="text-[10px] bg-blue-50 text-blue-700 border-blue-200">
+                               {social.length} Subj.
+                             </Badge>
+                           </div>
+
+                           {/* Common */}
+                           <div className="text-sm flex justify-between items-center group">
+                             <span className="text-foreground/80 group-hover:text-foreground transition-colors">Common Subjects</span>
+                             <Badge variant="outline" className="text-[10px] bg-gray-50 text-gray-700 border-gray-200">
+                               {common.length} Subj.
+                             </Badge>
+                           </div>
+
+                           {/* Link to view detailed subjects */}
+                           <div 
+                             className="text-xs text-primary cursor-pointer hover:underline flex items-center gap-1 pt-1"
+                             onClick={() => handleOpenViewSubjects(grade)}
+                           >
+                             View full subject list <ArrowRight className="h-3 w-3" />
+                           </div>
+
+                           {/* Sections Row */}
+                           <div className="text-sm flex justify-between items-center group pt-2 border-t border-dashed border-muted/60 mt-2">
+                             <span className="text-foreground/80 font-medium group-hover:text-foreground transition-colors flex items-center gap-1.5">
+                               <Users className="h-3 w-3 text-muted-foreground" />
+                               Active Sections
+                             </span>
+                             <div className="flex gap-1 flex-wrap justify-end">
+                                {gradeSections.length > 0 ? (
+                                    gradeSections.slice(0, 3).map(sec => (
+                                        <Badge key={sec.id} variant="secondary" className="text-[10px] px-1.5 h-5">
+                                            {sec.section_name}
+                                        </Badge>
+                                    ))
+                                ) : (
+                                    <span className="text-[10px] text-muted-foreground italic">None</span>
+                                )}
+                                {gradeSections.length > 3 && (
+                                    <Badge variant="outline" className="text-[10px] px-1.5 h-5">+{gradeSections.length - 3}</Badge>
+                                )}
+                             </div>
+                           </div>
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="flex justify-center mt-8">
+              <Pagination>
+                <PaginationContent>
+                  <PaginationItem>
+                    <PaginationPrevious
+                      href="#"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        handlePageChange(currentPage - 1);
+                      }}
+                      className={currentPage === 1 ? "pointer-events-none opacity-50" : ""}
+                    />
+                  </PaginationItem>
+
+                  {Array.from({ length: totalPages }).map((_, index) => {
+                    const pageNumber = index + 1;
+                    if (
+                      pageNumber === 1 ||
+                      pageNumber === totalPages ||
+                      (pageNumber >= currentPage - 1 && pageNumber <= currentPage + 1)
+                    ) {
+                      return (
+                        <PaginationItem key={pageNumber}>
+                          <PaginationLink
+                            href="#"
+                            isActive={pageNumber === currentPage}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              handlePageChange(pageNumber);
+                            }}
+                          >
+                            {pageNumber}
+                          </PaginationLink>
+                        </PaginationItem>
+                      );
+                    } else if (
+                      (pageNumber === currentPage - 2 && currentPage > 3) ||
+                      (pageNumber === currentPage + 2 && currentPage < totalPages - 2)
+                    ) {
+                      return (
+                        <PaginationItem key={pageNumber}>
+                          <span className="px-4 py-2">...</span>
+                        </PaginationItem>
+                      );
+                    }
+                    return null;
+                  })}
+
+                  <PaginationItem>
+                    <PaginationNext
+                      href="#"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        handlePageChange(currentPage + 1);
+                      }}
+                      className={currentPage === totalPages ? "pointer-events-none opacity-50" : ""}
+                    />
+                  </PaginationItem>
+                </PaginationContent>
+              </Pagination>
+            </div>
+          )}
+        </>
       )}
 
-      {/* Create/Edit Grade Dialog */}
+      {/* Create/Edit Grade Dialog - Modern Shadcn Design */}
       <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle className="text-2xl truncate">
-              {currentGrade.id ? "Update Grade" : "Create Grade"}
+            <DialogTitle>
+              {currentGrade.id ? "Edit grade" : "Create grade"}
             </DialogTitle>
-            <DialogDescription className="text-muted-foreground truncate">
+            <DialogDescription>
               {currentGrade.id
-                ? "Update the details of the grade."
-                : "Add a new grade to the system."}
+                ? "Make changes to your grade here. Click save when you're done."
+                : "Add a new grade to the system. Click save when you're done."}
             </DialogDescription>
           </DialogHeader>
-          <div className="grid gap-6 py-6">
+          <div className="grid gap-4 py-4">
             <div className="grid gap-2">
-              <Label
-                htmlFor="name"
-                className="text-sm font-medium text-gray-700 truncate"
-              >
-                Name *
+              <Label htmlFor="name">
+                Name
               </Label>
               <Input
                 id="name"
@@ -784,16 +799,13 @@ export default function GradesPage() {
                     name: e.target.value,
                   })
                 }
-                className="border-gray-300 focus:border-indigo-500 focus:ring-indigo-500"
-                placeholder="Enter grade name"
+                placeholder="e.g., Grade 10"
                 disabled={isSaving}
+                className="focus-visible:ring-primary"
               />
             </div>
             <div className="grid gap-2">
-              <Label
-                htmlFor="description"
-                className="text-sm font-medium text-gray-700 truncate"
-              >
+              <Label htmlFor="description">
                 Description
               </Label>
               <Textarea
@@ -805,20 +817,15 @@ export default function GradesPage() {
                     description: e.target.value,
                   })
                 }
-                className="border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 min-h-[100px]"
-                placeholder="Enter grade description (optional)"
+                placeholder="Enter a description (optional)"
                 disabled={isSaving}
+                className="min-h-[100px] focus-visible:ring-primary"
               />
             </div>
           </div>
-          <DialogFooter className="flex flex-col sm:flex-row gap-2">
-            <DialogClose asChild disabled={isSaving}>
-              <Button
-                type="button"
-                variant="outline"
-                className="border-gray-300 hover:bg-gray-100 bg-transparent w-full sm:w-auto"
-                disabled={isSaving}
-              >
+          <DialogFooter className="sm:justify-end border-t pt-4">
+            <DialogClose asChild>
+              <Button type="button" variant="outline" disabled={isSaving}>
                 Cancel
               </Button>
             </DialogClose>
@@ -826,7 +833,6 @@ export default function GradesPage() {
               type="button"
               onClick={handleSave}
               disabled={isSaving || !currentGrade.name.trim()}
-              className="bg-indigo-600 hover:bg-indigo-700 w-full sm:w-auto"
             >
               {isSaving ? (
                 <>
@@ -834,34 +840,29 @@ export default function GradesPage() {
                   Saving...
                 </>
               ) : (
-                "Save Changes"
+                "Save changes"
               )}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Delete Confirmation Dialog */}
-      <AlertDialog
-        open={isDeleteDialogOpen}
-        onOpenChange={setIsDeleteDialogOpen}
-      >
+      {/* Delete Confirmation Dialog - Modern Shadcn Design */}
+      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-            <AlertDialogDescription className="truncate">
-              This action cannot be undone. This will permanently delete the{" "}
-              <span className="font-bold">{gradeToDelete?.name}</span> grade and
-              any associated data.
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete{" "}
+              <span className="font-semibold">{gradeToDelete?.name}</span> and
+              remove all associated data from our servers.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter className="flex flex-col sm:flex-row gap-2">
-            <AlertDialogCancel className="w-full sm:w-auto">
-              Cancel
-            </AlertDialogCancel>
+          <AlertDialogFooter className="gap-2 border-t pt-4">
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={confirmDelete}
-              className="bg-red-600 hover:bg-red-700 w-full sm:w-auto"
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               Delete Grade
             </AlertDialogAction>
@@ -869,117 +870,214 @@ export default function GradesPage() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Assign Subjects Dialog */}
+      {/* Assign Subjects Dialog - Modern Shadcn Design */}
       <Dialog open={isSubjectModalOpen} onOpenChange={setIsSubjectModalOpen}>
-        <DialogContent className="sm:max-w-lg max-h-[90vh]">
+        <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle className="truncate">
-              Assign Subjects to {selectedGradeForSubjects?.name}
+            <DialogTitle>
+              Assign subjects to {selectedGradeForSubjects?.name}
             </DialogTitle>
-            <DialogDescription className="truncate">
-              Select the subjects you want to assign to this grade. All subjects
-              are shown in a single list.
+            <DialogDescription>
+              Select the subjects you want to assign to this grade. Click save when you're done.
             </DialogDescription>
           </DialogHeader>
 
-          <Tabs defaultValue="all">
-            <TabsList className="grid w-full grid-cols-1">
-              <TabsTrigger value="all" className="text-xs truncate">
-                All Subjects ({allSubjects.length})
-              </TabsTrigger>
-            </TabsList>
+          <div className="py-4">
+            <ScrollArea className="h-[300px] pr-4">
+              <div className="space-y-4">
+                {allSubjects.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-8">
+                    No subjects available.
+                  </p>
+                ) : (
+                  allSubjects.map((subject) => {
+                    const getStreamColor = () => {
+                      if (subject.stream === "Natural")
+                        return "bg-emerald-100 text-emerald-700 border-emerald-200";
+                      if (subject.stream === "Social")
+                        return "bg-blue-100 text-blue-700 border-blue-200";
+                      return "bg-gray-100 text-gray-700 border-gray-200";
+                    };
 
-            <TabsContent value="all" className="mt-4">
-              <ScrollArea className="h-[300px] pr-4 border rounded-md p-3">
-                <div className="space-y-3">
-                  {allSubjects.length === 0 ? (
-                    <p className="text-sm text-muted-foreground text-center py-4 truncate">
-                      No subjects available.
-                    </p>
-                  ) : (
-                    allSubjects.map((subject) => {
-                      // Get stream badge color
-                      const getStreamColor = () => {
-                        if (subject.stream === "Natural")
-                          return "bg-green-100 text-green-800 border-green-200";
-                        if (subject.stream === "Social")
-                          return "bg-blue-100 text-blue-800 border-blue-200";
-                        return "bg-gray-100 text-gray-800 border-gray-200";
-                      };
-
-                      return (
-                        <label
-                          key={subject.id}
-                          className="flex items-center gap-3 p-2 rounded hover:bg-gray-50 cursor-pointer"
+                    return (
+                      <div
+                        key={subject.id}
+                        className="flex items-center space-x-3 p-2 rounded-lg hover:bg-muted/50 transition-colors"
+                      >
+                        <Checkbox
+                          id={`subject-${subject.id}`}
+                          checked={selectedSubjectIds.includes(subject.id)}
+                          onCheckedChange={() => toggleSubject(subject.id)}
+                        />
+                        <Label
+                          htmlFor={`subject-${subject.id}`}
+                          className="flex-1 flex items-center justify-between cursor-pointer"
                         >
-                          <Checkbox
-                            checked={selectedSubjectIds.includes(subject.id)}
-                            onCheckedChange={() => toggleSubject(subject.id)}
-                          />
-                          <div className="flex-1 flex items-center justify-between min-w-0">
-                            <span className="text-sm text-gray-700 truncate">
-                              {subject.subject_name}
-                            </span>
-                            <Badge
-                              variant="outline"
-                              className={`text-xs ${getStreamColor()} flex-shrink-0 truncate`}
-                            >
-                              {subject.stream || "Common"}
-                            </Badge>
-                          </div>
-                        </label>
-                      );
-                    })
-                  )}
-                </div>
-              </ScrollArea>
-            </TabsContent>
-          </Tabs>
+                          <span className="text-sm font-medium">
+                            {subject.subject_name}
+                          </span>
+                          <Badge
+                            variant="outline"
+                            className={`text-xs ${getStreamColor()}`}
+                          >
+                            {subject.stream || "Common"}
+                          </Badge>
+                        </Label>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </ScrollArea>
+          </div>
 
-          <div className="flex flex-col sm:flex-row items-center justify-between pt-4 border-t gap-3">
-            <p className="text-sm text-muted-foreground truncate">
+          <Separator />
+
+          <div className="flex items-center justify-between pt-4">
+            <p className="text-sm text-muted-foreground">
               {selectedSubjectIds.length} subject(s) selected
             </p>
-            <div className="flex gap-2 w-full sm:w-auto">
+            <div className="flex gap-2">
               <DialogClose asChild>
-                <Button variant="outline" className="w-full sm:w-auto">
-                  Cancel
-                </Button>
+                <Button variant="outline">Cancel</Button>
               </DialogClose>
-              <Button
-                onClick={handleSaveSubjects}
-                className="bg-indigo-600 hover:bg-indigo-700 w-full sm:w-auto"
-              >
-                Save Subjects
+              <Button onClick={handleSaveSubjects}>
+                Save changes
               </Button>
             </div>
           </div>
         </DialogContent>
       </Dialog>
 
-      {/* Manage Sections Dialog */}
+      {/* View All Subjects Dialog - Modern Shadcn Design */}
+      <Dialog open={isViewSubjectsModalOpen} onOpenChange={setIsViewSubjectsModalOpen}>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>
+              Subjects in {selectedGradeForViewSubjects?.name}
+            </DialogTitle>
+            <DialogDescription>
+              All subjects assigned to this grade, organized by stream.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="py-4">
+            {selectedGradeForViewSubjects && (
+              <div className="space-y-6">
+                {(() => {
+                  const { natural, social, common } = getAssignedSubjectsByStream(
+                    selectedGradeForViewSubjects.id!
+                  );
+                  
+                  return (
+                    <>
+                      {/* Natural Stream */}
+                      {natural.length > 0 && (
+                        <div className="space-y-3">
+                          <div className="flex items-center gap-2">
+                            <div className="w-2 h-2 rounded-full bg-emerald-500" />
+                            <h3 className="text-sm font-semibold text-emerald-700">Natural Sciences</h3>
+                            <Badge variant="secondary" className="text-xs">
+                              {natural.length}
+                            </Badge>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2">
+                            {natural.map((subject) => (
+                              <div
+                                key={subject.id}
+                                className="flex items-center p-2 rounded-lg bg-emerald-50 border border-emerald-100"
+                              >
+                                <span className="text-sm text-emerald-700">{subject.subject_name}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Social Stream */}
+                      {social.length > 0 && (
+                        <div className="space-y-3">
+                          <div className="flex items-center gap-2">
+                            <div className="w-2 h-2 rounded-full bg-blue-500" />
+                            <h3 className="text-sm font-semibold text-blue-700">Social Sciences</h3>
+                            <Badge variant="secondary" className="text-xs">
+                              {social.length}
+                            </Badge>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2">
+                            {social.map((subject) => (
+                              <div
+                                key={subject.id}
+                                className="flex items-center p-2 rounded-lg bg-blue-50 border border-blue-100"
+                              >
+                                <span className="text-sm text-blue-700">{subject.subject_name}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Common Stream */}
+                      {common.length > 0 && (
+                        <div className="space-y-3">
+                          <div className="flex items-center gap-2">
+                            <div className="w-2 h-2 rounded-full bg-gray-500" />
+                            <h3 className="text-sm font-semibold text-gray-700">Common Subjects</h3>
+                            <Badge variant="secondary" className="text-xs">
+                              {common.length}
+                            </Badge>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2">
+                            {common.map((subject) => (
+                              <div
+                                key={subject.id}
+                                className="flex items-center p-2 rounded-lg bg-gray-50 border border-gray-100"
+                              >
+                                <span className="text-sm text-gray-700">{subject.subject_name}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {natural.length === 0 && social.length === 0 && common.length === 0 && (
+                        <p className="text-sm text-muted-foreground text-center py-8">
+                          No subjects assigned to this grade yet.
+                        </p>
+                      )}
+                    </>
+                  );
+                })()}
+              </div>
+            )}
+          </div>
+
+          <DialogFooter className="sm:justify-end border-t pt-4">
+            <DialogClose asChild>
+              <Button type="button">Close</Button>
+            </DialogClose>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Manage Sections Dialog - Modern Shadcn Design */}
       <Dialog open={isSectionModalOpen} onOpenChange={setIsSectionModalOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="truncate">
-              Manage Sections for {selectedGradeForSections?.name}
+            <DialogTitle>
+              Manage sections for {selectedGradeForSections?.name}
             </DialogTitle>
-            <DialogDescription className="truncate">
-              Add or remove sections for this grade. Sections help organize
-              students within the same grade.
+            <DialogDescription>
+              Add or remove sections for this grade. Sections help organize students
+              within the same grade.
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 py-4">
             {/* Add Section Form */}
             <div className="space-y-2">
-              <Label
-                htmlFor="section"
-                className="text-sm font-medium text-gray-700 truncate"
-              >
-                Add New Section
-              </Label>
-              <div className="flex flex-col sm:flex-row gap-2">
+              <Label htmlFor="section">Add new section</Label>
+              <div className="flex gap-2">
                 <Input
                   id="section"
                   value={sectionInput}
@@ -990,22 +1088,20 @@ export default function GradesPage() {
                 <Button
                   onClick={handleAddSection}
                   disabled={!sectionInput.trim()}
-                  className="w-full sm:w-auto"
                 >
                   Add
                 </Button>
               </div>
             </div>
 
+            <Separator />
+
             {/* Existing Sections List */}
             <div className="space-y-2">
-              <Label className="text-sm font-medium text-gray-700 truncate">
-                Existing Sections
-              </Label>
-              <ScrollArea className="h-48 border rounded-md">
-                {assignedSections[selectedGradeForSections?.id!]?.length ===
-                0 ? (
-                  <p className="text-sm text-muted-foreground text-center py-8 truncate">
+              <Label>Existing sections</Label>
+              <ScrollArea className="h-48 rounded-md border">
+                {assignedSections[selectedGradeForSections?.id!]?.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-8">
                     No sections added yet.
                   </p>
                 ) : (
@@ -1014,21 +1110,21 @@ export default function GradesPage() {
                       (section) => (
                         <div
                           key={section.id}
-                          className="flex items-center justify-between p-3 hover:bg-gray-50 min-w-0"
+                          className="flex items-center justify-between p-3 hover:bg-muted/50 transition-colors"
                         >
-                          <div className="flex items-center gap-3 min-w-0">
-                            <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center flex-shrink-0">
-                              <Users className="h-4 w-4 text-indigo-600" />
+                          <div className="flex items-center gap-3">
+                            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10">
+                              <Users className="h-4 w-4 text-primary" />
                             </div>
-                            <span className="font-medium truncate">
-                              {section.section_name}
+                            <span className="font-medium">
+                              Section {section.section_name}
                             </span>
                           </div>
                           <Button
                             variant="ghost"
                             size="sm"
                             onClick={() => handleDeleteSection(section.id)}
-                            className="text-red-600 hover:text-red-700 hover:bg-red-50 flex-shrink-0"
+                            className="text-destructive hover:text-destructive hover:bg-destructive/10"
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>
@@ -1041,7 +1137,7 @@ export default function GradesPage() {
             </div>
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="border-t pt-4">
             <DialogClose asChild>
               <Button variant="outline" className="w-full sm:w-auto">
                 Close

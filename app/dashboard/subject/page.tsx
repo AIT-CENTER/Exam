@@ -35,30 +35,97 @@ import {
 import { PlusCircle, MoreHorizontal, Edit, Trash2, BookOpen, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabaseClient";
-import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
 
 const emptySubject = { id: null, name: "", description: "" };
+const PAGE_SIZE = 6;
+
+// Premium spinner matching the dashboard
+function PageSpinner() {
+  return (
+    <div className="flex items-center justify-center min-h-[70vh] w-full bg-transparent">
+      <style>{`
+        .spinner-svg {
+          animation: spinner-rotate 2s linear infinite;
+        }
+        .spinner-circle {
+          stroke-dasharray: 1, 200;
+          stroke-dashoffset: 0;
+          animation: spinner-stretch 1.5s ease-in-out infinite;
+          stroke-linecap: round;
+        }
+        @keyframes spinner-rotate {
+          100% {
+            transform: rotate(360deg);
+          }
+        }
+        @keyframes spinner-stretch {
+          0% {
+            stroke-dasharray: 1, 200;
+            stroke-dashoffset: 0;
+          }
+          50% {
+            stroke-dasharray: 90, 200;
+            stroke-dashoffset: -35px;
+          }
+          100% {
+            stroke-dasharray: 90, 200;
+            stroke-dashoffset: -124px;
+          }
+        }
+      `}</style>
+      
+      <svg
+        className="h-10 w-10 text-zinc-800 dark:text-zinc-200 spinner-svg"
+        viewBox="25 25 50 50"
+      >
+        <circle
+          className="spinner-circle"
+          cx="50"
+          cy="50"
+          r="20"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="4"
+        />
+      </svg>
+    </div>
+  );
+}
 
 export default function SubjectsPage() {
-  const [subjects, setSubjects] = useState([]);
+  const [subjects, setSubjects] = useState<any[]>([]);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [currentSubject, setCurrentSubject] = useState(emptySubject);
-  const [subjectToDelete, setSubjectToDelete] = useState(null);
+  const [subjectToDelete, setSubjectToDelete] = useState<any>(null);
+  const [page, setPage] = useState(1);
+  const [totalSubjects, setTotalSubjects] = useState(0);
 
   useEffect(() => {
-    fetchSubjects();
-  }, []);
+    fetchSubjects(page);
+  }, [page]);
 
-  const fetchSubjects = async () => {
+  const fetchSubjects = async (pageNumber: number) => {
     setIsLoading(true);
     try {
-      const { data: subjectsData, error: subjectsError } = await supabase
+      const from = (pageNumber - 1) * PAGE_SIZE;
+      const to = from + PAGE_SIZE - 1;
+
+      const { data: subjectsData, error: subjectsError, count } = await supabase
         .from("subjects")
-        .select("*")
-        .order("subject_name", { ascending: true });
+        .select("*", { count: "exact" })
+        .order("subject_name", { ascending: true })
+        .range(from, to);
 
       if (subjectsError) {
         console.error("Error fetching subjects:", subjectsError);
@@ -67,7 +134,7 @@ export default function SubjectsPage() {
       }
 
       const subjectsWithExams = await Promise.all(
-        subjectsData.map(async (subj) => {
+        (subjectsData ?? []).map(async (subj) => {
           try {
             // Count exams
             const { count: examCount, error: countError } = await supabase
@@ -82,7 +149,7 @@ export default function SubjectsPage() {
             // Recent exams
             const { data: recentExams, error: recentError } = await supabase
               .from("exams")
-              .select("id, title as name, exam_date as start_time")
+              .select("id, title, exam_date")
               .eq("subject_id", subj.id)
               .order("exam_date", { ascending: false })
               .limit(3);
@@ -95,7 +162,11 @@ export default function SubjectsPage() {
               ...subj,
               name: subj.subject_name,
               exam_count: examCount || 0,
-              recent_exams: recentExams || [],
+              recent_exams: recentExams ? recentExams.map(e => ({
+                id: e.id,
+                name: e.title,
+                start_time: e.exam_date
+              })) : [],
             };
           } catch (error) {
             console.error(`Error processing subject ${subj.id}:`, error);
@@ -105,6 +176,7 @@ export default function SubjectsPage() {
       );
 
       setSubjects(subjectsWithExams);
+      setTotalSubjects(count ?? 0);
     } catch (error) {
       console.error("Unexpected error fetching subjects:", error);
       toast.error("Unexpected error loading subjects. Please try again.");
@@ -113,21 +185,28 @@ export default function SubjectsPage() {
     }
   };
 
+  const totalPages = Math.max(1, Math.ceil((totalSubjects || 0) / PAGE_SIZE) || 1);
+
+  const handlePageChange = (nextPage: number) => {
+    if (nextPage < 1 || nextPage > totalPages || nextPage === page) return;
+    setPage(nextPage);
+  };
+
   const handleCreate = () => {
     setCurrentSubject(emptySubject);
     setIsFormOpen(true);
   };
 
-  const handleEdit = (subject) => {
+  const handleEdit = (subject: any) => {
     setCurrentSubject({
       id: subject.id,
       name: subject.subject_name || subject.name,
-      description: subject.description,
+      description: subject.description || "",
     });
     setIsFormOpen(true);
   };
 
-  const handleDelete = (subject) => {
+  const handleDelete = (subject: any) => {
     setSubjectToDelete(subject);
     setIsDeleteDialogOpen(true);
   };
@@ -172,7 +251,7 @@ export default function SubjectsPage() {
         toast.error(`Failed to save subject: ${error.message}`);
       } else {
         toast.success(currentSubject.id ? "Subject updated successfully" : "Subject created successfully");
-        fetchSubjects();
+        fetchSubjects(page);
         setIsFormOpen(false);
         setCurrentSubject(emptySubject);
       }
@@ -194,7 +273,7 @@ export default function SubjectsPage() {
         .select("*", { count: "exact", head: true })
         .eq("subject_id", subjectToDelete.id);
 
-      if (examCount > 0) {
+      if (examCount && examCount > 0) {
         toast.error("Cannot delete subject with associated exams. Remove exams first.");
         setIsDeleteDialogOpen(false);
         setSubjectToDelete(null);
@@ -211,7 +290,12 @@ export default function SubjectsPage() {
         toast.error(`Failed to delete subject: ${deleteError.message}`);
       } else {
         toast.success("Subject deleted successfully");
-        fetchSubjects();
+        // Adjust page if deleting last item on page
+        if (subjects.length === 1 && page > 1) {
+          setPage(page - 1);
+        } else {
+          fetchSubjects(page);
+        }
       }
     } catch (err) {
       console.error("Unexpected delete error:", err);
@@ -222,7 +306,7 @@ export default function SubjectsPage() {
     }
   };
 
-  const formatDate = (dateString) => {
+  const formatDate = (dateString: string) => {
     if (!dateString) return "N/A";
     const date = new Date(dateString);
     return date.toLocaleDateString("en-US", {
@@ -232,64 +316,15 @@ export default function SubjectsPage() {
     });
   };
 
-  // Loading State
   if (isLoading) {
-    return (
-      <div className="flex-1 space-y-8 p-4 lg:p-8 bg-gradient-to-b from-gray-50 to-white min-h-screen">
-        {/* Header Skeleton */}
-        <div className="flex items-center justify-between">
-          <div className="space-y-2">
-            <Skeleton className="h-8 w-64 bg-gray-200 rounded animate-pulse" />
-            <Skeleton className="h-4 w-96 bg-gray-200 rounded animate-pulse" />
-          </div>
-          <Skeleton className="h-10 w-40 bg-gray-200 rounded animate-pulse" />
-        </div>
-
-        {/* Subjects Grid Skeleton */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {[...Array(6)].map((_, index) => (
-            <Card key={index} className="flex flex-col">
-              <CardHeader>
-                <div className="flex items-start justify-between">
-                  <div className="space-y-2 flex-1">
-                    <Skeleton className="h-6 w-3/4 bg-gray-200 rounded animate-pulse" />
-                    <Skeleton className="h-4 w-full bg-gray-200 rounded animate-pulse" />
-                  </div>
-                  <Skeleton className="h-8 w-8 bg-gray-200 rounded animate-pulse" />
-                </div>
-              </CardHeader>
-              <CardContent className="flex-grow space-y-4">
-                <div className="flex justify-between items-center">
-                  <div className="flex items-center gap-2">
-                    <Skeleton className="h-4 w-4 bg-gray-200 rounded animate-pulse" />
-                    <Skeleton className="h-4 w-16 bg-gray-200 rounded animate-pulse" />
-                  </div>
-                  <Skeleton className="h-4 w-8 bg-gray-200 rounded animate-pulse" />
-                </div>
-                <div className="space-y-2">
-                  <Skeleton className="h-4 w-24 bg-gray-200 rounded animate-pulse" />
-                  <div className="space-y-1">
-                    {[...Array(3)].map((_, i) => (
-                      <div key={i} className="flex justify-between items-center">
-                        <Skeleton className="h-3 w-3/4 bg-gray-200 rounded animate-pulse" />
-                        <Skeleton className="h-3 w-12 bg-gray-200 rounded animate-pulse" />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      </div>
-    );
+    return <PageSpinner />;
   }
 
   return (
-    <div className="flex-1 space-y-8 p-4 lg:p-8 bg-gradient-to-b from-gray-50 to-white min-h-screen">
+    <div className="flex-1 space-y-8 p-4 lg:p-8 bg-transparent">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-gray-900">Subjects</h1>
+          <h1 className="text-3xl font-bold tracking-tight text-foreground">Subjects</h1>
           <p className="text-muted-foreground mt-1">Manage your academic subjects and their details.</p>
         </div>
         <Button onClick={handleCreate} className="gap-2">
@@ -299,39 +334,49 @@ export default function SubjectsPage() {
       </div>
 
       {subjects.length === 0 ? (
-        <Card className="text-center py-12">
-          <BookOpen className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-          <CardTitle className="text-xl">No subjects yet</CardTitle>
-          <CardDescription>Create your first subject to get started.</CardDescription>
-          <Button onClick={handleCreate} className="mt-4">
+        <Card className="py-12 text-center shadow-sm">
+          <div className="flex justify-center mb-4">
+            <div className="p-3 bg-muted rounded-full">
+              <BookOpen className="h-8 w-8 text-muted-foreground" />
+            </div>
+          </div>
+          <CardTitle className="text-xl mb-2">No subjects yet</CardTitle>
+          <CardDescription className="mb-6 max-w-sm mx-auto">
+            Create your first subject to get started adding exams and managing your curriculum.
+          </CardDescription>
+          <Button onClick={handleCreate}>
             Create First Subject
           </Button>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
           {subjects.map((subj) => (
-            <Card key={subj.id} className="flex flex-col hover:shadow-lg transition-shadow duration-200">
-              <CardHeader>
+            <Card key={subj.id} className="flex flex-col transition-all duration-200 hover:shadow-lg shadow-sm border-muted/60">
+              <CardHeader className="pb-3">
                 <div className="flex items-start justify-between">
-                  <div>
-                    <CardTitle className="text-xl text-gray-900">{subj.name}</CardTitle>
-                    <CardDescription className="text-muted-foreground">{subj.description || "No description"}</CardDescription>
+                  <div className="space-y-1">
+                    <CardTitle className="text-xl font-semibold text-foreground line-clamp-1" title={subj.name}>
+                      {subj.name}
+                    </CardTitle>
+                    <CardDescription className="line-clamp-2 min-h-[40px]">
+                      {subj.description || "No description provided."}
+                    </CardDescription>
                   </div>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" className="h-8 w-8 p-0">
+                      <Button variant="ghost" className="h-8 w-8 p-0 -mr-2">
                         <MoreHorizontal className="h-4 w-4" />
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
                       <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                      <DropdownMenuItem onSelect={(e) => { e.preventDefault(); handleEdit(subj); }}>
+                      <DropdownMenuItem onClick={() => handleEdit(subj)}>
                         <Edit className="mr-2 h-4 w-4" />
                         <span>Edit</span>
                       </DropdownMenuItem>
                       <DropdownMenuItem 
-                        onSelect={(e) => { e.preventDefault(); handleDelete(subj); }} 
-                        className="text-red-600 focus:text-red-600"
+                        onClick={() => handleDelete(subj)} 
+                        className="text-red-600 focus:bg-red-50 dark:focus:bg-red-950/50"
                       >
                         <Trash2 className="mr-2 h-4 w-4" />
                         <span>Delete</span>
@@ -340,31 +385,38 @@ export default function SubjectsPage() {
                   </DropdownMenu>
                 </div>
               </CardHeader>
-              <CardContent className="flex-grow">
+              <CardContent className="grow pt-0">
                 <div className="space-y-4">
-                  <div className="flex justify-between text-sm">
+                  <div className="flex justify-between items-center text-sm py-2 border-t border-b border-muted/40">
                     <div className="flex items-center gap-2 text-muted-foreground">
                       <BookOpen className="h-4 w-4" />
-                      <span>Exams</span>
+                      <span>Total Exams</span>
                     </div>
-                    <span className="font-semibold text-gray-900">{subj.exam_count}</span>
+                    <span className="font-semibold bg-muted px-2 py-0.5 rounded text-xs">
+                      {subj.exam_count}
+                    </span>
                   </div>
+                  
                   <div>
-                    <h4 className="mb-2 text-sm font-semibold text-gray-900">Recent Exams</h4>
+                    <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Recent Exams</h4>
                     {subj.recent_exams.length > 0 ? (
-                      <div className="space-y-1">
-                        {subj.recent_exams.map((exam) => (
+                      <div className="space-y-2">
+                        {subj.recent_exams.map((exam: any) => (
                           <div
                             key={exam.id}
-                            className="text-xs text-muted-foreground flex justify-between items-center"
+                            className="text-sm flex justify-between items-center group"
                           >
-                            <span className="truncate flex-1">{exam.name}</span>
-                            <span className="text-[10px] ml-2">{formatDate(exam.start_time)}</span>
+                            <span className="truncate flex-1 text-foreground/80 group-hover:text-foreground transition-colors">
+                              {exam.name}
+                            </span>
+                            <span className="text-[10px] text-muted-foreground ml-2 bg-muted/50 px-1.5 py-0.5 rounded">
+                              {formatDate(exam.start_time)}
+                            </span>
                           </div>
                         ))}
                       </div>
                     ) : (
-                      <p className="text-xs text-muted-foreground">No recent exams.</p>
+                      <div className="text-xs text-muted-foreground italic py-1">No recent exams found.</div>
                     )}
                   </div>
                 </div>
@@ -374,20 +426,83 @@ export default function SubjectsPage() {
         </div>
       )}
 
+      {subjects.length > 0 && totalPages > 1 && (
+        <div className="flex justify-center mt-8">
+          <Pagination>
+            <PaginationContent>
+              <PaginationItem>
+                <PaginationPrevious
+                  href="#"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    handlePageChange(page - 1);
+                  }}
+                  className={page === 1 ? "pointer-events-none opacity-50" : ""}
+                />
+              </PaginationItem>
+
+              {Array.from({ length: totalPages }).map((_, index) => {
+                const pageNumber = index + 1;
+                // Simple pagination logic to show limited page numbers
+                if (
+                  pageNumber === 1 ||
+                  pageNumber === totalPages ||
+                  (pageNumber >= page - 1 && pageNumber <= page + 1)
+                ) {
+                  return (
+                    <PaginationItem key={pageNumber}>
+                      <PaginationLink
+                        href="#"
+                        isActive={pageNumber === page}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          handlePageChange(pageNumber);
+                        }}
+                      >
+                        {pageNumber}
+                      </PaginationLink>
+                    </PaginationItem>
+                  );
+                } else if (
+                  (pageNumber === page - 2 && page > 3) ||
+                  (pageNumber === page + 2 && page < totalPages - 2)
+                ) {
+                  return (
+                    <PaginationItem key={pageNumber}>
+                      <span className="px-4 py-2">...</span>
+                    </PaginationItem>
+                  );
+                }
+                return null;
+              })}
+
+              <PaginationItem>
+                <PaginationNext
+                  href="#"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    handlePageChange(page + 1);
+                  }}
+                  className={page === totalPages ? "pointer-events-none opacity-50" : ""}
+                />
+              </PaginationItem>
+            </PaginationContent>
+          </Pagination>
+        </div>
+      )}
+
       {/* Create/Edit Subject Dialog */}
       <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="text-2xl">{currentSubject.id ? "Edit Subject" : "Create Subject"}</DialogTitle>
-            <DialogDescription className="text-muted-foreground">
+            <DialogTitle>{currentSubject.id ? "Edit Subject" : "Create Subject"}</DialogTitle>
+            <DialogDescription>
               {currentSubject.id ? "Update the details of the subject." : "Add a new subject to the system."}
             </DialogDescription>
           </DialogHeader>
-          <div className="grid gap-6 py-6">
+          <div className="grid gap-4 py-4">
             <div className="grid gap-2">
-              <Label htmlFor="name" className="text-sm font-medium text-gray-700">
-                Name *
-              </Label>
+              <Label htmlFor="name">Subject Name <span className="text-red-500">*</span></Label>
               <Input
                 id="name"
                 value={currentSubject.name}
@@ -397,15 +512,12 @@ export default function SubjectsPage() {
                     name: e.target.value,
                   })
                 }
-                className="border-gray-300 focus:border-indigo-500 focus:ring-indigo-500"
-                placeholder="Enter subject name"
+                placeholder="e.g. Mathematics, Physics"
                 disabled={isSaving}
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="description" className="text-sm font-medium text-gray-700">
-                Description
-              </Label>
+              <Label htmlFor="description">Description <span className="text-muted-foreground font-normal text-xs">(Optional)</span></Label>
               <Textarea
                 id="description"
                 value={currentSubject.description}
@@ -415,19 +527,23 @@ export default function SubjectsPage() {
                     description: e.target.value,
                   })
                 }
-                className="border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 min-h-[100px]"
-                placeholder="Enter subject description (optional)"
+                className="resize-none min-h-[100px]"
+                placeholder="Brief description about this subject..."
                 disabled={isSaving}
               />
             </div>
           </div>
-          <DialogFooter className="flex justify-end gap-2">
+          <DialogFooter>
             <DialogClose asChild disabled={isSaving}>
-              <Button type="button" variant="outline" className="border-gray-300 hover:bg-gray-100" disabled={isSaving}>
+              <Button type="button" variant="outline" disabled={isSaving}>
                 Cancel
               </Button>
             </DialogClose>
-            <Button type="button" onClick={handleSave} disabled={isSaving || !currentSubject.name.trim()} className="bg-indigo-600 hover:bg-indigo-700">
+            <Button 
+              type="button" 
+              onClick={handleSave} 
+              disabled={isSaving || !currentSubject.name.trim()}
+            >
               {isSaving ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -447,13 +563,17 @@ export default function SubjectsPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
             <AlertDialogDescription>
-              This action cannot be undone. This will permanently delete the{" "}
-              <span className="font-bold">{subjectToDelete?.name}</span> subject and any associated data.
+              This action cannot be undone. This will permanently delete <span className="font-semibold text-foreground">{subjectToDelete?.name}</span> and remove all associated data.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmDelete}>Delete Subject</AlertDialogAction>
+            <AlertDialogAction 
+              onClick={confirmDelete}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              Delete Subject
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

@@ -1,112 +1,72 @@
-// admin-header.tsx
-// ModernHeader.tsx
-
-"use client";
+"use client"
 
 import { useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
+import { useTheme } from "next-themes"
 import { supabase } from "@/lib/supabaseClient"
 
 import {
-  Bell,
   Settings,
   Sun,
-  User,
-  Laptop,
-  ShieldCheck,
-  LifeBuoy,
   LogOut,
   Moon,
-  // --- ICONS FOR MODERN NOTIFICATIONS ---
-  UserPlus,
-  AlertTriangle,
-  CheckCircle,
-} from "lucide-react";
+  LifeBuoy,
+} from "lucide-react"
 
-import { Button } from "@/components/ui/button";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
-  DropdownMenuPortal,
   DropdownMenuSeparator,
-  DropdownMenuShortcut,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+} from "@/components/ui/dropdown-menu"
+import { TooltipProvider } from "@/components/ui/tooltip"
+import { SidebarTrigger } from "@/components/ui/sidebar"
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { SidebarTrigger } from "@/components/ui/sidebar";
-import { ScrollArea } from "@/components/ui/scroll-area";
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 
-
-// --- UPDATED PROPS: breadcrumbs is removed ---
-interface ModernHeaderProps {
-  title: string;
-}
-
-export function ModernHeader({ title }: ModernHeaderProps) {
+export function ModernHeader({ title }: { title: string }) {
   const router = useRouter()
-  // const { setTheme } = useTheme() // Uncomment if you have a theme provider
+  const { theme, setTheme } = useTheme()
   const [user, setUser] = useState<{ name: string; email: string; avatar?: string } | null>(null)
   const [loading, setLoading] = useState(true)
+  const [logoutOpen, setLogoutOpen] = useState(false)
 
   useEffect(() => {
     const fetchUser = async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession()
         if (session?.user) {
-          // Fetch admin profile from DB
           const { data: adminData, error } = await supabase
             .from('admin')
             .select('full_name, email')
             .eq('id', session.user.id)
             .single()
 
-          if (error || !adminData) {
-            console.error('Error fetching admin profile:', error)
-            router.push('/auth/alpha')
-            return
+          if (!error && adminData) {
+            setUser({
+              name: adminData.full_name,
+              email: adminData.email,
+            })
           }
-
-          setUser({
-            name: adminData.full_name,
-            email: adminData.email,
-            // avatar: adminData.avatar_url, // Add if you have avatar field
-          })
-        } else {
-          router.push('/auth/alpha')
         }
-      } catch (error) {
-        console.error('Error fetching user:', error)
-        router.push('/auth/alpha')
       } finally {
         setLoading(false)
       }
     }
-
     fetchUser()
-
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_OUT') {
-        router.push('/auth/alpha')
-      } else if (session?.user) {
-        fetchUser()
-      }
-    })
-
-    return () => subscription.unsubscribe()
   }, [router])
 
   const handleLogout = async () => {
@@ -114,139 +74,104 @@ export function ModernHeader({ title }: ModernHeaderProps) {
     router.push('/auth/alpha')
   }
 
-  const getInitials = (name: string) => {
-    return name
-      .split(" ")
-      .map((word) => word[0])
-      .join("")
-      .toUpperCase();
-  };
-
-  if (loading || !user) {
-    return (
-      <header className="sticky top-0 z-50 w-full border-b bg-background border-gray-200/60 backdrop-blur-xl supports-[backdrop-filter]:bg-white/80 animate-slide-in-left">
-        <div className="flex h-14 items-center gap-4 px-4 sm:px-6">
-          <div className="flex flex-1 items-center gap-4">
-            <SidebarTrigger className="-ml-1 h-8 w-8 hover:bg-gray-100/80 transition-all duration-200" />
-            <h1 className="text-xl font-semibold tracking-tight text-gray-800">
-              {title}
-            </h1>
-          </div>
-          {/* Loading placeholder for user avatar */}
-          <div className="flex items-center gap-2 ml-auto">
-            <div className="h-8 w-8 rounded-full bg-gray-200 animate-pulse" />
-          </div>
-        </div>
-      </header>
-    )
-  }
+  const toggleTheme = () => setTheme(theme === "dark" ? "light" : "dark")
+  const getInitials = (name: string) => name.split(" ").map((n) => n[0]).join("").toUpperCase()
 
   return (
     <TooltipProvider delayDuration={100}>
-      <header className="sticky top-0 z-50 w-full border-b bg-background border-gray-200/60 backdrop-blur-xl supports-[backdrop-filter]:bg-white/80 animate-slide-in-left">
-        <div className="flex h-14 items-center gap-4 px-4 sm:px-6">
+      <>
+        {/* Transparent background and border-none. Inherits exactly from the layout wrapper */}
+        <header className="w-full bg-transparent border-none flex-none h-16 flex items-center px-4 sm:px-6">
           <div className="flex flex-1 items-center gap-4">
-            <SidebarTrigger className="-ml-1 h-8 w-8 hover:bg-gray-100/80 transition-all duration-200" />
-            <h1 className="text-xl font-semibold tracking-tight text-gray-800">
+            <SidebarTrigger className="-ml-2 h-9 w-9 hover:bg-black/5 dark:hover:bg-white/5 transition-all duration-200" />
+            <h1 className="text-lg font-semibold tracking-tight text-foreground">
               {title}
             </h1>
           </div>
 
-          {/* Right Section - Notifications and User Menu (No changes here) */}
-          <div className="flex items-center gap-2 ml-auto">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
+          <div className="ml-auto flex items-center gap-2">
+            {!loading && user ? (
+              <>
                 <Button
                   variant="ghost"
-                  className="relative h-8 w-8 rounded-full"
+                  size="icon"
+                  className="relative h-9 w-9 rounded-full hover:bg-black/5 dark:hover:bg-white/5"
+                  onClick={toggleTheme}
                 >
-                  <Avatar className="h-8 w-8">
-                    <AvatarImage src={user.avatar} alt={user.name} />
-                    <AvatarFallback>{getInitials(user.name)}</AvatarFallback>
-                  </Avatar>
+                  <Sun className="absolute h-4 w-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
+                  <Moon className="absolute h-4 w-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
                 </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent
-                className="w-64 animate-scale-in"
-                align="end"
-                forceMount
-              >
-                <DropdownMenuLabel className="font-normal p-3">
-                  <div className="flex items-center gap-3">
-                    <Avatar className="h-9 w-9">
-                      <AvatarImage src={user.avatar} alt={user.name} />
-                      <AvatarFallback>{getInitials(user.name)}</AvatarFallback>
-                    </Avatar>
-                    <div className="flex flex-col space-y-1">
-                      <p className="text-sm font-medium leading-none">
-                        {user.name}
-                      </p>
-                      <p className="text-xs leading-none text-muted-foreground">
-                        {user.email}
-                      </p>
-                    </div>
-                  </div>
-                </DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuGroup>
-                  <DropdownMenuItem>
-                    <User className="mr-2 h-4 w-4" />
-                    <span>Admin Profile</span>
-                    <DropdownMenuShortcut>⇧⌘P</DropdownMenuShortcut>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem>
-                    <Settings className="mr-2 h-4 w-4" />
-                    <span>Global Settings</span>
-                    <DropdownMenuShortcut>⌘S</DropdownMenuShortcut>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem>
-                    <ShieldCheck className="mr-2 h-4 w-4" />
-                    <span>Security & Permissions</span>
-                  </DropdownMenuItem>
-                </DropdownMenuGroup>
-                <DropdownMenuSeparator />
-                <DropdownMenuGroup>
-                  <DropdownMenuSub>
-                    <DropdownMenuSubTrigger>
-                      <div className="relative mr-2 h-4 w-4">
-                        <Sun className="absolute h-full w-full rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
-                        <Moon className="absolute h-full w-full rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="relative h-9 w-9 rounded-full hover:bg-black/5 dark:hover:bg-white/5"
+                  onClick={() => router.push("/dashboard/settings")}
+                >
+                  <Settings className="h-4 w-4" />
+                </Button>
+
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" className="relative h-9 w-9 rounded-full p-0 ml-2 hover:bg-black/5 dark:hover:bg-white/5">
+                      <Avatar className="h-9 w-9 rounded-full border border-zinc-200 dark:border-zinc-800">
+                        <AvatarImage src={user?.avatar} alt={user?.name} />
+                        <AvatarFallback className="bg-zinc-900 text-zinc-50 dark:bg-zinc-100 dark:text-zinc-900 text-sm font-medium">
+                          {getInitials(user.name)}
+                        </AvatarFallback>
+                      </Avatar>
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent className="w-64 animate-scale-in" align="end" forceMount>
+                    <DropdownMenuLabel className="font-normal p-3">
+                      <div className="flex items-center gap-3">
+                        <Avatar className="h-9 w-9 border border-zinc-200 dark:border-zinc-800">
+                          <AvatarFallback className="bg-zinc-900 text-zinc-50 dark:bg-zinc-100 dark:text-zinc-900">
+                            {getInitials(user.name)}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="flex flex-col space-y-1">
+                          <p className="text-sm font-medium leading-none">{user.name}</p>
+                          <p className="text-xs leading-none text-muted-foreground">{user.email}</p>
+                        </div>
                       </div>
-                      <span>Theme</span>
-                    </DropdownMenuSubTrigger>
-                    <DropdownMenuPortal>
-                      <DropdownMenuSubContent>
-                        <DropdownMenuItem>
-                          <Sun className="mr-2 h-4 w-4" />
-                          <span>Light</span>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem>
-                          <Moon className="mr-2 h-4 w-4" />
-                          <span>Dark</span>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem>
-                          <Laptop className="mr-2 h-4 w-4" />
-                          <span>System</span>
-                        </DropdownMenuItem>
-                      </DropdownMenuSubContent>
-                    </DropdownMenuPortal>
-                  </DropdownMenuSub>
-                  <DropdownMenuItem>
-                    <LifeBuoy className="mr-2 h-4 w-4" />
-                    <span>Admin Support</span>
-                  </DropdownMenuItem>
-                </DropdownMenuGroup>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={handleLogout}>
-                  <LogOut className="mr-2 h-4 w-4" />
-                  <span>Log out</span>
-                  <DropdownMenuShortcut>⇧⌘Q</DropdownMenuShortcut>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+                    </DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setLogoutOpen(true) }}>
+                      <LogOut className="mr-2 h-4 w-4 text-red-500" />
+                      <span className="text-red-500 font-medium">Log out</span>
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </>
+            ) : (
+              <div className="flex gap-2">
+                {/* Skeletons adapt to theme using bg-zinc-200 and dark:bg-zinc-800 */}
+                <div className="h-9 w-9 rounded-full bg-zinc-200 dark:bg-zinc-800 animate-pulse" />
+                <div className="h-9 w-9 rounded-full bg-zinc-200 dark:bg-zinc-800 animate-pulse" />
+                <div className="h-9 w-9 rounded-full bg-zinc-200 dark:bg-zinc-800 animate-pulse ml-2" />
+              </div>
+            )}
           </div>
-        </div>
-      </header>
+        </header>
+
+        <AlertDialog open={logoutOpen} onOpenChange={setLogoutOpen}>
+          <AlertDialogContent size="sm">
+            <AlertDialogHeader>
+              <AlertDialogTitle>Log out?</AlertDialogTitle>
+              <AlertDialogDescription>
+                You will be signed out of the admin dashboard. You can log in again at any time.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction variant="destructive" onClick={handleLogout}>
+                Log out
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </>
     </TooltipProvider>
-  );
+  )
 }

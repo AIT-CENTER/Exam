@@ -4,96 +4,124 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  /* Updated to neutral beige/gray color palette as specified */
-  --background: #f9f8f7;
-  --foreground: #252525;
-  --card: #fcfcfc;
-  --card-foreground: #252525;
-  --popover: #f8f7f6;
-  --popover-foreground: #252525;
-  --primary: #2f2e2d;
-  --primary-foreground: #fcfcfc;
-  --secondary: #545353;
-  --secondary-foreground: #fcfcfc;
-  --muted: #ebebea;
-  --muted-foreground: #6d6c6b;
-  --accent: #282828;
-  --accent-foreground: #fcfcfc;
-  --destructive: #dc2626;
-  --destructive-foreground: #fcfcfc;
-  --border: #ebebea;
-  --input: #fcfcfc;
-  --ring: rgba(47, 46, 45, 0.3);
-  --chart-1: #2f2e2d;
-  --chart-2: #545353;
-  --chart-3: #6d6c6b;
-  --chart-4: #ebebea;
-  --chart-5: #fcfcfc;
-  --radius: 1rem;
-  --sidebar: #f8f7f6;
-  --sidebar-foreground: #252525;
-  --sidebar-primary: #2f2e2d;
-  --sidebar-primary-foreground: #fcfcfc;
-  --sidebar-accent: #ebebea;
-  --sidebar-accent-foreground: #2f2e2d;
-  --sidebar-border: #ebebea;
-  --sidebar-ring: rgba(47, 46, 45, 0.3);
+  /* Light mode – clean neutral similar to docs site */
+  --background: #f4f4f5;
+  --foreground: #020617;
 
-  /* Added custom color tokens for the design system */
-  --text-dark: #b57979;
-  --text-medium: #282828;
-  --text-gray: #545353;
-  --text-light: #6d6c6b;
-  --button: #2f2e2d;
-  --button-text: #fcfcfc;
-  --tab-parent: #ebebea;
-  --tab: #fcfcfc;
-  --dialog: #f8f7f6;
+  --card: #ffffff;
+  --card-foreground: #020617;
+
+  --popover: #f9fafb;
+  --popover-foreground: #020617;
+
+  --primary: #111827;
+  --primary-foreground: #f9fafb;
+
+  --secondary: #e5e7eb;
+  --secondary-foreground: #111827;
+
+  --muted: #e5e7eb;
+  --muted-foreground: #6b7280;
+
+  --accent: #111827;
+  --accent-foreground: #f9fafb;
+
+  --destructive: #ef4444;
+  --destructive-foreground: #f9fafb;
+
+  --border: #e5e7eb;
+  --input: #ffffff;
+  --ring: rgba(15, 23, 42, 0.35);
+
+  --chart-1: #111827;
+  --chart-2: #4b5563;
+  --chart-3: #9ca3af;
+  --chart-4: #e5e7eb;
+  --chart-5: #f9fafb;
+
+  --radius: 1rem;
+
+  --sidebar: #f4f4f5;
+  --sidebar-foreground: #020617;
+  --sidebar-primary: #374151;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #e5e7eb;
+  --sidebar-accent-foreground: #020617;
+  --sidebar-border: #e5e7eb;
+  --sidebar-ring: rgba(15, 23, 42, 0.35);
+
+  /* Custom text and surface tokens */
+  --text-dark: #020617;
+  --text-medium: #111827;
+  --text-gray: #6b7280;
+  --text-light: #9ca3af;
+
+  --button: #111827;
+  --button-text: #f9fafb;
+
+  --tab-parent: #e5e7eb;
+  --tab: #ffffff;
+
+  --dialog: #ffffff;
 }
 
 .dark {
-  --background: #1a1918;
-  --foreground: #fcfcfc;
-  --card: #2f2e2d;
-  --card-foreground: #fcfcfc;
-  --popover: #2f2e2d;
-  --popover-foreground: #fcfcfc;
-  --primary: #fcfcfc;
-  --primary-foreground: #252525;
-  --secondary: #545353;
-  --secondary-foreground: #fcfcfc;
-  --muted: #282828;
-  --muted-foreground: #6d6c6b;
-  --accent: #fcfcfc;
-  --accent-foreground: #252525;
-  --destructive: #ef4444;
-  --destructive-foreground: #fcfcfc;
-  --border: #282828;
-  --input: #2f2e2d;
-  --ring: rgba(252, 252, 252, 0.3);
-  --chart-1: #fcfcfc;
-  --chart-2: #6d6c6b;
-  --chart-3: #545353;
-  --chart-4: #282828;
-  --chart-5: #2f2e2d;
-  --sidebar: #1a1918;
-  --sidebar-foreground: #fcfcfc;
-  --sidebar-primary: #fcfcfc;
-  --sidebar-primary-foreground: #252525;
-  --sidebar-accent: #6d6c6b;
-  --sidebar-accent-foreground: #fcfcfc;
-  --sidebar-border: #282828;
-  --sidebar-ring: rgba(252, 252, 252, 0.3);
+  /* Dark mode – matches shadcn docs-style layout */
+  --background: #020617;
+  --foreground: #e5e7eb;
 
-  --text-dark: #fcfcfc;
-  --text-medium: #ebebea;
-  --text-gray: #6d6c6b;
-  --text-light: #545353;
-  --button: #fcfcfc;
-  --button-text: #252525;
-  --tab-parent: #282828;
-  --tab: #2f2e2d;
-  --dialog: #2f2e2d;
+  --card: #020617;
+  --card-foreground: #e5e7eb;
+
+  --popover: #020617;
+  --popover-foreground: #e5e7eb;
+
+  --primary: #f9fafb;
+  --primary-foreground: #020617;
+
+  --secondary: #111827;
+  --secondary-foreground: #e5e7eb;
+
+  --muted: #020617;
+  --muted-foreground: #9ca3af;
+
+  --accent: #111827;
+  --accent-foreground: #f9fafb;
+
+  --destructive: #ef4444;
+  --destructive-foreground: #f9fafb;
+
+  --border: #111827;
+  --input: #020617;
+  --ring: rgba(148, 163, 184, 0.6);
+
+  --chart-1: #f9fafb;
+  --chart-2: #9ca3af;
+  --chart-3: #4b5563;
+  --chart-4: #1f2937;
+  --chart-5: #020617;
+
+  --sidebar: #020617;
+  --sidebar-foreground: #e5e7eb;
+  --sidebar-primary: #f9fafb;
+  --sidebar-primary-foreground: #020617;
+  --sidebar-accent: #111827;
+  --sidebar-accent-foreground: #e5e7eb;
+  --sidebar-border: #111827;
+  --sidebar-ring: rgba(148, 163, 184, 0.6);
+
+  --text-dark: #f9fafb;
+  --text-medium: #e5e7eb;
+  --text-gray: #9ca3af;
+  --text-light: #6b7280;
+
+  --button: #f9fafb;
+  --button-text: #020617;
+
+  --tab-parent: #020617;
+  --tab: #020617;
+
+  --dialog: #020617;
 }
 
 @theme inline {
@@ -194,7 +222,6 @@
   }
 }
 
-
 /* Hover effects use opacity instead of scale */
 .hover-lift {
   transition: all 0.2s ease-out;
@@ -237,3 +264,4 @@
 ::-webkit-scrollbar-thumb:hover {
   background: var(--text-gray);
 }
+

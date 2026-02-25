@@ -341,39 +341,62 @@ export default function ExamResultsPage() {
 
   if (loading) {
     return (
-      <div className="flex-1 space-y-8 p-4 md:p-8 bg-gray-50 min-h-screen">
-        <div className="flex items-center justify-between">
-          <div className="space-y-2">
-            <Skeleton className="h-8 w-64 bg-gray-200 rounded animate-pulse" />
-            <Skeleton className="h-4 w-96 bg-gray-200 rounded animate-pulse" />
-          </div>
-          <Skeleton className="h-10 w-32 bg-gray-200 rounded animate-pulse" />
-        </div>
-        <div className="flex flex-col sm:flex-row gap-4 items-center">
-          <Skeleton className="h-10 flex-1 max-w-md bg-gray-200 rounded animate-pulse" />
-          <Skeleton className="h-10 w-64 bg-gray-200 rounded animate-pulse" />
-        </div>
-        <Card>
-          <div className="p-4 md:p-6 space-y-4">
-            {[...Array(5)].map((_, rowIndex) => (
-              <div key={rowIndex} className="flex items-center space-x-4">
-                <Skeleton className="h-4 w-8 bg-gray-200 rounded animate-pulse" />
-                <Skeleton className="h-4 flex-1 bg-gray-200 rounded animate-pulse" />
-                <Skeleton className="h-4 w-20 bg-gray-200 rounded animate-pulse" />
-              </div>
-            ))}
-          </div>
-        </Card>
+      <div className="flex items-center justify-center min-h-[70vh] w-full bg-transparent">
+        <style>{`
+          .spinner-svg {
+            animation: spinner-rotate 2s linear infinite;
+          }
+          .spinner-circle {
+            stroke-dasharray: 1, 200;
+            stroke-dashoffset: 0;
+            animation: spinner-stretch 1.5s ease-in-out infinite;
+            stroke-linecap: round;
+          }
+          @keyframes spinner-rotate {
+            100% {
+              transform: rotate(360deg);
+            }
+          }
+          @keyframes spinner-stretch {
+            0% {
+              stroke-dasharray: 1, 200;
+              stroke-dashoffset: 0;
+            }
+            50% {
+              stroke-dasharray: 90, 200;
+              stroke-dashoffset: -35px;
+            }
+            100% {
+              stroke-dasharray: 90, 200;
+              stroke-dashoffset: -124px;
+            }
+          }
+        `}</style>
+        
+        <svg
+          className="h-10 w-10 text-zinc-800 dark:text-zinc-200 spinner-svg"
+          viewBox="25 25 50 50"
+        >
+          <circle
+            className="spinner-circle"
+            cx="50"
+            cy="50"
+            r="20"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="4"
+          />
+        </svg>
       </div>
     )
   }
 
   return (
-    <div className="flex-1 space-y-6 p-4 md:p-8 pb-24 bg-gray-50 min-h-screen">
+    <div className="flex-1 space-y-6 pt-0 p-4 md:p-8 pb-24 bg-transparent min-h-screen">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-gray-900">Exam Results</h1>
+          <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground">Exam Results</h1>
           <p className="text-muted-foreground mt-1 text-sm">View and manage student exam performance (double-click to edit)</p>
         </div>
         <Button variant="outline" onClick={() => router.back()} className="gap-2">
@@ -442,31 +465,31 @@ export default function ExamResultsPage() {
             <div className="relative">
               <div className="overflow-auto">
                 <table className="w-full border-collapse text-sm">
-                  <thead className="sticky top-0 z-20 bg-gray-50">
-                    <tr>
+                  <thead className="sticky top-0 z-20 bg-zinc-50 dark:bg-zinc-900/40">
+                    <tr className="border-b dark:border-zinc-800">
                       {/* Fixed columns - # only */}
-                      <th className="sticky left-0 z-30 bg-gray-50 w-12 text-xs font-medium text-center p-3 border border-gray-200">
+                      <th className="sticky left-0 z-30 bg-zinc-50 dark:bg-zinc-900 w-12 text-xs font-medium text-center p-3 text-muted-foreground border-r dark:border-zinc-800">
                         #
                       </th>
                       {/* Scrollable columns */}
-                      <th className="min-w-[200px] text-xs font-medium text-left p-3 border border-gray-200 bg-gray-50">
+                      <th className="min-w-[200px] text-xs font-medium text-left p-3 text-muted-foreground border-r dark:border-zinc-800">
                         Full Name
                       </th>
-                      <th className="min-w-[100px] text-xs font-medium text-left p-3 border border-gray-200 bg-gray-50">
+                      <th className="min-w-[100px] text-xs font-medium text-left p-3 text-muted-foreground border-r dark:border-zinc-800">
                         Section
                       </th>
                       {/* Exam columns */}
                       {allExams.map((exam) => (
                         <th
                           key={exam.id}
-                          className="min-w-[120px] text-xs font-medium text-center p-3 border border-gray-200 bg-gray-50"
+                          className="min-w-[120px] text-xs font-medium text-center p-3 text-muted-foreground border-r dark:border-zinc-800"
                         >
                           <div className="truncate max-w-[120px]" title={exam.title}>
                             {exam.title} ({exam.totalMarks})
                           </div>
                         </th>
                       ))}
-                      <th className="min-w-[80px] text-xs font-medium text-center p-3 border border-gray-200 bg-gray-50">
+                      <th className="min-w-[80px] text-xs font-medium text-center p-3 text-muted-foreground">
                         Total
                       </th>
                     </tr>
@@ -475,20 +498,20 @@ export default function ExamResultsPage() {
                     {paginatedResults.map((student, idx) => {
                       const isFailing = isStudentFailing(student)
                       return (
-                        <tr key={student.studentDatabaseId} className={isFailing ? "bg-red-50" : "hover:bg-gray-50/50"}>
+                        <tr key={student.studentDatabaseId} className={isFailing ? "bg-red-50 dark:bg-red-900/20" : "hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors border-b dark:border-zinc-800"}>
                           {/* Fixed column - # only */}
-                          <td className="sticky left-0 z-10 bg-white text-xs font-medium text-center p-3 border border-gray-200">
+                          <td className="sticky left-0 z-10 bg-white dark:bg-zinc-950 text-xs font-medium text-center p-3 text-foreground border-r dark:border-zinc-800">
                             {(currentPage - 1) * RESULTS_PER_PAGE + idx + 1}
                           </td>
                           
                           {/* Scrollable columns */}
-                          <td className="bg-white p-3 border border-gray-200">
+                          <td className="bg-transparent text-foreground p-3 border-r dark:border-zinc-800">
                             <div className="font-medium text-sm truncate max-w-[180px]" title={student.fullName}>
                               {student.fullName}
                             </div>
                           </td>
                           
-                          <td className="bg-white p-3 border border-gray-200">
+                          <td className="bg-transparent text-foreground p-3 border-r dark:border-zinc-800">
                             <Badge variant="outline" className="text-xs">
                               {student.section}
                             </Badge>
@@ -504,7 +527,7 @@ export default function ExamResultsPage() {
                             return (
                               <td
                                 key={exam.id}
-                                className="text-center p-2 border border-gray-200 cursor-pointer hover:bg-gray-100 transition-colors"
+                                className="text-center p-2 border-r dark:border-zinc-800 text-foreground cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
                                 onDoubleClick={() =>
                                   currentScore !== null &&
                                   handleDoubleClick(student.studentDatabaseId, exam.id, currentScore)
@@ -523,7 +546,7 @@ export default function ExamResultsPage() {
                                       max={exam.totalMarks}
                                     />
                                     <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={handleSaveEdit}>
-                                      <Check className="h-3 w-3 text-green-600" />
+                                      <Check className="h-3 w-3 text-green-600 dark:text-green-400" />
                                     </Button>
                                     <Button
                                       size="sm"
@@ -531,7 +554,7 @@ export default function ExamResultsPage() {
                                       className="h-7 w-7 p-0"
                                       onClick={handleCancelEdit}
                                     >
-                                      <X className="h-3 w-3 text-red-600" />
+                                      <X className="h-3 w-3 text-red-600 dark:text-red-400" />
                                     </Button>
                                   </div>
                                 ) : (
@@ -541,7 +564,7 @@ export default function ExamResultsPage() {
                             )
                           })}
                           
-                          <td className="text-center p-3 border border-gray-200 text-sm font-bold text-primary bg-white">
+                          <td className="text-center p-3 text-sm font-bold text-primary bg-transparent">
                             {student.totalScore}
                           </td>
                         </tr>

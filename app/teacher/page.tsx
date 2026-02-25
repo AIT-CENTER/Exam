@@ -58,11 +58,11 @@ interface Result {
 }
 
 interface TeacherData {
-  id: string
-  username: string
-  full_name: string
-  email: string
-  grade_id: number | null
+  id?: string
+  username?: string
+  full_name?: string
+  email?: string
+  grade_id?: number | null
   gradeName?: string
   department?: string | null
   sections?: string[]
@@ -110,9 +110,9 @@ export default function TeacherDashboardPage() {
       }
 
       console.log("Teacher data from cookie:", teacher)
-      setTeacherData(teacher)
+      setTeacherData(teacher as any)
 
-      const teacherId = teacher.id || teacher.teacherId
+      const teacherId = (teacher as any).id || (teacher as any).teacherId
       console.log("Teacher ID:", teacherId)
 
       // 1. Load exams created by this teacher
@@ -344,69 +344,61 @@ export default function TeacherDashboardPage() {
 
   if (isLoading) {
     return (
-      <div className="flex-1 space-y-8 p-4 lg:p-8 bg-gradient-to-b from-gray-50 to-white min-h-screen">
-        <div className="space-y-2">
-          <Skeleton className="h-8 w-64 bg-gray-200 rounded animate-pulse" />
-          <Skeleton className="h-4 w-96 bg-gray-200 rounded animate-pulse" />
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {[...Array(3)].map((_, i) => (
-            <Card key={i}>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <Skeleton className="h-4 w-24 bg-gray-200 rounded animate-pulse" />
-                <Skeleton className="h-5 w-5 bg-gray-200 rounded animate-pulse" />
-              </CardHeader>
-              <CardContent>
-                <Skeleton className="h-8 w-16 bg-gray-200 rounded animate-pulse" />
-                <Skeleton className="h-3 w-24 bg-gray-200 rounded animate-pulse mt-2" />
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <div className="space-y-2">
-              <Skeleton className="h-6 w-32 bg-gray-200 rounded animate-pulse" />
-              <Skeleton className="h-4 w-48 bg-gray-200 rounded animate-pulse" />
-            </div>
-            <Skeleton className="h-9 w-24 bg-gray-200 rounded animate-pulse" />
-          </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  {[...Array(6)].map((_, i) => (
-                    <TableHead key={i}>
-                      <Skeleton className="h-4 w-20 bg-gray-200 rounded animate-pulse" />
-                    </TableHead>
-                  ))}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {[...Array(5)].map((_, rowIndex) => (
-                  <TableRow key={rowIndex}>
-                    {[...Array(6)].map((_, cellIndex) => (
-                      <TableCell key={cellIndex}>
-                        <Skeleton className="h-4 w-full bg-gray-200 rounded animate-pulse" />
-                      </TableCell>
-                    ))}
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
+      <div className="flex items-center justify-center min-h-[70vh] w-full bg-transparent">
+        <style>{`
+          .spinner-svg {
+            animation: spinner-rotate 2s linear infinite;
+          }
+          .spinner-circle {
+            stroke-dasharray: 1, 200;
+            stroke-dashoffset: 0;
+            animation: spinner-stretch 1.5s ease-in-out infinite;
+            stroke-linecap: round;
+          }
+          @keyframes spinner-rotate {
+            100% {
+              transform: rotate(360deg);
+            }
+          }
+          @keyframes spinner-stretch {
+            0% {
+              stroke-dasharray: 1, 200;
+              stroke-dashoffset: 0;
+            }
+            50% {
+              stroke-dasharray: 90, 200;
+              stroke-dashoffset: -35px;
+            }
+            100% {
+              stroke-dasharray: 90, 200;
+              stroke-dashoffset: -124px;
+            }
+          }
+        `}</style>
+        
+        <svg
+          className="h-10 w-10 text-zinc-800 dark:text-zinc-200 spinner-svg"
+          viewBox="25 25 50 50"
+        >
+          <circle
+            className="spinner-circle"
+            cx="50"
+            cy="50"
+            r="20"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="4"
+          />
+        </svg>
       </div>
     )
   }
 
   return (
-    <div className="flex-1 space-y-8 p-4 lg:p-8 bg-gradient-to-b from-gray-50 to-white min-h-screen">
+    <div className="flex-1 space-y-8 bg-transparent p-4 lg:p-8">
       <div className="flex items-center justify-between space-y-2">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-gray-900">
+          <h1 className="text-3xl font-bold tracking-tight text-foreground">
             Welcome, {teacherData?.full_name || teacherData?.fullName || "Teacher"}!
           </h1>
           <p className="text-muted-foreground mt-1">
@@ -419,10 +411,10 @@ export default function TeacherDashboardPage() {
           </p>
         </div>
         <div className="flex items-center space-x-2">
-          <Badge variant="outline" className="text-blue-600 border-blue-200">
+          <Badge variant="outline" className="text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800">
             {students.length} Students
           </Badge>
-          <Badge variant="outline" className="text-green-600 border-green-200">
+          <Badge variant="outline" className="text-green-600 dark:text-green-400 border-green-200 dark:border-green-800">
             {allExams.length} Exams
           </Badge>
         </div>
@@ -430,13 +422,13 @@ export default function TeacherDashboardPage() {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {teacherStats.map((stat) => (
-          <Card key={stat.title} className="hover:shadow-lg transition-shadow duration-200">
+          <Card key={stat.title} className="hover:shadow-lg transition-shadow duration-200 shadow-sm">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-gray-700">{stat.title}</CardTitle>
+              <CardTitle className="text-sm font-medium text-muted-foreground">{stat.title}</CardTitle>
               <stat.icon className="h-5 w-5 text-indigo-500" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-gray-900">{stat.value}</div>
+              <div className="text-2xl font-bold text-foreground">{stat.value}</div>
               <p className="text-xs text-muted-foreground mt-1">{stat.change}</p>
             </CardContent>
           </Card>
@@ -444,10 +436,10 @@ export default function TeacherDashboardPage() {
       </div>
 
       {/* Students Section */}
-      <Card className="hover:shadow-lg transition-shadow duration-200">
+      <Card className="hover:shadow-lg transition-shadow duration-200 shadow-sm">
         <CardHeader className="flex flex-row items-center justify-between">
           <div>
-            <CardTitle className="text-xl text-gray-900">My Students</CardTitle>
+            <CardTitle className="text-xl text-foreground">My Students</CardTitle>
             <CardDescription className="text-muted-foreground">
               {students.length > 0 
                 ? `Showing ${students.length} students from ${stats.uniqueGrades} grade${stats.uniqueGrades !== 1 ? 's' : ''}`
@@ -469,9 +461,9 @@ export default function TeacherDashboardPage() {
           {students.length === 0 ? (
             <div className="text-center py-10 text-muted-foreground">
               <div className="mb-4">
-                <Users className="h-12 w-12 text-gray-400 mx-auto" />
+                <Users className="h-12 w-12 mx-auto opacity-50" />
               </div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">No Students Assigned</h3>
+              <h3 className="text-lg font-semibold text-foreground mb-2">No Students Assigned</h3>
               <p className="text-muted-foreground mb-4">
                 You don't have any students assigned to you yet.
               </p>
@@ -480,7 +472,7 @@ export default function TeacherDashboardPage() {
             <>
               <div className="mb-4 flex flex-wrap gap-2">
                 {uniqueGrades.map((grade, index) => (
-                  <Badge key={index} variant="outline" className="text-blue-600 border-blue-200">
+                  <Badge key={index} variant="outline" className="text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800">
                     <BookOpen className="h-3 w-3 mr-1" />
                     {grade}
                   </Badge>
@@ -488,31 +480,31 @@ export default function TeacherDashboardPage() {
               </div>
               <Table>
                 <TableHeader>
-                  <TableRow className="border-b">
-                    <TableHead className="w-[50px] text-gray-700">#</TableHead>
-                    <TableHead className="text-gray-700">Student ID</TableHead>
-                    <TableHead className="text-gray-700">Full Name</TableHead>
-                    <TableHead className="text-gray-700">Grade</TableHead>
-                    <TableHead className="text-gray-700">Section</TableHead>
-                    <TableHead className="text-gray-700">Gender</TableHead>
-                    <TableHead className="text-gray-700">Stream</TableHead>
+                  <TableRow className="border-b dark:border-zinc-800">
+                    <TableHead className="w-[50px] text-muted-foreground">#</TableHead>
+                    <TableHead className="text-muted-foreground">Student ID</TableHead>
+                    <TableHead className="text-muted-foreground">Full Name</TableHead>
+                    <TableHead className="text-muted-foreground">Grade</TableHead>
+                    <TableHead className="text-muted-foreground">Section</TableHead>
+                    <TableHead className="text-muted-foreground">Gender</TableHead>
+                    <TableHead className="text-muted-foreground">Stream</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {topStudents.map((student, idx) => (
-                    <TableRow key={student.id} className="hover:bg-gray-50 transition-colors">
-                      <TableCell className="font-medium text-gray-900">{idx + 1}</TableCell>
-                      <TableCell className="font-medium text-gray-900">{student.student_id}</TableCell>
-                      <TableCell className="text-gray-900">
+                    <TableRow key={student.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors">
+                      <TableCell className="font-medium text-foreground">{idx + 1}</TableCell>
+                      <TableCell className="font-medium text-foreground">{student.student_id}</TableCell>
+                      <TableCell className="text-foreground">
                         {student.name} {student.father_name} {student.grandfather_name}
                       </TableCell>
                       <TableCell>
-                        <Badge variant="outline" className="text-blue-600 border-blue-200">
+                        <Badge variant="outline" className="text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800">
                           {student.grades?.grade_name || "N/A"}
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        <Badge variant="outline" className="text-indigo-600 border-indigo-200">
+                        <Badge variant="outline" className="text-indigo-600 dark:text-indigo-400 border-indigo-200 dark:border-indigo-800">
                           {student.section}
                         </Badge>
                       </TableCell>
@@ -525,8 +517,8 @@ export default function TeacherDashboardPage() {
                         {student.stream ? (
                           <Badge variant="outline" className={
                             student.stream === 'Natural' 
-                              ? "text-green-600 border-green-200" 
-                              : "text-purple-600 border-purple-200"
+                              ? "text-green-600 dark:text-green-400 border-green-200 dark:border-green-800" 
+                              : "text-purple-600 dark:text-purple-400 border-purple-200 dark:border-purple-800"
                           }>
                             {student.stream}
                           </Badge>
@@ -544,10 +536,10 @@ export default function TeacherDashboardPage() {
       </Card>
 
       {/* Exams Section */}
-      <Card className="hover:shadow-lg transition-shadow duration-200">
+      <Card className="hover:shadow-lg transition-shadow duration-200 shadow-sm">
         <CardHeader className="flex flex-row items-center justify-between">
           <div>
-            <CardTitle className="text-xl text-gray-900">
+            <CardTitle className="text-xl text-foreground">
               {allExams.length > 0 ? "My Exams" : "Exams"}
             </CardTitle>
             <CardDescription className="text-muted-foreground">
@@ -564,9 +556,9 @@ export default function TeacherDashboardPage() {
           {allExams.length === 0 ? (
             <div className="text-center py-10 text-muted-foreground">
               <div className="mb-4">
-                <ClipboardList className="h-12 w-12 text-gray-400 mx-auto" />
+                <ClipboardList className="h-12 w-12 mx-auto opacity-50" />
               </div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">No Exams Available</h3>
+              <h3 className="text-lg font-semibold text-foreground mb-2">No Exams Available</h3>
               <p className="text-muted-foreground mb-4">
                 You haven't created or been assigned any exams yet.
               </p>
@@ -576,19 +568,19 @@ export default function TeacherDashboardPage() {
             </div>
           ) : (
             <div>
-              <div className="mb-4 text-sm text-gray-600">
+              <div className="mb-4 text-sm text-muted-foreground">
                 Showing {allExams.length} unique exams (no duplicates)
               </div>
               <Table>
                 <TableHeader>
-                  <TableRow className="border-b">
-                    <TableHead className="text-gray-700">Status</TableHead>
-                    <TableHead className="text-gray-700">Exam Code</TableHead>
-                    <TableHead className="text-gray-700">Title</TableHead>
-                    <TableHead className="text-gray-700">Subject</TableHead>
-                    <TableHead className="text-gray-700">Grade</TableHead>
-                    <TableHead className="text-gray-700">Section</TableHead>
-                    <TableHead className="text-gray-700">Marks</TableHead>
+                  <TableRow className="border-b dark:border-zinc-800">
+                    <TableHead className="text-muted-foreground">Status</TableHead>
+                    <TableHead className="text-muted-foreground">Exam Code</TableHead>
+                    <TableHead className="text-muted-foreground">Title</TableHead>
+                    <TableHead className="text-muted-foreground">Subject</TableHead>
+                    <TableHead className="text-muted-foreground">Grade</TableHead>
+                    <TableHead className="text-muted-foreground">Section</TableHead>
+                    <TableHead className="text-muted-foreground">Marks</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -598,33 +590,33 @@ export default function TeacherDashboardPage() {
                     
                     return (
                       <TableRow key={`${exam.id}-${isCreatedByMe ? 'created' : 'assigned'}`} 
-                               className="hover:bg-gray-50 transition-colors">
+                               className="hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors">
                         <TableCell>
                           <Badge 
                             variant={exam.exam_active ? "default" : "outline"} 
                             className={
                               exam.exam_active 
-                                ? "bg-green-100 text-green-800 hover:bg-green-100 border-green-200" 
-                                : "bg-gray-100 text-gray-800"
+                                ? "bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/40 border-green-200 dark:border-green-800" 
+                                : "bg-gray-100 text-gray-800 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-700"
                             }
                           >
                             {exam.exam_active ? "Active" : "Inactive"}
                           </Badge>
                         </TableCell>
-                        <TableCell className="font-medium text-gray-900">{exam.exam_code}</TableCell>
-                        <TableCell className="text-gray-900 truncate max-w-[180px]">{exam.title}</TableCell>
+                        <TableCell className="font-medium text-foreground">{exam.exam_code}</TableCell>
+                        <TableCell className="text-foreground truncate max-w-[180px]">{exam.title}</TableCell>
                         <TableCell>
-                          <Badge variant="outline" className="text-orange-600 border-orange-200 truncate">
+                          <Badge variant="outline" className="text-orange-600 dark:text-orange-400 border-orange-200 dark:border-orange-800 truncate">
                             {(exam as any).subjects?.subject_name || exam.subject_id || "N/A"}
                           </Badge>
                         </TableCell>
                         <TableCell>
-                          <Badge variant="outline" className="text-blue-600 border-blue-200">
+                          <Badge variant="outline" className="text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800">
                             {(exam as any).grades?.grade_name || exam.grade_id || "N/A"}
                           </Badge>
                         </TableCell>
                         <TableCell>
-                          <Badge variant="outline" className="text-green-600 border-green-200">
+                          <Badge variant="outline" className="text-green-600 dark:text-green-400 border-green-200 dark:border-green-800">
                             {exam.section}
                           </Badge>
                         </TableCell>
@@ -640,54 +632,54 @@ export default function TeacherDashboardPage() {
       </Card>
 
       {/* Summary Card */}
-      <Card className="hover:shadow-lg transition-shadow duration-200">
+      <Card className="hover:shadow-lg transition-shadow duration-200 shadow-sm">
         <CardHeader>
-          <CardTitle className="text-xl text-gray-900">Teaching Summary</CardTitle>
+          <CardTitle className="text-xl text-foreground">Teaching Summary</CardTitle>
           <CardDescription className="text-muted-foreground">
             Overview of your teaching responsibilities
           </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="border rounded-lg p-4">
+            <div className="border border-zinc-200 dark:border-zinc-800 bg-card rounded-lg p-4">
               <div className="flex items-center">
                 <Users className="h-5 w-5 text-blue-500 mr-2" />
-                <h3 className="font-medium text-gray-900">Total Students</h3>
+                <h3 className="font-medium text-foreground">Total Students</h3>
               </div>
-              <p className="text-2xl font-bold text-gray-900 mt-2">{students.length}</p>
+              <p className="text-2xl font-bold text-foreground mt-2">{students.length}</p>
               <p className="text-sm text-muted-foreground">
                 Across {stats.uniqueGrades} grade{stats.uniqueGrades !== 1 ? 's' : ''}
               </p>
             </div>
             
-            <div className="border rounded-lg p-4">
+            <div className="border border-zinc-200 dark:border-zinc-800 bg-card rounded-lg p-4">
               <div className="flex items-center">
                 <ClipboardList className="h-5 w-5 text-green-500 mr-2" />
-                <h3 className="font-medium text-gray-900">Total Exams</h3>
+                <h3 className="font-medium text-foreground">Total Exams</h3>
               </div>
-              <p className="text-2xl font-bold text-gray-900 mt-2">{allExams.length}</p>
+              <p className="text-2xl font-bold text-foreground mt-2">{allExams.length}</p>
               <p className="text-sm text-muted-foreground">
                 {allActiveExams.length} active • {allExams.length - allActiveExams.length} inactive
               </p>
             </div>
             
-            <div className="border rounded-lg p-4">
+            <div className="border border-zinc-200 dark:border-zinc-800 bg-card rounded-lg p-4">
               <div className="flex items-center">
                 <TrendingUp className="h-5 w-5 text-purple-500 mr-2" />
-                <h3 className="font-medium text-gray-900">Success Rate</h3>
+                <h3 className="font-medium text-foreground">Success Rate</h3>
               </div>
-              <p className="text-2xl font-bold text-gray-900 mt-2">{stats.overallSuccessRate}%</p>
+              <p className="text-2xl font-bold text-foreground mt-2">{stats.overallSuccessRate}%</p>
               <p className="text-sm text-muted-foreground">
                 Based on {results.length} exam results
               </p>
             </div>
             
-            <div className="border rounded-lg p-4">
+            <div className="border border-zinc-200 dark:border-zinc-800 bg-card rounded-lg p-4">
               <div className="flex items-center">
                 <BookOpen className="h-5 w-5 text-orange-500 mr-2" />
-                <h3 className="font-medium text-gray-900">Primary Subject</h3>
+                <h3 className="font-medium text-foreground">Primary Subject</h3>
               </div>
-              <p className="text-2xl font-bold text-gray-900 mt-2">
+              <p className="text-2xl font-bold text-foreground mt-2">
                 {teacherData?.subjectName || "N/A"}
               </p>
               <p className="text-sm text-muted-foreground">

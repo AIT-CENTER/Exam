@@ -21,25 +21,14 @@ import {
 import { Progress } from "@/components/ui/progress"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
-import {
   Settings,
-  Save,
   RotateCw,
   Key,
   Trash2,
-  Edit2,
   Check,
   X,
   AlertTriangle,
   Database,
-  RefreshCw,
   FileX,
   Download,
   HardDrive,
@@ -52,27 +41,23 @@ import {
   FileSpreadsheet,
   Plus,
   Shield,
-  UserX,
   ShieldAlert,
   Info,
   Book,
   User,
   FileText,
-  Hash,
   Image,
   Grid,
   BarChart,
   CheckSquare,
   GraduationCap,
   Layers,
-  Select,
   CheckCircle,
   ChevronDown,
   ChevronUp,
 } from "lucide-react"
 import { supabase } from "@/lib/supabaseClient"
 import { format } from "date-fns"
-import { Skeleton } from "@/components/ui/skeleton"
 
 interface Admin {
   id: string
@@ -91,9 +76,61 @@ interface TableInfo {
   selected?: boolean
 }
 
+// Premium spinner matching the dashboard
+function PageSpinner() {
+  return (
+    <div className="flex items-center justify-center min-h-[70vh] w-full bg-transparent">
+      <style>{`
+        .spinner-svg {
+          animation: spinner-rotate 2s linear infinite;
+        }
+        .spinner-circle {
+          stroke-dasharray: 1, 200;
+          stroke-dashoffset: 0;
+          animation: spinner-stretch 1.5s ease-in-out infinite;
+          stroke-linecap: round;
+        }
+        @keyframes spinner-rotate {
+          100% {
+            transform: rotate(360deg);
+          }
+        }
+        @keyframes spinner-stretch {
+          0% {
+            stroke-dasharray: 1, 200;
+            stroke-dashoffset: 0;
+          }
+          50% {
+            stroke-dasharray: 90, 200;
+            stroke-dashoffset: -35px;
+          }
+          100% {
+            stroke-dasharray: 90, 200;
+            stroke-dashoffset: -124px;
+          }
+        }
+      `}</style>
+      
+      <svg
+        className="h-10 w-10 text-zinc-800 dark:text-zinc-200 spinner-svg"
+        viewBox="25 25 50 50"
+      >
+        <circle
+          className="spinner-circle"
+          cx="50"
+          cy="50"
+          r="20"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="4"
+        />
+      </svg>
+    </div>
+  );
+}
+
 export default function SettingsPage() {
   const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
 
   // Security Settings
   const [currentPassword, setCurrentPassword] = useState("")
@@ -150,20 +187,20 @@ export default function SettingsPage() {
   const [isDragOver, setIsDragOver] = useState(false)
 
   const systemTables: TableInfo[] = [
-    { name: "students", icon: User, description: "Student records and information", color: "bg-blue-100 text-blue-700" },
-    { name: "teacher", icon: Users, description: "Teacher accounts and details", color: "bg-purple-100 text-purple-700" },
-    { name: "grades", icon: GraduationCap, description: "Grade levels and classes", color: "bg-green-100 text-green-700" },
-    { name: "subjects", icon: Book, description: "Subjects taught in school", color: "bg-yellow-100 text-yellow-700" },
-    { name: "exams", icon: FileText, description: "Exams and test papers", color: "bg-orange-100 text-orange-700" },
-    { name: "questions", icon: CheckSquare, description: "Exam questions and answers", color: "bg-red-100 text-red-700" },
-    { name: "exam_sessions", icon: Layers, description: "Active exam sessions", color: "bg-indigo-100 text-indigo-700" },
-    { name: "student_answers", icon: CheckSquare, description: "Student exam answers", color: "bg-pink-100 text-pink-700" },
-    { name: "assign_exams", icon: ClipboardList, description: "Assigned exams to students", color: "bg-teal-100 text-teal-700" },
-    { name: "results", icon: BarChart, description: "Exam results and grades", color: "bg-cyan-100 text-cyan-700" },
-    { name: "grade_sections", icon: Grid, description: "Grade sections and divisions", color: "bg-lime-100 text-lime-700" },
-    { name: "grade_subjects", icon: BookOpen, description: "Subjects per grade", color: "bg-amber-100 text-amber-700" },
-    { name: "images", icon: Image, description: "Uploaded images and files", color: "bg-rose-100 text-rose-700" },
-    { name: "settings", icon: Settings, description: "System settings and config", color: "bg-gray-100 text-gray-700" },
+    { name: "students", icon: User, description: "Student records and information", color: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400" },
+    { name: "teacher", icon: Users, description: "Teacher accounts and details", color: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400" },
+    { name: "grades", icon: GraduationCap, description: "Grade levels and classes", color: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" },
+    { name: "subjects", icon: Book, description: "Subjects taught in school", color: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400" },
+    { name: "exams", icon: FileText, description: "Exams and test papers", color: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400" },
+    { name: "questions", icon: CheckSquare, description: "Exam questions and answers", color: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400" },
+    { name: "exam_sessions", icon: Layers, description: "Active exam sessions", color: "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400" },
+    { name: "student_answers", icon: CheckSquare, description: "Student exam answers", color: "bg-pink-100 text-pink-700 dark:bg-pink-900/30 dark:text-pink-400" },
+    { name: "assign_exams", icon: ClipboardList, description: "Assigned exams to students", color: "bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400" },
+    { name: "results", icon: BarChart, description: "Exam results and grades", color: "bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400" },
+    { name: "grade_sections", icon: Grid, description: "Grade sections and divisions", color: "bg-lime-100 text-lime-700 dark:bg-lime-900/30 dark:text-lime-400" },
+    { name: "grade_subjects", icon: BookOpen, description: "Subjects per grade", color: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400" },
+    { name: "images", icon: Image, description: "Uploaded images and files", color: "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400" },
+    { name: "settings", icon: Settings, description: "System settings and config", color: "bg-gray-100 text-gray-700 dark:bg-zinc-800 dark:text-zinc-300" },
   ]
 
   const backupTables = systemTables.map(t => t.name)
@@ -579,15 +616,21 @@ export default function SettingsPage() {
   }
 
   useEffect(() => {
-    const fetchCurrentUser = async () => {
-      const { data } = await supabase.auth.getUser()
-      setCurrentUserId(data.user?.id || null)
+    const loadAllData = async () => {
+      setLoading(true);
+      const fetchCurrentUser = async () => {
+        const { data } = await supabase.auth.getUser()
+        setCurrentUserId(data.user?.id || null)
+      }
+      await Promise.all([
+        fetchCurrentUser(),
+        fetchAdmins(),
+        fetchSessionStats(),
+        fetchTableStats()
+      ]);
+      setLoading(false);
     }
-    fetchCurrentUser()
-    fetchAdmins()
-    fetchSessionStats()
-    fetchTableStats()
-    setLoading(false)
+    loadAllData()
   }, [])
 
   // Update tables when selectedTables changes
@@ -963,12 +1006,12 @@ export default function SettingsPage() {
     try {
       console.log("Deleting all exam session data...");
       
-      // ပထမဆုံး student_answers table ကို ဖျက်မယ်
+      // First delete student_answers table
       console.log("Deleting student_answers...");
       const { error: answersError } = await supabase
         .from('student_answers')
         .delete()
-        .not('id', 'is', null); // UUID အတွက် အသင့်တော်ဆုံးနည်းလမ်း
+        .not('id', 'is', null);
       
       if (answersError) {
         console.error("Error deleting student_answers:", answersError);
@@ -979,12 +1022,12 @@ export default function SettingsPage() {
       
       console.log("Student answers deleted successfully");
       
-      // ပြီးရင် exam_sessions table ကို ဖျက်မယ်
+      // Then delete exam_sessions table
       console.log("Deleting exam_sessions...");
       const { error: sessionsError } = await supabase
         .from('exam_sessions')
         .delete()
-        .not('id', 'is', null); // UUID အတွက် အသင့်တော်ဆုံးနည်းလမ်း
+        .not('id', 'is', null);
       
       if (sessionsError) {
         console.error("Error deleting exam_sessions:", sessionsError);
@@ -1024,48 +1067,26 @@ export default function SettingsPage() {
   }, 0)
 
   if (loading) {
-    return (
-      <div className="flex-1 space-y-8 p-4 md:p-8 bg-gray-50 min-h-screen">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <Skeleton className="h-14 w-14 rounded-lg" />
-            <div className="space-y-2">
-              <Skeleton className="h-8 w-40" />
-              <Skeleton className="h-4 w-60" />
-            </div>
-          </div>
-        </div>
-        <div className="space-y-6">
-          <div className="grid w-full grid-cols-2 md:grid-cols-4 lg:w-auto lg:inline-flex gap-2">
-            <Skeleton className="h-10 w-full" />
-            <Skeleton className="h-10 w-full" />
-            <Skeleton className="h-10 w-full" />
-            <Skeleton className="h-10 w-full" />
-          </div>
-          <Skeleton className="h-64 w-full rounded-lg" />
-          <Skeleton className="h-64 w-full rounded-lg" />
-        </div>
-      </div>
-    )
+    return <PageSpinner />
   }
 
   return (
-    <div className="flex-1 space-y-8 p-4 md:p-8 bg-gray-50 min-h-screen">
+    <div className="flex-1 space-y-8 p-4 md:p-8 bg-transparent">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
-          <div className="p-3 bg-indigo-100 rounded-lg">
-            <Settings className="h-8 w-8 text-indigo-600" />
+            <div className="rounded-lg bg-indigo-100 dark:bg-indigo-900/30 p-3">
+            <Settings className="h-8 w-8 text-indigo-600 dark:text-indigo-400" />
           </div>
           <div>
-            <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-gray-900">Settings</h1>
+            <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground">Settings</h1>
             <p className="text-muted-foreground mt-1 text-sm md:text-base">
               Manage your school system preferences and configurations
             </p>
           </div>
         </div>
         {currentUserId && (
-          <div className="flex items-center gap-2 px-4 py-2 bg-white rounded-lg border border-gray-200">
+          <div className="flex items-center gap-2 rounded-lg border border-border bg-card px-4 py-2">
             <Shield className="h-4 w-4 text-indigo-600" />
             <span className="text-sm font-medium">
               {admins.find(a => a.id === currentUserId)?.username || "Admin"}
@@ -1111,17 +1132,17 @@ export default function SettingsPage() {
             <CardContent className="space-y-6">
               {/* Session Stats */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="p-4 bg-blue-50 rounded-lg border border-blue-200 text-center">
-                  <p className="text-3xl font-bold text-blue-600">{sessionStats.total}</p>
-                  <p className="text-sm text-blue-700">Total Sessions</p>
+                <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800 text-center">
+                  <p className="text-3xl font-bold text-blue-600 dark:text-blue-400">{sessionStats.total}</p>
+                  <p className="text-sm text-blue-700 dark:text-blue-300">Total Sessions</p>
                 </div>
-                <div className="p-4 bg-amber-50 rounded-lg border border-amber-200 text-center">
-                  <p className="text-3xl font-bold text-amber-600">{sessionStats.inProgress}</p>
-                  <p className="text-sm text-amber-700">In Progress</p>
+                <div className="p-4 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-200 dark:border-amber-800 text-center">
+                  <p className="text-3xl font-bold text-amber-600 dark:text-amber-400">{sessionStats.inProgress}</p>
+                  <p className="text-sm text-amber-700 dark:text-amber-300">In Progress</p>
                 </div>
-                <div className="p-4 bg-green-50 rounded-lg border border-green-200 text-center">
-                  <p className="text-3xl font-bold text-green-600">{sessionStats.submitted}</p>
-                  <p className="text-sm text-green-700">Submitted</p>
+                <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800 text-center">
+                  <p className="text-3xl font-bold text-green-600 dark:text-green-400">{sessionStats.submitted}</p>
+                  <p className="text-sm text-green-700 dark:text-green-300">Submitted</p>
                 </div>
               </div>
 
@@ -1192,30 +1213,30 @@ export default function SettingsPage() {
             </CardHeader>
             <CardContent>
               {/* Selection Summary */}
-              <div className="mb-6 p-4 bg-indigo-50 rounded-lg border border-indigo-200">
+              <div className="mb-6 p-4 bg-indigo-50 dark:bg-indigo-900/10 rounded-lg border border-indigo-200 dark:border-indigo-800">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div>
-                    <h3 className="font-medium text-indigo-900">Selection Summary</h3>
+                    <h3 className="font-medium text-indigo-900 dark:text-indigo-300">Selection Summary</h3>
                     <div className="flex flex-wrap items-center gap-4 mt-2">
                       <div className="flex items-center gap-2">
-                        <div className="h-3 w-3 rounded-full bg-indigo-600"></div>
-                        <span className="text-sm text-indigo-700">
+                        <div className="h-3 w-3 rounded-full bg-indigo-600 dark:bg-indigo-400"></div>
+                        <span className="text-sm text-indigo-700 dark:text-indigo-400">
                           {selectedTables.length} table{selectedTables.length !== 1 ? 's' : ''} selected
                         </span>
                       </div>
                       <div className="flex items-center gap-2">
-                        <div className="h-3 w-3 rounded-full bg-green-600"></div>
-                        <span className="text-sm text-green-700">
+                        <div className="h-3 w-3 rounded-full bg-green-600 dark:bg-green-400"></div>
+                        <span className="text-sm text-green-700 dark:text-green-400">
                           {totalSelectedRecords.toLocaleString()} total records
                         </span>
                       </div>
                     </div>
                     {selectedTables.length > 0 && (
                       <div className="mt-3">
-                        <p className="text-xs text-indigo-600 mb-1">Selected tables:</p>
+                        <p className="text-xs text-indigo-600 dark:text-indigo-400 mb-1">Selected tables:</p>
                         <div className="flex flex-wrap gap-1">
                           {selectedTables.map(tableName => (
-                            <Badge key={tableName} variant="outline" className="bg-white">
+                            <Badge key={tableName} variant="outline" className="bg-white dark:bg-zinc-900">
                               {tableName}
                             </Badge>
                           ))}
@@ -1253,7 +1274,7 @@ export default function SettingsPage() {
                     {tables.map((table) => (
                       <div
                         key={table.name}
-                        className={`p-4 rounded-lg border ${table.selected ? 'ring-2 ring-indigo-500 ring-offset-2 border-indigo-300 bg-indigo-50' : 'border-gray-200 bg-white hover:bg-gray-50'} transition-all cursor-pointer`}
+                        className={`p-4 rounded-lg border ${table.selected ? 'ring-2 ring-indigo-500 ring-offset-2 dark:ring-offset-zinc-900 border-indigo-300 dark:border-indigo-700 bg-indigo-50 dark:bg-indigo-900/20' : 'border-gray-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:bg-gray-50 dark:hover:bg-zinc-800/80'} transition-all cursor-pointer`}
                         onClick={() => handleTableSelect(table.name)}
                       >
                         <div className="flex items-center justify-between mb-3">
@@ -1262,18 +1283,18 @@ export default function SettingsPage() {
                               <table.icon className="h-5 w-5" />
                             </div>
                             <div className="flex-1">
-                              <h3 className="font-semibold text-gray-900">{table.name}</h3>
-                              <p className="text-xs text-gray-500 truncate">{table.description}</p>
+                              <h3 className="font-semibold text-gray-900 dark:text-gray-100">{table.name}</h3>
+                              <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{table.description}</p>
                             </div>
                           </div>
                           <div className="flex items-center gap-2">
-                            <div className={`h-4 w-4 rounded-full border-2 ${table.selected ? 'bg-indigo-600 border-indigo-600' : 'border-gray-300'}`}>
+                            <div className={`h-4 w-4 rounded-full border-2 ${table.selected ? 'bg-indigo-600 border-indigo-600 dark:bg-indigo-500 dark:border-indigo-500' : 'border-gray-300 dark:border-zinc-700'}`}>
                               {table.selected && <Check className="h-3 w-3 text-white" />}
                             </div>
                           </div>
                         </div>
                         <div className="flex items-center justify-between mt-4">
-                          <Badge variant="outline" className={table.count === 0 ? "text-gray-500" : "text-gray-700"}>
+                          <Badge variant="outline" className={table.count === 0 ? "text-gray-500 dark:text-gray-500" : "text-gray-700 dark:text-gray-300"}>
                             {table.count.toLocaleString()} records
                           </Badge>
                           <div className="flex items-center gap-2">
@@ -1298,10 +1319,10 @@ export default function SettingsPage() {
                     ))}
                   </div>
                   
-                  <div className="mt-6 p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                  <div className="mt-6 p-4 bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800 rounded-lg">
                     <div className="flex gap-3">
-                      <AlertTriangle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
-                      <div className="text-sm text-amber-800">
+                      <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-500 flex-shrink-0 mt-0.5" />
+                      <div className="text-sm text-amber-800 dark:text-amber-300">
                         <p className="font-semibold">Important Notes:</p>
                         <ul className="list-disc list-inside mt-2 space-y-1">
                           <li>Click on any table to select/deselect it</li>
@@ -1330,11 +1351,11 @@ export default function SettingsPage() {
               <CardDescription>Export your school data as a JSON or CSV backup file for safekeeping</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              <div className="p-6 bg-indigo-50 rounded-lg border border-indigo-200">
+              <div className="p-6 bg-indigo-50 dark:bg-indigo-900/10 rounded-lg border border-indigo-200 dark:border-indigo-800">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                   <div>
-                    <h3 className="text-lg font-semibold text-indigo-900">Create Full Backup</h3>
-                    <p className="text-sm text-indigo-700 mt-1">Download all your school data as a JSON or CSV file</p>
+                    <h3 className="text-lg font-semibold text-indigo-900 dark:text-indigo-300">Create Full Backup</h3>
+                    <p className="text-sm text-indigo-700 dark:text-indigo-400 mt-1">Download all your school data as a JSON or CSV file</p>
                   </div>
                   <Button
                     onClick={() => setShowBackupDialog(true)}
@@ -1346,11 +1367,11 @@ export default function SettingsPage() {
                 </div>
               </div>
 
-              <div className="p-6 bg-emerald-50 rounded-lg border border-emerald-200">
+              <div className="p-6 bg-emerald-50 dark:bg-emerald-900/10 rounded-lg border border-emerald-200 dark:border-emerald-800">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                   <div>
-                    <h3 className="text-lg font-semibold text-emerald-900">Restore from Backup</h3>
-                    <p className="text-sm text-emerald-700 mt-1">Import data from a previously exported backup file</p>
+                    <h3 className="text-lg font-semibold text-emerald-900 dark:text-emerald-300">Restore from Backup</h3>
+                    <p className="text-sm text-emerald-700 dark:text-emerald-400 mt-1">Import data from a previously exported backup file</p>
                   </div>
                   <Button
                     onClick={() => setShowImportDialog(true)}
@@ -1363,10 +1384,10 @@ export default function SettingsPage() {
                 </div>
               </div>
 
-              <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
+              <div className="p-4 bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800 rounded-lg">
                 <div className="flex gap-3">
-                  <AlertTriangle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
-                  <div className="text-sm text-amber-800">
+                  <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-500 flex-shrink-0 mt-0.5" />
+                  <div className="text-sm text-amber-800 dark:text-amber-300">
                     <p className="font-semibold">Backup Tips:</p>
                     <ul className="list-disc list-inside mt-2 space-y-1">
                       <li>Create regular backups before major changes</li>
@@ -1452,10 +1473,10 @@ export default function SettingsPage() {
             </CardHeader>
             <CardContent>
               {admins.length === 0 ? (
-                <div className="text-center py-12 bg-gray-50 rounded-lg border border-dashed border-gray-300">
-                  <Users className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                  <h3 className="text-lg font-semibold text-gray-900 mb-2">No Admins</h3>
-                  <p className="text-gray-500 mb-4">Add a new admin</p>
+                <div className="text-center py-12 bg-gray-50 dark:bg-zinc-900/50 rounded-lg border border-dashed border-gray-300 dark:border-zinc-700">
+                  <Users className="h-12 w-12 text-gray-400 dark:text-gray-600 mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">No Admins</h3>
+                  <p className="text-gray-500 dark:text-gray-400 mb-4">Add a new admin</p>
                   <Button onClick={() => setShowAddAdmin(true)} className="gap-2">
                     <Plus className="h-4 w-4" />
                     Add Admin
@@ -1468,8 +1489,8 @@ export default function SettingsPage() {
                       key={admin.id}
                       className={`flex items-center justify-between p-4 rounded-lg border ${
                         admin.id === currentUserId 
-                          ? 'bg-indigo-50 border-indigo-200' 
-                          : 'bg-white border-gray-200'
+                          ? 'bg-indigo-50 dark:bg-indigo-900/10 border-indigo-200 dark:border-indigo-800' 
+                          : 'bg-white dark:bg-zinc-900 border-gray-200 dark:border-zinc-800'
                       }`}
                     >
                       <div className="flex-1">
@@ -1607,8 +1628,8 @@ export default function SettingsPage() {
             
             {/* Admin Info */}
             {adminToDelete && (
-              <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
-                <p className="text-sm font-medium text-gray-900 mb-2">Admin Details:</p>
+              <div className="p-3 bg-gray-50 dark:bg-zinc-900/50 rounded-lg border border-gray-200 dark:border-zinc-800">
+                <p className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-2">Admin Details:</p>
                 <div className="grid grid-cols-2 gap-2 text-sm">
                   <div>
                     <p className="text-gray-500">Name:</p>
@@ -1699,14 +1720,14 @@ export default function SettingsPage() {
             
             {/* Table Info */}
             {tableToDelete && (
-              <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
+              <div className="p-3 bg-gray-50 dark:bg-zinc-900/50 rounded-lg border border-gray-200 dark:border-zinc-800">
                 <div className="flex items-center gap-3 mb-3">
                   <div className={`p-2 rounded-lg ${tableToDelete.color}`}>
                     <tableToDelete.icon className="h-5 w-5" />
                   </div>
                   <div>
-                    <p className="text-sm font-medium text-gray-900 mb-1">{tableToDelete.name}</p>
-                    <p className="text-xs text-gray-500">{tableToDelete.description}</p>
+                    <p className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-1">{tableToDelete.name}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">{tableToDelete.description}</p>
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-2 text-sm">
@@ -1726,10 +1747,10 @@ export default function SettingsPage() {
             
             {/* Special note for admin table */}
             {tableToDelete?.name === "admin" && (
-              <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+              <div className="p-3 bg-blue-50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-800 rounded-lg">
                 <div className="flex items-start gap-2">
-                  <Info className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
-                  <div className="text-sm text-blue-800">
+                  <Info className="h-4 w-4 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
+                  <div className="text-sm text-blue-800 dark:text-blue-300">
                     <p className="font-semibold">Note:</p>
                     <p>Your current admin account will be preserved. Only other admin accounts will be deleted.</p>
                   </div>
@@ -1738,10 +1759,10 @@ export default function SettingsPage() {
             )}
             
             {/* Warning */}
-            <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+            <div className="p-3 bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-800 rounded-lg">
               <div className="flex items-start gap-2">
-                <AlertTriangle className="h-4 w-4 text-red-600 mt-0.5 flex-shrink-0" />
-                <div className="text-sm text-red-800">
+                <AlertTriangle className="h-4 w-4 text-red-600 dark:text-red-500 mt-0.5 flex-shrink-0" />
+                <div className="text-sm text-red-800 dark:text-red-300">
                   <p className="font-semibold">Warning:</p>
                   <p>This action is permanent and cannot be undone. All data in this table will be deleted.</p>
                 </div>
@@ -1820,8 +1841,8 @@ export default function SettingsPage() {
           <div className="py-4 space-y-4">
             
             {/* Selection Info */}
-            <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
-              <p className="text-sm font-medium text-gray-900 mb-2">Selected Tables:</p>
+            <div className="p-3 bg-gray-50 dark:bg-zinc-900/50 rounded-lg border border-gray-200 dark:border-zinc-800">
+              <p className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-2">Selected Tables:</p>
               <div className="grid grid-cols-2 gap-2 text-sm">
                 <div>
                   <p className="text-gray-500">Tables:</p>
@@ -1836,7 +1857,7 @@ export default function SettingsPage() {
                 <p className="text-xs text-gray-500 mb-1">Tables list:</p>
                 <div className="flex flex-wrap gap-1 max-h-20 overflow-y-auto p-1">
                   {selectedTables.map(tableName => (
-                    <Badge key={tableName} variant="outline" className="bg-white text-xs">
+                    <Badge key={tableName} variant="outline" className="bg-white dark:bg-zinc-900 text-xs">
                       {tableName}
                     </Badge>
                   ))}
@@ -1846,10 +1867,10 @@ export default function SettingsPage() {
             
             {/* Special note if admin table is selected */}
             {selectedTables.includes("admin") && (
-              <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+              <div className="p-3 bg-blue-50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-800 rounded-lg">
                 <div className="flex items-start gap-2">
-                  <Info className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
-                  <div className="text-sm text-blue-800">
+                  <Info className="h-4 w-4 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
+                  <div className="text-sm text-blue-800 dark:text-blue-300">
                     <p className="font-semibold">Note:</p>
                     <p>Your current admin account will be preserved. Only other admin accounts will be deleted.</p>
                   </div>
@@ -1858,10 +1879,10 @@ export default function SettingsPage() {
             )}
             
             {/* Warning */}
-            <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+            <div className="p-3 bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-800 rounded-lg">
               <div className="flex items-start gap-2">
-                <AlertTriangle className="h-4 w-4 text-red-600 mt-0.5 flex-shrink-0" />
-                <div className="text-sm text-red-800">
+                <AlertTriangle className="h-4 w-4 text-red-600 dark:text-red-500 mt-0.5 flex-shrink-0" />
+                <div className="text-sm text-red-800 dark:text-red-300">
                   <p className="font-semibold">Warning:</p>
                   <p>This action is permanent and cannot be undone. All data in selected tables will be deleted.</p>
                 </div>
@@ -1936,14 +1957,14 @@ export default function SettingsPage() {
             </DialogDescription>
           </DialogHeader>
           <div className="py-4">
-            <div className="p-4 bg-red-50 border border-red-200 rounded-lg space-y-2">
-              <p className="text-sm text-red-800 font-semibold">This action will delete:</p>
-              <ul className="text-sm text-red-800 list-disc list-inside">
+            <div className="p-4 bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-800 rounded-lg space-y-2">
+              <p className="text-sm text-red-800 dark:text-red-300 font-semibold">This action will delete:</p>
+              <ul className="text-sm text-red-800 dark:text-red-300 list-disc list-inside">
                 <li>{sessionStats.total} exam sessions</li>
                 <li>All associated student answers</li>
                 <li>Session progress data</li>
               </ul>
-              <p className="text-sm text-red-800 font-semibold mt-2">Note: Results and grades will NOT be affected.</p>
+              <p className="text-sm text-red-800 dark:text-red-300 font-semibold mt-2">Note: Results and grades will NOT be affected.</p>
             </div>
           </div>
           <DialogFooter>
@@ -2069,10 +2090,10 @@ export default function SettingsPage() {
                 className={`
                   border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors
                   ${isDragOver 
-                    ? 'border-emerald-400 bg-emerald-50 border-2' 
+                    ? 'border-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 border-2' 
                     : importFile 
-                      ? 'border-emerald-200 bg-emerald-50' 
-                      : 'border-gray-300 hover:border-emerald-400 hover:bg-emerald-50'
+                      ? 'border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/10' 
+                      : 'border-gray-300 dark:border-zinc-700 hover:border-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/10'
                   }
                 `}
               >
@@ -2085,15 +2106,15 @@ export default function SettingsPage() {
                 />
                 {importFile ? (
                   <div className="flex items-center justify-center gap-3">
-                    <div className={`p-2 rounded-full ${importFile.name.endsWith(".csv") ? 'bg-green-100' : 'bg-blue-100'}`}>
+                    <div className={`p-2 rounded-full ${importFile.name.endsWith(".csv") ? 'bg-green-100 dark:bg-green-900/30' : 'bg-blue-100 dark:bg-blue-900/30'}`}>
                       {importFile.name.endsWith(".csv") ? (
-                        <FileSpreadsheet className="h-6 w-6 text-green-600" />
+                        <FileSpreadsheet className="h-6 w-6 text-green-600 dark:text-green-400" />
                       ) : (
-                        <FileJson className="h-6 w-6 text-blue-600" />
+                        <FileJson className="h-6 w-6 text-blue-600 dark:text-blue-400" />
                       )}
                     </div>
                     <div className="text-left flex-1">
-                      <p className="font-medium text-gray-900 truncate">{importFile.name}</p>
+                      <p className="font-medium text-gray-900 dark:text-gray-100 truncate">{importFile.name}</p>
                       <div className="flex items-center gap-2 text-sm text-gray-500">
                         <span>{(importFile.size / 1024).toFixed(2)} KB</span>
                         <span>•</span>
@@ -2155,20 +2176,20 @@ export default function SettingsPage() {
 
             {/* Import Preview */}
             {importPreview && (
-              <div className="p-4 bg-emerald-50 rounded-lg border border-emerald-200 space-y-3">
+              <div className="p-4 bg-emerald-50 dark:bg-emerald-900/10 rounded-lg border border-emerald-200 dark:border-emerald-800 space-y-3">
                 <div className="flex items-center gap-2">
-                  <Database className="h-4 w-4 text-emerald-600" />
-                  <p className="text-sm font-medium text-emerald-900">Backup Contents Preview</p>
+                  <Database className="h-4 w-4 text-emerald-600 dark:text-emerald-500" />
+                  <p className="text-sm font-medium text-emerald-900 dark:text-emerald-300">Backup Contents Preview</p>
                 </div>
                 
                 <div className="grid grid-cols-2 gap-2">
-                  <div className="bg-white p-3 rounded border">
+                  <div className="bg-white dark:bg-zinc-900 p-3 rounded border dark:border-zinc-800">
                     <p className="text-xs text-gray-500">Tables</p>
-                    <p className="font-semibold text-gray-900">{importPreview.tables.length}</p>
+                    <p className="font-semibold text-gray-900 dark:text-gray-100">{importPreview.tables.length}</p>
                   </div>
-                  <div className="bg-white p-3 rounded border">
+                  <div className="bg-white dark:bg-zinc-900 p-3 rounded border dark:border-zinc-800">
                     <p className="text-xs text-gray-500">Records</p>
-                    <p className="font-semibold text-gray-900">{importPreview.recordCount.toLocaleString()}</p>
+                    <p className="font-semibold text-gray-900 dark:text-gray-100">{importPreview.recordCount.toLocaleString()}</p>
                   </div>
                 </div>
                 
@@ -2176,12 +2197,12 @@ export default function SettingsPage() {
                   <p className="text-xs text-gray-500 mb-2">Included Tables:</p>
                   <div className="flex flex-wrap gap-1.5">
                     {importPreview.tables.slice(0, 8).map((tableName) => (
-                      <Badge key={tableName} variant="outline" className="bg-white text-xs">
+                      <Badge key={tableName} variant="outline" className="bg-white dark:bg-zinc-900 text-xs">
                         {tableName}
                       </Badge>
                     ))}
                     {importPreview.tables.length > 8 && (
-                      <Badge variant="outline" className="bg-white text-xs">
+                      <Badge variant="outline" className="bg-white dark:bg-zinc-900 text-xs">
                         +{importPreview.tables.length - 8} more
                       </Badge>
                     )}

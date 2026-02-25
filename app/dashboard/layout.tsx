@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Inter, Poppins } from "next/font/google";
 import { SidebarProvider } from "@/components/ui/sidebar";
-import AdminLayoutClient from "./layout-client"; // component client ta'e
+import AdminLayoutClient from "./layout-client";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 
 const inter = Inter({
@@ -37,7 +37,6 @@ export default function AdminLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        {/* PWA manifest */}
         <link rel="manifest" href="/manifest-admin.json" />
         <meta name="theme-color" content="#1a73e8" />
       </head>

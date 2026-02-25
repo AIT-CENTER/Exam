@@ -26,7 +26,7 @@ import {
   Users
 } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
-import { getTeacherDataFromCookie, TeacherData } from "@/utils/teacherCookie";
+import { getTeacherDataFromCookie, TeacherCookieData } from "@/utils/teacherCookie";
 import bcrypt from "bcryptjs";
 
 interface TeacherProfileData {
@@ -51,7 +51,7 @@ export default function TeacherSettingsPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [teacherCookie, setTeacherCookie] = useState<TeacherData | null>(null);
+  const [teacherCookie, setTeacherCookie] = useState<TeacherCookieData | null>(null);
 
   // Teacher Profile Data
   const [teacherData, setTeacherData] = useState<TeacherProfileData>({
@@ -371,7 +371,7 @@ export default function TeacherSettingsPage() {
     }
   };
 
-  const passwordStrength = () => {
+  const passwordStrength = (): { strength: number; label: string; color: string } => {
     if (!passwordData.newPassword) return { strength: 0, label: "", color: "" };
     
     let strength = 0;
@@ -383,11 +383,11 @@ export default function TeacherSettingsPage() {
     if (/(?=.*[@$!%*?&])/.test(passwordData.newPassword)) strength += 1;
 
     const strengths = [
-      { label: "Very Weak", color: "bg-red-500" },
-      { label: "Weak", color: "bg-orange-500" },
-      { label: "Fair", color: "bg-yellow-500" },
-      { label: "Good", color: "bg-blue-500" },
-      { label: "Strong", color: "bg-green-500" }
+      { strength: 1, label: "Very Weak", color: "bg-red-500" },
+      { strength: 2, label: "Weak", color: "bg-orange-500" },
+      { strength: 3, label: "Fair", color: "bg-yellow-500" },
+      { strength: 4, label: "Good", color: "bg-blue-500" },
+      { strength: 5, label: "Strong", color: "bg-green-500" }
     ];
 
     return strengths[strength - 1] || { strength: 0, label: "Very Weak", color: "bg-red-500" };
@@ -397,112 +397,74 @@ export default function TeacherSettingsPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex items-center justify-center p-4">
-        <div className="w-full max-w-4xl">
-          {/* Header Skeleton */}
-          <div className="flex items-center justify-between mb-8">
-            <div className="flex items-center gap-4">
-              <Skeleton className="h-12 w-12 bg-gray-200 rounded-lg animate-pulse" />
-              <div className="space-y-2">
-                <Skeleton className="h-8 w-48 bg-gray-200 rounded animate-pulse" />
-                <Skeleton className="h-4 w-64 bg-gray-200 rounded animate-pulse" />
-              </div>
-            </div>
-          </div>
-
-          <Tabs defaultValue="profile" className="space-y-6">
-            {/* Tabs List Skeleton */}
-            <TabsList className="grid w-full grid-cols-2 lg:w-auto lg:inline-flex bg-gray-100 p-1 rounded-lg">
-              <Skeleton className="h-10 w-32 bg-gray-200 rounded animate-pulse" />
-              <Skeleton className="h-10 w-32 bg-gray-200 rounded animate-pulse" />
-            </TabsList>
-
-            {/* Profile Tab Skeleton */}
-            <TabsContent value="profile" className="space-y-6">
-              <Card>
-                <CardHeader className="space-y-2">
-                  <Skeleton className="h-6 w-32 bg-gray-200 rounded animate-pulse" />
-                  <Skeleton className="h-4 w-64 bg-gray-200 rounded animate-pulse" />
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {[...Array(6)].map((_, i) => (
-                      <div key={i} className="space-y-2">
-                        <Skeleton className="h-4 w-24 bg-gray-200 rounded animate-pulse" />
-                        <Skeleton className="h-10 w-full bg-gray-200 rounded animate-pulse" />
-                      </div>
-                    ))}
-                  </div>
-                  <div className="flex justify-end pt-4">
-                    <Skeleton className="h-10 w-32 bg-gray-200 rounded animate-pulse" />
-                  </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            {/* Security Tab Skeleton */}
-            <TabsContent value="security" className="space-y-6">
-              <Card>
-                <CardHeader className="space-y-2">
-                  <Skeleton className="h-6 w-32 bg-gray-200 rounded animate-pulse" />
-                  <Skeleton className="h-4 w-48 bg-gray-200 rounded animate-pulse" />
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  <div className="grid gap-4">
-                    {[...Array(3)].map((_, i) => (
-                      <div key={i} className="space-y-2">
-                        <Skeleton className="h-4 w-32 bg-gray-200 rounded animate-pulse" />
-                        <Skeleton className="h-10 w-full bg-gray-200 rounded animate-pulse" />
-                      </div>
-                    ))}
-                  </div>
-                  
-                  {/* Password Requirements Skeleton */}
-                  <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-                    <div className="flex items-center gap-2 mb-3">
-                      <Skeleton className="h-4 w-4 bg-gray-200 rounded-full animate-pulse" />
-                      <Skeleton className="h-4 w-32 bg-gray-200 rounded animate-pulse" />
-                    </div>
-                    <div className="space-y-2">
-                      {[...Array(5)].map((_, i) => (
-                        <div key={i} className="flex items-center gap-2">
-                          <Skeleton className="h-2 w-2 bg-gray-200 rounded-full animate-pulse" />
-                          <Skeleton className="h-3 w-48 bg-gray-200 rounded animate-pulse" />
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="flex justify-end pt-4">
-                    <Skeleton className="h-10 w-40 bg-gray-200 rounded animate-pulse" />
-                  </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
-          </Tabs>
-        </div>
+      <div className="flex items-center justify-center min-h-[70vh] w-full bg-transparent">
+        <style>{`
+          .spinner-svg {
+            animation: spinner-rotate 2s linear infinite;
+          }
+          .spinner-circle {
+            stroke-dasharray: 1, 200;
+            stroke-dashoffset: 0;
+            animation: spinner-stretch 1.5s ease-in-out infinite;
+            stroke-linecap: round;
+          }
+          @keyframes spinner-rotate {
+            100% {
+              transform: rotate(360deg);
+            }
+          }
+          @keyframes spinner-stretch {
+            0% {
+              stroke-dasharray: 1, 200;
+              stroke-dashoffset: 0;
+            }
+            50% {
+              stroke-dasharray: 90, 200;
+              stroke-dashoffset: -35px;
+            }
+            100% {
+              stroke-dasharray: 90, 200;
+              stroke-dashoffset: -124px;
+            }
+          }
+        `}</style>
+        
+        <svg
+          className="h-10 w-10 text-zinc-800 dark:text-zinc-200 spinner-svg"
+          viewBox="25 25 50 50"
+        >
+          <circle
+            className="spinner-circle"
+            cx="50"
+            cy="50"
+            r="20"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="4"
+          />
+        </svg>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex items-center justify-center p-4">
-      <div className="w-full max-w-4xl">
+    <div className="min-h-[70vh] bg-transparent flex justify-center p-4">
+      <div className="w-full max-w-4xl pt-0 lg:pt-8 space-y-8">
         {/* Header */}
-        <div className="flex items-center justify-between mb-8">
+        <div className="flex items-center justify-between mb-2 lg:mb-8">
           <div className="flex items-center gap-4">
-            <div className="p-3 bg-indigo-100 rounded-lg">
-              <Settings className="h-8 w-8 text-indigo-600" />
+            <div className="p-3 bg-indigo-100 dark:bg-indigo-900/30 rounded-lg">
+              <Settings className="h-8 w-8 text-indigo-600 dark:text-indigo-400" />
             </div>
             <div>
-              <h1 className="text-3xl font-bold tracking-tight text-gray-900">Teacher Settings</h1>
+              <h1 className="text-3xl font-bold tracking-tight text-foreground">Teacher Settings</h1>
               <p className="text-muted-foreground mt-1">Manage your profile information and security settings</p>
             </div>
           </div>
         </div>
 
         <Tabs defaultValue="profile" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-2 lg:w-auto lg:inline-flex">
+          <TabsList className="grid w-full grid-cols-2 lg:w-auto lg:inline-flex bg-zinc-100 dark:bg-zinc-800/50">
             <TabsTrigger value="profile" className="gap-2">
               <User className="h-4 w-4" />
               Profile Settings
@@ -524,7 +486,7 @@ export default function TeacherSettingsPage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   {/* Full Name */}
                   <div className="space-y-2">
-                    <Label htmlFor="full_name" className="text-sm font-medium text-gray-700">
+                    <Label htmlFor="full_name" className="text-sm font-medium">
                       Full Name *
                     </Label>
                     <Input
@@ -535,7 +497,7 @@ export default function TeacherSettingsPage() {
                       className={errors.profile.full_name ? "border-red-500" : ""}
                     />
                     {errors.profile.full_name && (
-                      <p className="text-sm text-red-600 flex items-center gap-1">
+                      <p className="text-sm text-red-600 dark:text-red-400 flex items-center gap-1">
                         <AlertCircle className="h-3 w-3" />
                         {errors.profile.full_name}
                       </p>
@@ -544,7 +506,7 @@ export default function TeacherSettingsPage() {
 
                   {/* Username */}
                   <div className="space-y-2">
-                    <Label htmlFor="username" className="text-sm font-medium text-gray-700">
+                    <Label htmlFor="username" className="text-sm font-medium">
                       Username *
                     </Label>
                     <Input
@@ -555,7 +517,7 @@ export default function TeacherSettingsPage() {
                       className={errors.profile.username ? "border-red-500" : ""}
                     />
                     {errors.profile.username && (
-                      <p className="text-sm text-red-600 flex items-center gap-1">
+                      <p className="text-sm text-red-600 dark:text-red-400 flex items-center gap-1">
                         <AlertCircle className="h-3 w-3" />
                         {errors.profile.username}
                       </p>
@@ -564,11 +526,11 @@ export default function TeacherSettingsPage() {
 
                   {/* Email */}
                   <div className="space-y-2">
-                    <Label htmlFor="email" className="text-sm font-medium text-gray-700">
+                    <Label htmlFor="email" className="text-sm font-medium">
                       Email Address *
                     </Label>
                     <div className="relative">
-                      <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                      <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                       <Input
                         id="email"
                         type="email"
@@ -579,7 +541,7 @@ export default function TeacherSettingsPage() {
                       />
                     </div>
                     {errors.profile.email && (
-                      <p className="text-sm text-red-600 flex items-center gap-1">
+                      <p className="text-sm text-red-600 dark:text-red-400 flex items-center gap-1">
                         <AlertCircle className="h-3 w-3" />
                         {errors.profile.email}
                       </p>
@@ -588,11 +550,11 @@ export default function TeacherSettingsPage() {
 
                   {/* Phone Number */}
                   <div className="space-y-2">
-                    <Label htmlFor="phone_number" className="text-sm font-medium text-gray-700">
+                    <Label htmlFor="phone_number" className="text-sm font-medium">
                       Phone Number
                     </Label>
                     <div className="relative">
-                      <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                      <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                       <Input
                         id="phone_number"
                         value={teacherData.phone_number}
@@ -602,7 +564,7 @@ export default function TeacherSettingsPage() {
                       />
                     </div>
                     {errors.profile.phone_number && (
-                      <p className="text-sm text-red-600 flex items-center gap-1">
+                      <p className="text-sm text-red-600 dark:text-red-400 flex items-center gap-1">
                         <AlertCircle className="h-3 w-3" />
                         {errors.profile.phone_number}
                       </p>
@@ -611,61 +573,61 @@ export default function TeacherSettingsPage() {
 
                   {/* Grade (Read Only) */}
                   <div className="space-y-2">
-                    <Label htmlFor="grade_id" className="text-sm font-medium text-gray-700">
+                    <Label htmlFor="grade_id" className="text-sm font-medium">
                       Assigned Grade
                     </Label>
                     <div className="relative">
-                      <GraduationCap className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                      <GraduationCap className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                       <Input
                         id="grade_id"
                         value={teacherData.grade_name || "Not assigned"}
                         readOnly
-                        className="pl-10 bg-gray-50 text-gray-600"
+                        className="pl-10 bg-zinc-50 dark:bg-zinc-800/50 text-muted-foreground"
                       />
                     </div>
-                    <p className="text-xs text-gray-500">Grade assignment is managed by administrator</p>
+                    <p className="text-xs text-muted-foreground">Grade assignment is managed by administrator</p>
                   </div>
 
                   {/* Subject (Read Only) */}
                   <div className="space-y-2">
-                    <Label htmlFor="subject_id" className="text-sm font-medium text-gray-700">
+                    <Label htmlFor="subject_id" className="text-sm font-medium">
                       Assigned Subject
                     </Label>
                     <div className="relative">
-                      <BookOpen className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                      <BookOpen className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                       <Input
                         id="subject_id"
                         value={teacherData.subject_name || "Not assigned"}
                         readOnly
-                        className="pl-10 bg-gray-50 text-gray-600"
+                        className="pl-10 bg-zinc-50 dark:bg-zinc-800/50 text-muted-foreground"
                       />
                     </div>
-                    <p className="text-xs text-gray-500">Subject assignment is managed by administrator</p>
+                    <p className="text-xs text-muted-foreground">Subject assignment is managed by administrator</p>
                   </div>
                 </div>
 
                 {/* Section (Read Only) */}
                 <div className="space-y-2 max-w-md">
-                  <Label htmlFor="section" className="text-sm font-medium text-gray-700">
+                  <Label htmlFor="section" className="text-sm font-medium">
                     Section
                   </Label>
                   <div className="relative">
-                    <Users className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                    <Users className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input
                       id="section"
                       value={teacherData.section || "Not assigned"}
                       readOnly
-                      className="pl-10 bg-gray-50 text-gray-600"
+                      className="pl-10 bg-zinc-50 dark:bg-zinc-800/50 text-muted-foreground"
                     />
                   </div>
-                  <p className="text-xs text-gray-500">Section assignment is managed by administrator</p>
+                  <p className="text-xs text-muted-foreground">Section assignment is managed by administrator</p>
                 </div>
 
                 <div className="flex justify-end pt-4">
                   <Button 
                     onClick={handleSaveProfile} 
                     size="lg" 
-                    className="gap-2 bg-blue-600 hover:bg-blue-700"
+                    className="gap-2 bg-indigo-600 hover:bg-indigo-700"
                     disabled={saving}
                   >
                     <Save className="h-5 w-5" />
@@ -687,7 +649,7 @@ export default function TeacherSettingsPage() {
                 <div className="grid gap-4">
                   {/* Current Password */}
                   <div className="space-y-2">
-                    <Label htmlFor="currentPassword" className="text-sm font-medium text-gray-700">
+                    <Label htmlFor="currentPassword" className="text-sm font-medium">
                       Current Password
                     </Label>
                     <div className="relative">
@@ -707,14 +669,14 @@ export default function TeacherSettingsPage() {
                         onClick={() => setShowCurrentPassword(!showCurrentPassword)}
                       >
                         {showCurrentPassword ? (
-                          <EyeOff className="h-4 w-4 text-gray-400" />
+                          <EyeOff className="h-4 w-4 text-muted-foreground" />
                         ) : (
-                          <Eye className="h-4 w-4 text-gray-400" />
+                          <Eye className="h-4 w-4 text-muted-foreground" />
                         )}
                       </Button>
                     </div>
                     {errors.password.currentPassword && (
-                      <p className="text-sm text-red-600 flex items-center gap-1">
+                      <p className="text-sm text-red-600 dark:text-red-400 flex items-center gap-1">
                         <AlertCircle className="h-3 w-3" />
                         {errors.password.currentPassword}
                       </p>
@@ -723,7 +685,7 @@ export default function TeacherSettingsPage() {
 
                   {/* New Password */}
                   <div className="space-y-2">
-                    <Label htmlFor="newPassword" className="text-sm font-medium text-gray-700">
+                    <Label htmlFor="newPassword" className="text-sm font-medium">
                       New Password
                     </Label>
                     <div className="relative">
@@ -743,9 +705,9 @@ export default function TeacherSettingsPage() {
                         onClick={() => setShowNewPassword(!showNewPassword)}
                       >
                         {showNewPassword ? (
-                          <EyeOff className="h-4 w-4 text-gray-400" />
+                          <EyeOff className="h-4 w-4 text-muted-foreground" />
                         ) : (
-                          <Eye className="h-4 w-4 text-gray-400" />
+                          <Eye className="h-4 w-4 text-muted-foreground" />
                         )}
                       </Button>
                     </div>
@@ -754,18 +716,18 @@ export default function TeacherSettingsPage() {
                     {passwordData.newPassword && (
                       <div className="space-y-2">
                         <div className="flex justify-between text-xs">
-                          <span className="text-gray-600">Password strength:</span>
+                          <span className="text-muted-foreground">Password strength:</span>
                           <span className={`font-medium ${
-                            strengthInfo.label === "Very Weak" ? "text-red-600" :
-                            strengthInfo.label === "Weak" ? "text-orange-600" :
-                            strengthInfo.label === "Fair" ? "text-yellow-600" :
-                            strengthInfo.label === "Good" ? "text-blue-600" :
-                            "text-green-600"
+                            strengthInfo.label === "Very Weak" ? "text-red-600 dark:text-red-400" :
+                            strengthInfo.label === "Weak" ? "text-orange-600 dark:text-orange-400" :
+                            strengthInfo.label === "Fair" ? "text-yellow-600 dark:text-yellow-400" :
+                            strengthInfo.label === "Good" ? "text-blue-600 dark:text-blue-400" :
+                            "text-green-600 dark:text-green-400"
                           }`}>
                             {strengthInfo.label}
                           </span>
                         </div>
-                        <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div className="w-full bg-zinc-200 dark:bg-zinc-800 rounded-full h-2">
                           <div 
                             className={`h-2 rounded-full transition-all duration-300 ${strengthInfo.color}`}
                             style={{ 
@@ -777,7 +739,7 @@ export default function TeacherSettingsPage() {
                     )}
                     
                     {errors.password.newPassword && (
-                      <p className="text-sm text-red-600 flex items-center gap-1">
+                      <p className="text-sm text-red-600 dark:text-red-400 flex items-center gap-1">
                         <AlertCircle className="h-3 w-3" />
                         {errors.password.newPassword}
                       </p>
@@ -786,7 +748,7 @@ export default function TeacherSettingsPage() {
 
                   {/* Confirm Password */}
                   <div className="space-y-2">
-                    <Label htmlFor="confirmPassword" className="text-sm font-medium text-gray-700">
+                    <Label htmlFor="confirmPassword" className="text-sm font-medium">
                       Confirm New Password
                     </Label>
                     <div className="relative">
@@ -806,14 +768,14 @@ export default function TeacherSettingsPage() {
                         onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                       >
                         {showConfirmPassword ? (
-                          <EyeOff className="h-4 w-4 text-gray-400" />
+                          <EyeOff className="h-4 w-4 text-muted-foreground" />
                         ) : (
-                          <Eye className="h-4 w-4 text-gray-400" />
+                          <Eye className="h-4 w-4 text-muted-foreground" />
                         )}
                       </Button>
                     </div>
                     {errors.password.confirmPassword && (
-                      <p className="text-sm text-red-600 flex items-center gap-1">
+                      <p className="text-sm text-red-600 dark:text-red-400 flex items-center gap-1">
                         <AlertCircle className="h-3 w-3" />
                         {errors.password.confirmPassword}
                       </p>
@@ -822,29 +784,29 @@ export default function TeacherSettingsPage() {
                 </div>
 
                 {/* Password Requirements */}
-                <Alert className="bg-blue-50 border-blue-200">
-                  <AlertCircle className="h-4 w-4 text-blue-600" />
-                  <AlertDescription className="text-blue-800 text-sm">
+                <Alert className="bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800">
+                  <AlertCircle className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                  <AlertDescription className="text-blue-800 dark:text-blue-200 text-sm">
                     <strong>Password must contain:</strong>
                     <ul className="mt-1 space-y-1">
                       <li className="flex items-center gap-1">
-                        <span className={`w-1.5 h-1.5 rounded-full ${passwordData.newPassword.length >= 8 ? 'bg-green-500' : 'bg-gray-300'}`} />
+                        <span className={`w-1.5 h-1.5 rounded-full ${passwordData.newPassword.length >= 8 ? 'bg-green-500' : 'bg-zinc-300 dark:bg-zinc-600'}`} />
                         At least 8 characters
                       </li>
                       <li className="flex items-center gap-1">
-                        <span className={`w-1.5 h-1.5 rounded-full ${/(?=.*[a-z])/.test(passwordData.newPassword) ? 'bg-green-500' : 'bg-gray-300'}`} />
+                        <span className={`w-1.5 h-1.5 rounded-full ${/(?=.*[a-z])/.test(passwordData.newPassword) ? 'bg-green-500' : 'bg-zinc-300 dark:bg-zinc-600'}`} />
                         One lowercase letter
                       </li>
                       <li className="flex items-center gap-1">
-                        <span className={`w-1.5 h-1.5 rounded-full ${/(?=.*[A-Z])/.test(passwordData.newPassword) ? 'bg-green-500' : 'bg-gray-300'}`} />
+                        <span className={`w-1.5 h-1.5 rounded-full ${/(?=.*[A-Z])/.test(passwordData.newPassword) ? 'bg-green-500' : 'bg-zinc-300 dark:bg-zinc-600'}`} />
                         One uppercase letter
                       </li>
                       <li className="flex items-center gap-1">
-                        <span className={`w-1.5 h-1.5 rounded-full ${/(?=.*\d)/.test(passwordData.newPassword) ? 'bg-green-500' : 'bg-gray-300'}`} />
+                        <span className={`w-1.5 h-1.5 rounded-full ${/(?=.*\d)/.test(passwordData.newPassword) ? 'bg-green-500' : 'bg-zinc-300 dark:bg-zinc-600'}`} />
                         One number
                       </li>
                       <li className="flex items-center gap-1">
-                        <span className={`w-1.5 h-1.5 rounded-full ${/(?=.*[@$!%*?&])/.test(passwordData.newPassword) ? 'bg-green-500' : 'bg-gray-300'}`} />
+                        <span className={`w-1.5 h-1.5 rounded-full ${/(?=.*[@$!%*?&])/.test(passwordData.newPassword) ? 'bg-green-500' : 'bg-zinc-300 dark:bg-zinc-600'}`} />
                         One special character (@$!%*?&)
                       </li>
                     </ul>
@@ -855,7 +817,7 @@ export default function TeacherSettingsPage() {
                   <Button 
                     onClick={handleChangePassword} 
                     size="lg" 
-                    className="gap-2 bg-blue-600 hover:bg-blue-700"
+                    className="gap-2 bg-indigo-600 hover:bg-indigo-700"
                     disabled={saving}
                   >
                     <Key className="h-5 w-5" />

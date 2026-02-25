@@ -357,48 +357,52 @@ export default function StudentsPage() {
 
   if (isLoading) {
     return (
-      <div className="flex-1 space-y-8 p-8 bg-gray-50 min-h-screen">
-        <div className="space-y-2">
-          <div className="h-8 w-64 bg-gray-200 rounded animate-pulse" />
-          <div className="h-4 w-96 bg-gray-200 rounded animate-pulse" />
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {[...Array(4)].map((_, i) => (
-            <Card key={i}>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <div className="h-4 w-32 bg-gray-200 rounded animate-pulse" />
-                <div className="h-5 w-5 bg-gray-200 rounded animate-pulse" />
-              </CardHeader>
-              <CardContent>
-                <div className="h-8 w-20 bg-gray-200 rounded animate-pulse" />
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-
-        <div className="flex flex-col sm:flex-row gap-4 items-center">
-          <div className="h-10 w-80 bg-gray-200 rounded animate-pulse" />
-          <div className="h-10 w-40 bg-gray-200 rounded animate-pulse" />
-          <div className="h-10 w-40 bg-gray-200 rounded animate-pulse" />
-          <div className="h-10 w-40 bg-gray-200 rounded animate-pulse" />
-          <div className="h-10 w-32 bg-gray-200 rounded animate-pulse" />
-        </div>
-
-        <Card>
-          <div className="p-6 space-y-4">
-            {[...Array(5)].map((_, i) => (
-              <div key={i} className="flex items-center space-x-4">
-                <div className="h-4 flex-1 bg-gray-200 rounded animate-pulse" />
-                <div className="h-4 flex-1 bg-gray-200 rounded animate-pulse" />
-                <div className="h-4 flex-1 bg-gray-200 rounded animate-pulse" />
-                <div className="h-4 flex-1 bg-gray-200 rounded animate-pulse" />
-                <div className="h-4 flex-1 bg-gray-200 rounded animate-pulse" />
-                <div className="h-4 w-20 bg-gray-200 rounded animate-pulse" />
-              </div>
-            ))}
-          </div>
-        </Card>
+      <div className="flex items-center justify-center min-h-[70vh] w-full bg-transparent">
+        <style>{`
+          .spinner-svg {
+            animation: spinner-rotate 2s linear infinite;
+          }
+          .spinner-circle {
+            stroke-dasharray: 1, 200;
+            stroke-dashoffset: 0;
+            animation: spinner-stretch 1.5s ease-in-out infinite;
+            stroke-linecap: round;
+          }
+          @keyframes spinner-rotate {
+            100% {
+              transform: rotate(360deg);
+            }
+          }
+          @keyframes spinner-stretch {
+            0% {
+              stroke-dasharray: 1, 200;
+              stroke-dashoffset: 0;
+            }
+            50% {
+              stroke-dasharray: 90, 200;
+              stroke-dashoffset: -35px;
+            }
+            100% {
+              stroke-dasharray: 90, 200;
+              stroke-dashoffset: -124px;
+            }
+          }
+        `}</style>
+        
+        <svg
+          className="h-10 w-10 text-zinc-800 dark:text-zinc-200 spinner-svg"
+          viewBox="25 25 50 50"
+        >
+          <circle
+            className="spinner-circle"
+            cx="50"
+            cy="50"
+            r="20"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="4"
+          />
+        </svg>
       </div>
     )
   }
@@ -407,11 +411,11 @@ export default function StudentsPage() {
   const teacherStream = getDepartmentStream(teacherData?.department)
 
   return (
-    <div className="flex-1 space-y-8 p-8 bg-gray-50 min-h-screen">
+    <div className="flex-1 space-y-8 bg-transparent p-4 lg:p-8">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-gray-900">Assigned Students</h1>
+          <h1 className="text-3xl font-bold tracking-tight text-foreground">Assigned Students</h1>
           <p className="text-muted-foreground mt-1">
             {teacherData?.gradeName && teacherSections.length > 0 ? (
               <>
@@ -568,13 +572,13 @@ export default function StudentsPage() {
         <Card>
           <Table>
             <TableHeader>
-              <TableRow>
-                <TableHead>#</TableHead>
-                <TableHead>Student ID</TableHead>
-                <TableHead>Full Name</TableHead>
-                <TableHead>Section</TableHead>
-                <TableHead>Stream</TableHead>
-                <TableHead>Gender</TableHead>
+              <TableRow className="border-b dark:border-zinc-800">
+                <TableHead className="text-muted-foreground">#</TableHead>
+                <TableHead className="text-muted-foreground">Student ID</TableHead>
+                <TableHead className="text-muted-foreground">Full Name</TableHead>
+                <TableHead className="text-muted-foreground">Section</TableHead>
+                <TableHead className="text-muted-foreground">Stream</TableHead>
+                <TableHead className="text-muted-foreground">Gender</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -590,20 +594,20 @@ export default function StudentsPage() {
                 </TableRow>
               ) : (
                 paginatedStudents.map((student, index) => (
-                  <TableRow key={student.id}>
-                    <TableCell className="font-medium">{(currentPage - 1) * STUDENTS_PER_PAGE + index + 1}</TableCell>
-                    <TableCell className="font-medium">{student.student_id}</TableCell>
-                    <TableCell className="font-medium">
+                  <TableRow key={student.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors">
+                    <TableCell className="font-medium text-foreground">{(currentPage - 1) * STUDENTS_PER_PAGE + index + 1}</TableCell>
+                    <TableCell className="font-medium text-foreground">{student.student_id}</TableCell>
+                    <TableCell className="font-medium text-foreground">
                       {student.name} {student.father_name} {student.grandfather_name}
                     </TableCell>
                     <TableCell>
-                      <Badge variant="outline" className="text-indigo-600 border-indigo-200">
+                      <Badge variant="outline" className="text-indigo-600 dark:text-indigo-400 border-indigo-200 dark:border-indigo-800">
                         {student.section}
                       </Badge>
                     </TableCell>
                     <TableCell>
                       {student.stream ? (
-                        <Badge variant="outline" className="text-emerald-600 border-emerald-200">
+                        <Badge variant="outline" className="text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800">
                           {student.stream}
                         </Badge>
                       ) : (
@@ -619,8 +623,8 @@ export default function StudentsPage() {
                         }
                         className={
                           student.gender === "male" ? "" :
-                          student.gender === "female" ? "bg-pink-100 text-pink-800 hover:bg-pink-100" :
-                          "bg-gray-100 text-gray-800 border-gray-300"
+                          student.gender === "female" ? "bg-pink-100 dark:bg-pink-900/40 text-pink-800 dark:text-pink-400 hover:bg-pink-100 dark:hover:bg-pink-900/40" :
+                          "bg-gray-100 text-gray-800 border-gray-300 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-300"
                         }
                       >
                         {student.gender.charAt(0).toUpperCase() + student.gender.slice(1)}
