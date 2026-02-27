@@ -66,7 +66,7 @@ import {
 } from "lucide-react";
 import { InlineMath, BlockMath } from "react-katex";
 import "katex/dist/katex.min.css";
-import { toast, Toaster } from "sonner";
+import { toast } from "sonner";
 import { supabase } from "@/lib/supabaseClient";
 import { getTeacherDataFromCookie } from "@/utils/teacherCookie";
 import { useEditor, EditorContent } from "@tiptap/react";
@@ -81,7 +81,7 @@ import Highlight from "@tiptap/extension-highlight";
 import SubscriptExtension from "@tiptap/extension-subscript";
 import SuperscriptExtension from "@tiptap/extension-superscript";
 import Color from "@tiptap/extension-color";
-import TextStyle from "@tiptap/extension-text-style";
+import { TextStyle } from "@tiptap/extension-text-style";
 import Placeholder from "@tiptap/extension-placeholder";
 import Link from "@tiptap/extension-link";
 import { Underline as UnderlineIcon } from "lucide-react";
@@ -1270,6 +1270,58 @@ export default function CreateExamPage() {
       passageEditor.commands.setContent(newQuestion.passageHtml || "");
   }, [editingIndex, passageEditor, newQuestion.passageHtml]);
 
+  // Rich text editor for exam instructions (same toolset as passage editor)
+  const instructionsEditor = useEditor({
+    extensions: [
+      StarterKit.configure({
+        codeBlock: false,
+      }),
+      Underline,
+      Strike,
+      TextAlign.configure({
+        types: ["heading", "paragraph"],
+      }),
+      Heading.configure({
+        levels: [2, 3, 4],
+      }),
+      Blockquote,
+      CodeBlock,
+      Highlight,
+      SubscriptExtension,
+      SuperscriptExtension,
+      Color,
+      TextStyle,
+      Link.configure({
+        openOnClick: true,
+        linkOnPaste: true,
+      }),
+      Placeholder.configure({
+        placeholder: "Write detailed exam instructions for students...",
+      }),
+    ],
+    content: examInstructions || "",
+    editorProps: {
+      attributes: {
+        class:
+          "prose prose-sm max-w-none min-h-[180px] max-h-[320px] overflow-y-auto px-3 py-2 focus:outline-none bg-background",
+      },
+    },
+    onUpdate: ({ editor }) => {
+      setExamInstructions(editor.getHTML());
+    },
+    immediatelyRender: false,
+  });
+
+  useEffect(() => {
+    if (
+      instructionsEditor &&
+      examInstructions &&
+      examInstructions !== instructionsEditor.getHTML()
+    ) {
+      instructionsEditor.commands.setContent(examInstructions);
+    }
+  }, [instructionsEditor, examInstructions]);
+
   useEffect(() => {
     setOptionPreview(newQuestion.options.map((opt) => opt.text));
   }, [newQuestion.options]);
@@ -2058,7 +2110,6 @@ export default function CreateExamPage() {
 
   return (
     <>
-      <Toaster position="top-right" richColors closeButton />
       <ImageUploadModal
         isOpen={showImageModal}
         onClose={() => setShowImageModal(false)}
@@ -2069,6 +2120,53 @@ export default function CreateExamPage() {
             : `Upload Option Image`
         }
       />
+      {/* Ensure TipTap editor styles exist on all steps (instructions + passage) */}
+      <style jsx global>{`
+        .ProseMirror {
+          min-height: 180px;
+          padding: 1rem;
+          outline: none;
+          font-family: system-ui, -apple-system, sans-serif;
+        }
+
+        .ProseMirror p {
+          margin-bottom: 0.75rem;
+          line-height: 1.6;
+        }
+
+        .ProseMirror ul,
+        .ProseMirror ol {
+          padding-left: 1.5rem;
+          margin: 0.75rem 0;
+        }
+
+        .ProseMirror ul {
+          list-style-type: disc;
+        }
+
+        .ProseMirror ol {
+          list-style-type: decimal;
+        }
+
+        .ProseMirror li {
+          margin: 0.25rem 0;
+        }
+
+        .ProseMirror mark {
+          background-color: var(--highlight-color, #ffff00);
+          padding: 0.1em 0.2em;
+          border-radius: 0.2em;
+        }
+
+        .ProseMirror a {
+          color: #3b82f6;
+          text-decoration: underline;
+        }
+
+        .ProseMirror a:hover {
+          color: #1d4ed8;
+        }
+      `}</style>
       <div className="flex flex-col w-full items-center p-4 bg-background min-h-screen">
         {currentStep === 2 && (
           <Drawer direction="left" open={isSidebarOpen} onOpenChange={setIsSidebarOpen}>
@@ -2178,13 +2276,19 @@ export default function CreateExamPage() {
                 </div>
                 <div>
                   <Label htmlFor="instructions">Exam Instructions</Label>
-                  <textarea
-                    id="instructions"
-                    value={examInstructions}
-                    onChange={(e) => setExamInstructions(e.target.value)}
-                    className="mt-1 w-full min-h-[100px] max-h-[200px] overflow-y-auto p-3 border rounded-md resize-none bg-background"
-                    placeholder="Enter exam instructions for students..."
-                  />
+                  <div className="mt-1 border rounded-md overflow-hidden shadow-sm">
+                    <EditorToolbar editor={instructionsEditor} />
+                    {mounted && instructionsEditor ? (
+                      <EditorContent
+                        editor={instructionsEditor}
+                        className="min-h-[180px] max-h-[320px] overflow-y-auto focus:outline-none bg-background"
+                      />
+                    ) : (
+                      <div className="min-h-[180px] p-4 flex items-center justify-center text-muted-foreground">
+                        Loading editor...
+                      </div>
+                    )}
+                  </div>
                 </div>
                 <div>
                   <Label htmlFor="time" className="required">
@@ -2269,110 +2373,6 @@ export default function CreateExamPage() {
                           Loading editor...
                         </div>
                       )}
-                      <style jsx global>{`
-                        .ProseMirror {
-                          min-height: 200px;
-                          padding: 1rem;
-                          outline: none;
-                          font-family: system-ui, -apple-system, sans-serif;
-                        }
-
-                        .ProseMirror p {
-                          margin-bottom: 0.75rem;
-                          line-height: 1.6;
-                        }
-
-                        .ProseMirror h2 {
-                          font-size: 1.5rem;
-                          font-weight: bold;
-                          margin-top: 1.5rem;
-                          margin-bottom: 0.75rem;
-                          color: #1f2937;
-                        }
-
-                        .ProseMirror h3 {
-                          font-size: 1.25rem;
-                          font-weight: bold;
-                          margin-top: 1.25rem;
-                          margin-bottom: 0.5rem;
-                          color: #374151;
-                        }
-
-                        .ProseMirror h4 {
-                          font-size: 1.125rem;
-                          font-weight: bold;
-                          margin-top: 1rem;
-                          margin-bottom: 0.5rem;
-                          color: #4b5563;
-                        }
-
-                        .ProseMirror blockquote {
-                          border-left: 3px solid #e5e7eb;
-                          padding-left: 1rem;
-                          margin: 1rem 0;
-                          color: #6b7280;
-                          font-style: italic;
-                        }
-
-                        .ProseMirror ul,
-                        .ProseMirror ol {
-                          padding-left: 1.5rem;
-                          margin: 0.75rem 0;
-                        }
-
-                        .ProseMirror ul {
-                          list-style-type: disc;
-                        }
-
-                        .ProseMirror ol {
-                          list-style-type: decimal;
-                        }
-
-                        .ProseMirror li {
-                          margin: 0.25rem 0;
-                        }
-
-                        .code-block {
-                          background-color: #1e1e1e;
-                          color: #d4d4d4;
-                          font-family: "Monaco", "Menlo", "Ubuntu Mono",
-                            monospace;
-                          font-size: 0.875rem;
-                          padding: 1rem;
-                          border-radius: 0.375rem;
-                          margin: 0.75rem 0;
-                          overflow-x: auto;
-                        }
-
-                        .code-block code {
-                          color: #d4d4d4;
-                        }
-
-                        .ProseMirror sub {
-                          vertical-align: sub;
-                          font-size: smaller;
-                        }
-
-                        .ProseMirror sup {
-                          vertical-align: super;
-                          font-size: smaller;
-                        }
-
-                        .ProseMirror mark {
-                          background-color: var(--highlight-color, #ffff00);
-                          padding: 0.1em 0.2em;
-                          border-radius: 0.2em;
-                        }
-
-                        .ProseMirror a {
-                          color: #3b82f6;
-                          text-decoration: underline;
-                        }
-
-                        .ProseMirror a:hover {
-                          color: #1d4ed8;
-                        }
-                      `}</style>
                     </div>
                     {showPreview && newQuestion.passageHtml && (
                       <div className="mt-2 p-3 bg-muted/30 rounded-md border">

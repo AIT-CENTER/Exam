@@ -36,7 +36,6 @@ create index IF not exists idx_assign_exams_teacher_student on public.assign_exa
 
 create index IF not exists idx_assign_exams_assigned_by on public.assign_exams using btree (assigned_by) TABLESPACE pg_default;
 
-
 create table public.exam_sessions (
   id uuid not null default gen_random_uuid (),
   student_id integer not null,
@@ -88,8 +87,7 @@ where
   (status = 'in_progress'::text);
 
 
-
-create table public.exams (
+  create table public.exams (
   id serial not null,
   exam_code text not null,
   title text not null,
@@ -187,6 +185,7 @@ create table public.questions (
 ) TABLESPACE pg_default;
 
 create index IF not exists idx_questions_exam_id on public.questions using btree (exam_id) TABLESPACE pg_default;
+
 
 create table public.results (
   id serial not null,
@@ -308,6 +307,7 @@ create table public.subjects (
   )
 ) TABLESPACE pg_default;
 
+
 create table public.teacher (
   id uuid not null default gen_random_uuid (),
   username text not null,
@@ -335,7 +335,6 @@ create table public.teacher (
     )
   )
 ) TABLESPACE pg_default;
-
 
 
 create view public.active_exam_sessions_view as
@@ -377,8 +376,7 @@ where
   and ss.is_active = true;
 
 
-
-create view public.exam_session_progress_view as
+  create view public.exam_session_progress_view as
 select
   es.id as session_id,
   s.id as student_id,
@@ -432,7 +430,7 @@ from
   join grades g on g.id = s.grade_id;
 
 
-create view public.student_aggregate_results_view as
+  create view public.student_aggregate_results_view as
 select
   s.id as student_id,
   s.name as student_name,
@@ -467,7 +465,7 @@ order by
   s.name;
 
 
-create view public.student_exam_results_view as
+  create view public.student_exam_results_view as
 select
   r.id as result_id,
   r.exam_id,

@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import type React from "react";
 import { useState, useEffect, useRef } from "react";
@@ -229,6 +229,9 @@ export default function StudentLogin() {
   const examInputRef = useRef<HTMLInputElement>(null);
 
   const [countdown, setCountdown] = useState(10);
+  const [idsVerified, setIdsVerified] = useState(false);
+  const [verifyingIds, setVerifyingIds] = useState(false);
+  const [idCheckError, setIdCheckError] = useState("");
 
   useEffect(() => {
     fetchStudentIdFormat();
@@ -254,6 +257,50 @@ export default function StudentLogin() {
       if (interval) clearInterval(interval);
     };
   }, [showActiveSessionBlockDialog, countdown]);
+
+  // Verify that Student ID and Exam ID map to real records before showing Start button
+  useEffect(() => {
+    setIdsVerified(false);
+    setIdCheckError("");
+
+    const trimmedStudent = studentId.trim();
+    const trimmedExam = examId.trim();
+
+    // Only attempt remote validation when local format is satisfied
+    const hasMinimumStudent =
+      trimmedStudent.length >= studentIdFormat.minLength;
+    const hasValidExam = /^\d{6}$/.test(trimmedExam);
+
+    if (!hasMinimumStudent || !hasValidExam) {
+      setVerifyingIds(false);
+      return;
+    }
+
+    let cancelled = false;
+    setVerifyingIds(true);
+
+    const timer = setTimeout(async () => {
+      try {
+        await validateExamAccess(trimmedStudent, trimmedExam);
+        if (!cancelled) {
+          setIdsVerified(true);
+          setIdCheckError("");
+        }
+      } catch (error: any) {
+        if (!cancelled) {
+          setIdsVerified(false);
+          setIdCheckError(error.message || "Invalid Student ID or Exam ID.");
+        }
+      } finally {
+        if (!cancelled) setVerifyingIds(false);
+      }
+    }, 500);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [studentId, examId, studentIdFormat.minLength]);
 
   const fetchStudentIdFormat = async () => {
     try {
@@ -445,6 +492,11 @@ export default function StudentLogin() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validateForm()) return;
+
+    if (!idsVerified) {
+      toast.error("Please enter a valid Student ID and Exam Code assigned to you.");
+      return;
+    }
 
     if (!securityInitialized || !deviceFingerprint) {
       toast.error("Security system initializing. Please wait...");
@@ -791,7 +843,12 @@ export default function StudentLogin() {
   };
 
   return (
-    <>
+    <div
+      className="min-h-screen bg-[#F7F7F4] text-slate-900"
+      onContextMenu={(e) => e.preventDefault()}
+      onCopy={(e) => e.preventDefault()}
+      onCut={(e) => e.preventDefault()}
+    >
       {/* Resume Exam Dialog */}
       <Dialog open={showResumeDialog} onOpenChange={setShowResumeDialog}>
         <DialogContent className="sm:max-w-md">
@@ -1090,7 +1147,7 @@ export default function StudentLogin() {
       </Dialog>
 
       {/* Main Login Page - Professional Split Screen */}
-      <div className="min-h-screen flex bg-white">
+      <div className="min-h-screen flex bg-transparent">
         {/* Left Side – Enhanced Professional UI */}
         <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden bg-slate-50 flex-col justify-between p-12 text-slate-700 border-r border-slate-200">
           {/* Decorative Background Elements */}
@@ -1205,13 +1262,16 @@ export default function StudentLogin() {
                     className={`
                       h-12 pl-11 pr-12 
                       text-base font-medium
-                      border-slate-200
                       ${
                         errors.studentId
                           ? "border-red-300 focus:border-red-500 focus:ring-red-100"
-                          : studentId
+                          : verifyingIds && studentId && examId
+                          ? "border-slate-400 animate-pulse focus:border-slate-800 focus:ring-slate-200"
+                          : idCheckError && studentId
+                          ? "border-red-300 focus:border-red-500 focus:ring-red-100"
+                          : idsVerified && studentId
                           ? "border-green-300 focus:border-green-500 focus:ring-green-100"
-                          : "focus:border-slate-800 focus:ring-slate-100"
+                          : "border-slate-200 focus:border-slate-800 focus:ring-slate-100"
                       }
                       focus:ring-2 shadow-sm
                       transition-all duration-200
@@ -1283,13 +1343,16 @@ export default function StudentLogin() {
                     className={`
                       h-12 pl-11 pr-12 
                       text-lg tracking-[0.2em] font-medium
-                      border-slate-200
                       ${
                         errors.examId
                           ? "border-red-300 focus:border-red-500 focus:ring-red-100"
-                          : examId
+                          : verifyingIds && studentId && examId
+                          ? "border-slate-400 animate-pulse focus:border-slate-800 focus:ring-slate-200"
+                          : idCheckError && examId
+                          ? "border-red-300 focus:border-red-500 focus:ring-red-100"
+                          : idsVerified && examId.length === 6
                           ? "border-green-300 focus:border-green-500 focus:ring-green-100"
-                          : "focus:border-slate-800 focus:ring-slate-100"
+                          : "border-slate-200 focus:border-slate-800 focus:ring-slate-100"
                       }
                       focus:ring-2 shadow-sm
                       transition-all duration-200
@@ -1328,52 +1391,57 @@ export default function StudentLogin() {
                 </div>
               </div>
 
-              {/* Submit Button - Dark Theme */}
-              <div className="pt-4">
-                <Button
-                  type="submit"
-                  className={`
-                    w-full h-12 text-base font-semibold text-white
-                    transition-all duration-300 rounded-lg
-                    ${
-                      loading || !securityInitialized || !studentId || !examId || studentId.length < studentIdFormat.minLength || examId.length !== 6
-                        ? "bg-slate-300 text-slate-500 cursor-not-allowed shadow-none"
-                        : "bg-slate-900 hover:bg-slate-800 shadow-md hover:shadow-lg hover:-translate-y-0.5"
-                    }
-                  `}
-                  disabled={
-                    loading ||
-                    !securityInitialized ||
-                    !studentId ||
-                    !examId ||
-                    studentId.length < studentIdFormat.minLength ||
-                    examId.length !== 6
-                  }
-                >
-                  <span className="flex items-center justify-center">
-                    {loading ? (
-                      <>
-                        <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                        Authenticating...
-                      </>
-                    ) : !securityInitialized ? (
-                      <>
-                        <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                        Initializing Security...
-                      </>
-                    ) : (
-                      <>
-                        Start Exam Session
-                        <ArrowRight className="ml-2 h-5 w-5 transition-transform group-hover:translate-x-1" />
-                      </>
-                    )}
-                  </span>
-                </Button>
+              {/* Submit Button - Only when IDs are fully valid */}
+              <div className="pt-4 space-y-2">
+                {idsVerified && (
+                  <Button
+                    type="submit"
+                    className={`
+                      w-full h-12 text-base font-semibold text-white
+                      transition-all duration-300 rounded-lg
+                      ${
+                        loading || !securityInitialized
+                          ? "bg-slate-300 text-slate-500 cursor-not-allowed shadow-none"
+                          : "bg-slate-900 hover:bg-slate-800 shadow-md hover:shadow-lg hover:-translate-y-0.5"
+                      }
+                    `}
+                    disabled={loading || !securityInitialized}
+                  >
+                    <span className="flex items-center justify-center">
+                      {loading ? (
+                        <>
+                          <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                          Authenticating...
+                        </>
+                      ) : !securityInitialized ? (
+                        <>
+                          <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                          Initializing Security...
+                        </>
+                      ) : (
+                        <>
+                          Start Exam Session
+                          <ArrowRight className="ml-2 h-5 w-5" />
+                        </>
+                      )}
+                    </span>
+                  </Button>
+                )}
+
+                {!idsVerified && (studentId || examId) && (
+                  <p className="text-xs text-slate-500 text-center">
+                    {verifyingIds
+                      ? "Checking your Student ID and Exam Code..."
+                      : idCheckError
+                      ? idCheckError
+                      : "Enter a valid Student ID and 6‑digit Exam Code assigned to you to continue."}
+                  </p>
+                )}
               </div>
             </form>
           </div>
         </div>
       </div>
-    </>
+    </div>
   );
 }

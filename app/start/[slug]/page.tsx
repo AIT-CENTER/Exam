@@ -40,6 +40,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { SlidingNumber } from "@/components/motion-primitives/sliding-number";
 import { toast } from "sonner";
 import {
   Clock,
@@ -478,22 +479,26 @@ const parseQuestionText = (text: string) => {
 };
 
 // Improved seeded shuffle function with better randomness
+// Uses a simple string hash -> LCG PRNG -> Fisher-Yates.
 const seededShuffle = <T,>(array: T[], seed: string): T[] => {
   const shuffled = [...array];
-  let hash = 0;
 
+  // Derive an integer seed from the string
+  let hash = 0;
   for (let i = 0; i < seed.length; i++) {
     hash = (hash << 5) - hash + seed.charCodeAt(i);
-    hash = hash ^ hash;
-    hash = hash & 0x7fffffff;
+    hash |= 0; // force 32‑bit
   }
+  // Ensure non‑zero positive seed
+  let seedValue = (hash >>> 0) || 1;
 
-  let seedValue = hash;
   const seededRandom = () => {
-    seedValue = (seedValue * 9301 + 49297) % 233280;
-    return seedValue / 233280;
+    // LCG parameters
+    seedValue = (seedValue * 1664525 + 1013904223) >>> 0;
+    return seedValue / 0xffffffff;
   };
 
+  // Fisher–Yates shuffle using the seeded PRNG
   for (let i = shuffled.length - 1; i > 0; i--) {
     const j = Math.floor(seededRandom() * (i + 1));
     [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
@@ -847,10 +852,11 @@ function PassageModal({
   );
 }
 
-// Floating Mobile Navigation Bar
+// Floating Mobile Navigation Bar (mobile drawer using Sheet)
 const FloatingMobileNavBar = ({
   currentQuestionIndex,
   questions,
+  answers,
   flaggedQuestions,
   onQuestionSelect,
   isOpen,
@@ -858,6 +864,7 @@ const FloatingMobileNavBar = ({
 }: {
   currentQuestionIndex: number;
   questions: any[];
+  answers: any[];
   flaggedQuestions: Set<number>;
   onQuestionSelect: (index: number) => void;
   isOpen: boolean;
@@ -865,203 +872,157 @@ const FloatingMobileNavBar = ({
 }) => {
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
 
+  const answeredCount = answers.filter(
+    (a) => a !== null && a !== undefined
+  ).length;
+  const unansweredCount = Math.max(0, questions.length - answeredCount);
+
   return (
-    <>
-      {/* Floating Toggle Button */}
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="fixed bottom-4 right-4 z-50 bg-zinc-900 hover:bg-zinc-700 text-white rounded-full p-3 shadow-2xl transition-colors"
+    <Sheet open={isOpen} onOpenChange={setIsOpen}>
+      <SheetContent
+        side="bottom"
+        className="h-[80vh] rounded-t-3xl px-0 pt-2 pb-4 bg-[#F7F7F4]"
       >
-        <Navigation className="h-6 w-6" />
-      </button>
+        <div className="px-4 pb-3 border-b border-[#e3e3dd] rounded-t-3xl">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="font-semibold text-sm text-gray-800">
+              Question navigator
+            </h3>
+            <button
+              onClick={() => setIsOpen(false)}
+              className="p-1 rounded-full text-gray-500 hover:bg-gray-100 hover:text-gray-800"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
 
-      {/* Navigation Panel */}
-      {isOpen && (
-        <div
-          className="fixed inset-0 z-40 bg-black/50"
-          onClick={() => setIsOpen(false)}
-        >
-          <div
-            className="absolute bottom-0 left-0 right-0 bg-white rounded-t-3xl shadow-2xl max-h-[80vh] overflow-hidden"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Header */}
-            <div className="p-4 border-b bg-gradient-to-r from-blue-600 to-indigo-600 text-white">
-              <div className="flex items-center justify-between">
-                <h3 className="font-bold text-lg">Question Navigator</h3>
-                <button
-                  onClick={() => setIsOpen(false)}
-                  className="text-white hover:text-gray-200"
-                >
-                  <X className="h-5 w-5" />
-                </button>
+          {/* Stats Bar */}
+          <div className="flex items-center justify-between text-xs text-gray-600 pb-2">
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-1">
+                <div className="w-2 h-2 rounded-full bg-green-500" />
+                <span>Answered: {answeredCount}</span>
               </div>
-
-              {/* Stats Bar */}
-              <div className="flex items-center justify-between mt-3 text-sm">
-                <div className="flex items-center gap-4">
-                  <div className="flex items-center gap-1">
-                    <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                    <span>
-                      Answered: {questions.filter((_, i) => true).length}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <div className="w-2 h-2 rounded-full bg-gray-400"></div>
-                    <span>
-                      Unanswered:{" "}
-                      {questions.length -
-                        questions.filter((_, i) => true).length}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setViewMode("grid")}
-                    className={`px-3 py-1 rounded-full text-xs ${
-                      viewMode === "grid"
-                        ? "bg-white text-blue-600"
-                        : "bg-blue-500/30 text-white"
-                    }`}
-                  >
-                    Grid
-                  </button>
-                  <button
-                    onClick={() => setViewMode("list")}
-                    className={`px-3 py-1 rounded-full text-xs ${
-                      viewMode === "list"
-                        ? "bg-white text-blue-600"
-                        : "bg-blue-500/30 text-white"
-                    }`}
-                  >
-                    List
-                  </button>
-                </div>
+              <div className="flex items-center gap-1">
+                <div className="w-2 h-2 rounded-full bg-gray-400" />
+                <span>Unanswered: {unansweredCount}</span>
               </div>
             </div>
 
-            {/* Questions Grid/List */}
-            <div className="p-4 overflow-y-auto max-h-[60vh]">
-              {viewMode === "grid" ? (
-                <div className="grid grid-cols-5 gap-2">
-                  {questions.map((_, i) => {
-                    const isAnswered = true;
-                    const isCurrent = currentQuestionIndex === i;
-                    const isFlagged = flaggedQuestions.has(i);
-
-                    return (
-                      <button
-                        key={i}
-                        onClick={() => {
-                          onQuestionSelect(i);
-                          setIsOpen(false);
-                        }}
-                        className={cn(
-                          "h-12 w-12 rounded-lg flex items-center justify-center font-medium text-sm relative transition-all",
-                          isCurrent
-                            ? "bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg"
-                            : isAnswered
-                            ? "bg-green-100 text-green-800 border border-green-300"
-                            : "bg-gray-100 text-gray-600 border border-gray-300",
-                          isFlagged && "border-amber-400 border-2"
-                        )}
-                      >
-                        {isFlagged && (
-                          <Flag className="absolute -top-1 -right-1 h-4 w-4 text-amber-500 fill-amber-500" />
-                        )}
-                        {i + 1}
-                      </button>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {questions.map((_, i) => {
-                    const isAnswered = true;
-                    const isCurrent = currentQuestionIndex === i;
-                    const isFlagged = flaggedQuestions.has(i);
-
-                    return (
-                      <button
-                        key={i}
-                        onClick={() => {
-                          onQuestionSelect(i);
-                          setIsOpen(false);
-                        }}
-                        className={cn(
-                          "w-full p-3 rounded-lg flex items-center justify-between text-left",
-                          isCurrent
-                            ? "bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-500"
-                            : isAnswered
-                            ? "bg-green-50 border border-green-200"
-                            : "bg-gray-50 border border-gray-200"
-                        )}
-                      >
-                        <div className="flex items-center gap-3">
-                          <div
-                            className={cn(
-                              "h-8 w-8 rounded-full flex items-center justify-center font-medium",
-                              isCurrent
-                                ? "bg-blue-600 text-white"
-                                : isAnswered
-                                ? "bg-green-500 text-white"
-                                : "bg-gray-400 text-white"
-                            )}
-                          >
-                            {i + 1}
-                          </div>
-                          <span className="font-medium">Question {i + 1}</span>
-                          {isFlagged && (
-                            <Flag className="h-4 w-4 text-amber-500" />
-                          )}
-                        </div>
-                        <div
-                          className={cn(
-                            "text-xs px-2 py-1 rounded-full",
-                            isAnswered
-                              ? "bg-green-100 text-green-800"
-                              : "bg-gray-100 text-gray-800"
-                          )}
-                        >
-                          {isAnswered ? "Answered" : "Not answered"}
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
-            {/* Quick Actions */}
-            <div className="p-4 border-t bg-gray-50 flex justify-between">
+            <div className="flex gap-1.5">
               <button
-                onClick={() => {
-                  onQuestionSelect(Math.max(0, currentQuestionIndex - 1));
-                  setIsOpen(false);
-                }}
-                disabled={currentQuestionIndex === 0}
-                className="px-4 py-2 bg-gray-200 rounded-lg disabled:opacity-50"
+                onClick={() => setViewMode("grid")}
+                className={cn(
+                  "px-2 py-0.5 rounded-full text-[11px]",
+                  viewMode === "grid"
+                    ? "bg-white text-gray-900 border border-[#e3e3dd]"
+                    : "bg-transparent text-gray-600 border border-transparent"
+                )}
               >
-                Previous
+                Grid
               </button>
               <button
-                onClick={() => {
-                  onQuestionSelect(
-                    Math.min(questions.length - 1, currentQuestionIndex + 1)
-                  );
-                  setIsOpen(false);
-                }}
-                disabled={currentQuestionIndex === questions.length - 1}
-                className="px-4 py-2 bg-zinc-900 hover:bg-zinc-700 text-white rounded-lg disabled:opacity-50 transition-colors"
+                onClick={() => setViewMode("list")}
+                className={cn(
+                  "px-2 py-0.5 rounded-full text-[11px]",
+                  viewMode === "list"
+                    ? "bg-white text-gray-900 border border-[#e3e3dd]"
+                    : "bg-transparent text-gray-600 border border-transparent"
+                )}
               >
-                Next
+                List
               </button>
             </div>
           </div>
         </div>
-      )}
-    </>
+
+        {/* Questions Grid/List */}
+        <div className="px-4 pt-3 overflow-y-auto max-h-[calc(80vh-64px)]">
+          {viewMode === "grid" ? (
+            <div className="grid grid-cols-5 gap-2">
+              {questions.map((_, i) => {
+                const isAnswered =
+                  answers[i] !== null && answers[i] !== undefined;
+                const isCurrent = currentQuestionIndex === i;
+                const isFlagged = flaggedQuestions.has(i);
+
+                return (
+                  <button
+                    key={i}
+                    onClick={() => {
+                      onQuestionSelect(i);
+                      setIsOpen(false);
+                    }}
+                    className={cn(
+                      "h-10 w-10 md:h-12 md:w-12 p-0 flex items-center justify-center rounded-lg border text-sm md:text-lg font-medium transition-all bg-white",
+                      isCurrent && "border-blue-500 text-blue-600",
+                      isAnswered && !isCurrent && "bg-[#f4f4ef]",
+                      isFlagged && "border-amber-400"
+                    )}
+                  >
+                    {i + 1}
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {questions.map((_, i) => {
+                const isAnswered =
+                  answers[i] !== null && answers[i] !== undefined;
+                const isCurrent = currentQuestionIndex === i;
+                const isFlagged = flaggedQuestions.has(i);
+
+                return (
+                  <button
+                    key={i}
+                    onClick={() => {
+                      onQuestionSelect(i);
+                      setIsOpen(false);
+                    }}
+                    className={cn(
+                      "w-full flex items-center justify-between rounded-lg border px-3 py-2 text-xs transition-all bg-white",
+                      isCurrent && "border-blue-500 text-blue-600",
+                      isAnswered && !isCurrent && "bg-[#f4f4ef]",
+                      isFlagged && "border-amber-400"
+                    )}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div
+                        className={cn(
+                          "h-8 w-8 rounded-full flex items-center justify-center font-medium",
+                          isCurrent
+                            ? "bg-blue-600 text-white"
+                            : isAnswered
+                            ? "bg-green-500 text-white"
+                            : "bg-gray-400 text-white"
+                        )}
+                      >
+                        {i + 1}
+                      </div>
+                      <span className="font-medium">Question {i + 1}</span>
+                      {isFlagged && (
+                        <Flag className="h-4 w-4 text-amber-500" />
+                      )}
+                    </div>
+                    <div
+                      className={cn(
+                        "text-xs px-2 py-1 rounded-full",
+                        isAnswered
+                          ? "bg-green-100 text-green-800"
+                          : "bg-gray-100 text-gray-800"
+                      )}
+                    >
+                      {isAnswered ? "Answered" : "Not answered"}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </SheetContent>
+    </Sheet>
   );
 };
 
@@ -1435,19 +1396,45 @@ export default function ExamTakingPage() {
           };
         });
 
-        // Create unique seed for this student-exam combination
-        const shuffleSeed = `${student.id}-${exam.id}-${
-          exam.exam_code
-        }-${Date.now()}`;
+        // Create a per-student, per-exam shuffle seed.
+        // We persist a random seed in localStorage so order is:
+        // - Truly randomized per student
+        // - Stable across reloads/resume for that student+exam
+        const baseShuffleSeed = `${student.id}-${exam.id}-${exam.exam_code}`;
+        let shuffleSeed = baseShuffleSeed;
+        try {
+          const seedKey = `exam_shuffle_seed_${student.id}_${exam.id}`;
+          const stored = localStorage.getItem(seedKey);
+          if (stored) {
+            shuffleSeed = stored;
+          } else {
+            let randomPart = "";
+            if (typeof crypto !== "undefined" && crypto.getRandomValues) {
+              const buffer = new Uint32Array(2);
+              crypto.getRandomValues(buffer);
+              randomPart = Array.from(buffer)
+                .map((n) => n.toString(16))
+                .join("");
+            } else {
+              randomPart = `${Date.now()}-${Math.random()
+                .toString(36)
+                .slice(2)}`;
+            }
+            shuffleSeed = `${baseShuffleSeed}-${randomPart}`;
+            localStorage.setItem(seedKey, shuffleSeed);
+          }
+        } catch {
+          // Fallback: keep baseShuffleSeed if localStorage/crypto unavailable
+        }
         let finalQuestions = processedQuestions;
 
-        // SHUFFLE QUESTIONS if enabled in exam settings
-        if (exam.questions_shuffled) {
+        // SHUFFLE QUESTIONS if enabled in exam settings (treat null as true)
+        if (exam.questions_shuffled !== false) {
           finalQuestions = seededShuffle(processedQuestions, shuffleSeed);
         }
 
-        // RANDOMIZE OPTIONS if enabled in exam settings
-        if (exam.options_shuffled) {
+        // RANDOMIZE OPTIONS if enabled in exam settings (treat null as true)
+        if (exam.options_shuffled !== false) {
           finalQuestions = finalQuestions.map((q) => {
             if (
               (q.type === "mcq" || q.type === "tf" || q.type === "passage") &&
@@ -1472,7 +1459,7 @@ export default function ExamTakingPage() {
         }
 
         // SHUFFLE MATCHING PAIRS if enabled
-        if (exam.options_shuffled) {
+        if (exam.options_shuffled !== false) {
           finalQuestions = finalQuestions.map((q) => {
             if (
               q.type === "matching" &&
@@ -1591,65 +1578,77 @@ export default function ExamTakingPage() {
           setTimeLeft(remaining);
           timeLeftRef.current = remaining;
 
-          // Load saved answers
-          const { data: savedAnswers } = await supabase
-            .from("student_answers")
-            .select("*")
-            .eq("session_id", activeSession.id);
+        // Load saved answers
+        const { data: savedAnswers } = await supabase
+          .from("student_answers")
+          .select("*")
+          .eq("session_id", activeSession.id);
 
-          if (savedAnswers) {
-            const restoredAnswers = [...initialAnswers];
-            const restoredFlags = new Set<number>();
+        const hasSavedAnswers =
+          Array.isArray(savedAnswers) && savedAnswers.length > 0;
 
-            savedAnswers.forEach((sa: any) => {
-              const idx = finalQuestions.findIndex(
-                (q) => q.id === sa.question_id
-              );
-              if (idx > -1) {
-                try {
-                  if (sa.answer_text) {
-                    const parsed = JSON.parse(sa.answer_text);
+        if (hasSavedAnswers) {
+          const restoredAnswers = [...initialAnswers];
+          const restoredFlags = new Set<number>();
 
-                    if (finalQuestions[idx].type === "matching") {
-                      if (
-                        typeof parsed === "object" &&
-                        !Array.isArray(parsed)
-                      ) {
-                        const pairCount =
-                          finalQuestions[idx].matchingPairs?.length || 0;
-                        const answerArray = Array(pairCount).fill(null);
-                        Object.entries(parsed).forEach(([key, value]) => {
-                          const index = parseInt(key);
-                          if (
-                            !isNaN(index) &&
-                            index >= 0 &&
-                            index < pairCount
-                          ) {
-                            answerArray[index] = value;
-                          }
-                        });
-                        restoredAnswers[idx] = answerArray;
-                      } else {
-                        restoredAnswers[idx] = parsed;
-                      }
+          savedAnswers.forEach((sa: any) => {
+            const idx = finalQuestions.findIndex(
+              (q) => q.id === sa.question_id
+            );
+            if (idx > -1) {
+              try {
+                if (sa.answer_text) {
+                  const parsed = JSON.parse(sa.answer_text);
+
+                  if (finalQuestions[idx].type === "matching") {
+                    if (
+                      typeof parsed === "object" &&
+                      !Array.isArray(parsed)
+                    ) {
+                      const pairCount =
+                        finalQuestions[idx].matchingPairs?.length || 0;
+                      const answerArray = Array(pairCount).fill(null);
+                      Object.entries(parsed).forEach(([key, value]) => {
+                        const index = parseInt(key);
+                        if (
+                          !isNaN(index) &&
+                          index >= 0 &&
+                          index < pairCount
+                        ) {
+                          answerArray[index] = value;
+                        }
+                      });
+                      restoredAnswers[idx] = answerArray;
                     } else {
                       restoredAnswers[idx] = parsed;
                     }
                   } else {
-                    restoredAnswers[idx] = sa.selected_option_id;
+                    restoredAnswers[idx] = parsed;
                   }
-                } catch {
-                  restoredAnswers[idx] =
-                    sa.answer_text || sa.selected_option_id;
+                } else {
+                  restoredAnswers[idx] = sa.selected_option_id;
                 }
-                if (sa.is_flagged) restoredFlags.add(idx);
+              } catch {
+                restoredAnswers[idx] =
+                  sa.answer_text || sa.selected_option_id;
               }
-            });
-            setAnswers(restoredAnswers);
-            answersRef.current = restoredAnswers;
-            setFlaggedQuestions(restoredFlags);
-          }
+              if (sa.is_flagged) restoredFlags.add(idx);
+            }
+          });
 
+          setAnswers(restoredAnswers);
+          answersRef.current = restoredAnswers;
+          setFlaggedQuestions(restoredFlags);
+        }
+
+        const hasProgress =
+          hasSavedAnswers ||
+          (typeof activeSession.time_remaining === "number" &&
+            activeSession.time_remaining < examDurationRef.current);
+
+        if (hasProgress) {
+          // Resume directly into exam when there is any progress
+          // (saved answers or time already spent in this session)
           setExamStatus("in-progress");
 
           // Enter fullscreen if required
@@ -1660,6 +1659,10 @@ export default function ExamTakingPage() {
               console.log("Fullscreen request failed:", err);
             }
           }
+        } else {
+          // First-time start for this exam session -> show instructions once
+          setExamStatus("instructions");
+        }
         } else {
           // Check if exam was already submitted
           const { data: existingResult } = await supabase
@@ -2024,10 +2027,46 @@ export default function ExamTakingPage() {
     };
   }, []);
 
+  // --- Keyboard & shortcut restrictions (anti-cheating) ---
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const key = e.key.toLowerCase();
+      const isModifier = e.ctrlKey || e.metaKey;
+
+      // Block common copy/print/save shortcuts and print-screen
+      if (
+        e.key === "PrintScreen" ||
+        (isModifier &&
+          (key === "c" || key === "x" || key === "p" || key === "s"))
+      ) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown, true);
+    return () => window.removeEventListener("keydown", handleKeyDown, true);
+  }, []);
+
   // --- Handlers ---
 
   const handleStartExam = async () => {
     try {
+      // If a session already exists (created during login or takeover)
+      // and we're currently on the instructions screen, just move into
+      // the in-progress state instead of creating a new session.
+      if (sessionIdRef.current && sessionId) {
+        setExamStatus("in-progress");
+        if (examData?.fullscreen_required) {
+          try {
+            await document.documentElement.requestFullscreen();
+          } catch (err) {
+            console.log("Fullscreen request failed:", err);
+          }
+        }
+        return;
+      }
+
       // Generate security token
       const newSecurityToken = [...Array(32)]
         .map(() => Math.random().toString(36)[2])
@@ -2268,54 +2307,68 @@ export default function ExamTakingPage() {
 
   if (examStatus === "instructions") {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 p-4">
+      <div
+        className="flex items-center justify-center min-h-screen p-4 select-none"
+        style={{ backgroundColor: "#F7F7F4" }}
+        onContextMenu={(e) => e.preventDefault()}
+        onCopy={(e) => e.preventDefault()}
+        onCut={(e) => e.preventDefault()}
+      >
         <Card className="w-full max-w-2xl shadow-xl border-0">
           <CardHeader className="text-center bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-t-lg">
-            <CardTitle className="text-xl md:text-3xl font-bold">
+            <CardTitle className="text-lg md:text-2xl font-bold">
               {examData?.title}
             </CardTitle>
-            <p className="text-blue-100 pt-1 text-sm md:text-base">
-              Read carefully before starting.
+            <p className="text-blue-100 pt-1 text-xs md:text-sm">
+              Read all instructions carefully before you begin.
             </p>
           </CardHeader>
           <CardContent className="space-y-6 p-4 md:p-8">
-            <div className="grid grid-cols-2 gap-4 text-center">
-              <div className="p-3 md:p-4 bg-blue-50 rounded-lg border border-blue-100">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="p-3 md:p-4 bg-blue-50 rounded-lg border border-blue-100 text-center">
                 <p className="text-xs md:text-sm font-medium text-blue-600">
                   Duration
                 </p>
-                <p className="text-lg md:text-2xl font-bold text-gray-900">
+                <p className="text-base md:text-xl font-bold text-gray-900">
                   {examData?.duration} Min
                 </p>
               </div>
-              <div className="p-3 md:p-4 bg-indigo-50 rounded-lg border border-indigo-100">
+              <div className="p-3 md:p-4 bg-indigo-50 rounded-lg border border-indigo-100 text-center">
                 <p className="text-xs md:text-sm font-medium text-indigo-600">
                   Questions
                 </p>
-                <p className="text-lg md:text-2xl font-bold text-gray-900">
+                <p className="text-base md:text-xl font-bold text-gray-900">
                   {questions.length}
                 </p>
               </div>
             </div>
 
             {examData?.description && (
-              <div className="text-gray-600 bg-amber-50 p-3 md:p-4 rounded-lg border border-amber-200">
-                <div className="flex items-center gap-2">
-                  <AlertCircle className="h-4 w-4 md:h-5 md:w-5 text-amber-600" />
-                  <p className="font-semibold text-amber-800 text-sm md:text-base">
-                    Instructions
-                  </p>
+              <div className="rounded-xl border border-amber-200 bg-white/90 shadow-sm">
+                <div className="flex items-start gap-2 p-3 md:p-4 border-b border-amber-100 bg-amber-50/80">
+                  <AlertCircle className="h-4 w-4 md:h-5 md:w-5 text-amber-600 mt-0.5" />
+                  <div>
+                    <p className="font-semibold text-amber-900 text-xs md:text-sm uppercase tracking-wide">
+                      Exam Instructions
+                    </p>
+                    <p className="text-[11px] md:text-xs text-amber-800 mt-0.5">
+                      These instructions were prepared by your teacher. Please read them fully.
+                    </p>
+                  </div>
                 </div>
-                <p className="text-sm md:text-base mt-1">
-                  {examData.description}
-                </p>
+                <div className="p-3 md:p-4 max-h-64 md:max-h-80 overflow-y-auto bg-amber-50/40">
+                  <div
+                    className="prose prose-sm md:prose-base max-w-none text-slate-800 [&_p]:mb-2 [&_p:last-child]:mb-0"
+                    dangerouslySetInnerHTML={{ __html: examData.description }}
+                  />
+                </div>
               </div>
             )}
 
             <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 p-3 md:p-4 rounded-lg">
               <div className="flex items-center gap-2 mb-2 md:mb-3">
                 <AlertTriangle className="h-4 w-4 md:h-5 md:w-5 text-blue-600" />
-                <p className="font-bold text-blue-800 text-sm md:text-base">
+                <p className="font-bold text-blue-800 text-xs md:text-sm">
                   Exam Settings:
                 </p>
               </div>
@@ -2378,7 +2431,7 @@ export default function ExamTakingPage() {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Shield className="h-4 w-4 md:h-5 md:w-5 text-green-600" />
-                    <span className="font-medium text-green-800 text-sm md:text-base">
+                    <span className="font-medium text-green-800 text-xs md:text-sm">
                       Device Verified
                     </span>
                   </div>
@@ -2395,7 +2448,7 @@ export default function ExamTakingPage() {
 
             <Button
               size="lg"
-              className="w-full bg-zinc-900 hover:bg-zinc-700 text-white font-bold py-3 text-base md:text-lg transition-colors"
+              className="w-full bg-zinc-900 hover:bg-zinc-700 text-white font-semibold py-3 text-sm md:text-base transition-colors"
               onClick={handleStartExam}
               disabled={!securityInitialized}
             >
@@ -2427,14 +2480,20 @@ export default function ExamTakingPage() {
     const shouldShowResults = examData?.show_results !== false;
 
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 flex items-center justify-center p-4">
+      <div
+        className="min-h-screen flex items-center justify-center p-4 select-none"
+        style={{ backgroundColor: "#F7F7F4" }}
+        onContextMenu={(e) => e.preventDefault()}
+        onCopy={(e) => e.preventDefault()}
+        onCut={(e) => e.preventDefault()}
+      >
         <Card className="w-full max-w-2xl text-center shadow-2xl border-0 overflow-hidden">
           <div className="bg-gradient-to-r from-green-600 to-emerald-600 text-white p-6 md:p-8">
-            <CheckCircle2 className="h-16 w-16 md:h-20 md:w-20 mx-auto mb-4" />
-            <h2 className="text-xl md:text-3xl font-bold mb-2">
+            <CheckCircle2 className="h-12 w-12 md:h-16 md:w-16 mx-auto mb-4" />
+            <h2 className="text-lg md:text-2xl font-bold mb-2">
               Exam Submitted Successfully!
             </h2>
-            <p className="text-green-100 text-sm md:text-base">
+            <p className="text-green-100 text-xs md:text-sm">
               Your answers have been recorded and graded.
             </p>
           </div>
@@ -2447,7 +2506,7 @@ export default function ExamTakingPage() {
                     <p className="text-xs md:text-sm font-medium text-green-600">
                       Score Obtained
                     </p>
-                    <p className="text-lg md:text-2xl font-bold text-gray-900">
+                      <p className="text-base md:text-xl font-bold text-gray-900">
                       {submissionResult.totalMarks} /{" "}
                       {submissionResult.totalPossibleMarks}
                     </p>
@@ -2456,7 +2515,7 @@ export default function ExamTakingPage() {
                     <p className="text-xs md:text-sm font-medium text-blue-600">
                       Percentage
                     </p>
-                    <p className="text-lg md:text-2xl font-bold text-gray-900">
+                      <p className="text-base md:text-xl font-bold text-gray-900">
                       {submissionResult.percent}%
                     </p>
                   </div>
@@ -2467,7 +2526,7 @@ export default function ExamTakingPage() {
                     <p className="text-xs md:text-sm font-medium text-amber-600">
                       Correct Answers
                     </p>
-                    <p className="text-lg md:text-2xl font-bold text-gray-900">
+                      <p className="text-base md:text-xl font-bold text-gray-900">
                       {submissionResult.correctCount} /{" "}
                       {submissionResult.totalQuestions}
                     </p>
@@ -2476,7 +2535,7 @@ export default function ExamTakingPage() {
                     <p className="text-xs md:text-sm font-medium text-indigo-600">
                       Time Taken
                     </p>
-                    <p className="text-lg md:text-2xl font-bold text-gray-900">
+                      <p className="text-base md:text-xl font-bold text-gray-900">
                       {formatTime(submissionResult.timeSpent)}
                     </p>
                   </div>
@@ -2484,8 +2543,8 @@ export default function ExamTakingPage() {
 
                 <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-4 md:p-6 rounded-xl border border-blue-200">
                   <div className="flex items-center justify-center gap-2 md:gap-3 mb-3 md:mb-4">
-                    <Award className="h-6 w-6 md:h-8 md:w-8 text-amber-600" />
-                    <h3 className="text-lg md:text-xl font-bold text-gray-800">
+                    <Award className="h-5 w-5 md:h-7 md:w-7 text-amber-600" />
+                    <h3 className="text-base md:text-lg font-bold text-gray-800">
                       Performance Summary
                     </h3>
                   </div>
@@ -2550,163 +2609,177 @@ export default function ExamTakingPage() {
 
   // --- Main Exam UI ---
   return (
-    <div className="flex h-screen bg-gradient-to-br from-gray-50 to-blue-50 text-gray-900 select-none">
-      <PassageModal
-        isOpen={showPassageModal}
-        onClose={() => setShowPassageModal(false)}
-        passageHtml={currentPassageHtml}
-        questionNumber={currentQuestionIndex + 1}
-      />
+    <div
+      className="relative h-screen w-full text-gray-900 select-none text-[0.95rem] md:text-[0.98rem]"
+      style={{ backgroundColor: "#F7F7F4" }}
+      onContextMenu={(e) => e.preventDefault()}
+      onCopy={(e) => e.preventDefault()}
+      onCut={(e) => e.preventDefault()}
+    >
+      {examData?.fullscreen_required &&
+        examStatus === "in-progress" &&
+        isFullscreenActive && (
+          <div className="pointer-events-none absolute inset-0 bg-[#F7F7F4]/85 backdrop-blur-md" />
+        )}
 
-      {/* Floating Mobile Navigation */}
-      {isMobile && examStatus === "in-progress" && (
-        <FloatingMobileNavBar
-          currentQuestionIndex={currentQuestionIndex}
-          questions={questions}
-          flaggedQuestions={flaggedQuestions}
-          onQuestionSelect={setCurrentQuestionIndex}
-          isOpen={mobileNavOpen}
-          setIsOpen={setMobileNavOpen}
+      <div className="relative z-10 flex h-full">
+        <PassageModal
+          isOpen={showPassageModal}
+          onClose={() => setShowPassageModal(false)}
+          passageHtml={currentPassageHtml}
+          questionNumber={currentQuestionIndex + 1}
         />
-      )}
 
-      {/* Sidebar (Desktop) */}
-      {!isMobile && (
-        <aside
-          className={cn(
-            "bg-white border-r flex flex-col transition-all duration-300 ease-in-out shadow-lg",
-            isSidebarOpen
-              ? "w-64 md:w-80 p-3 md:p-4"
-              : "w-0 p-0 border-0 overflow-hidden"
-          )}
-        >
-          <div className="flex items-center justify-between mb-4 md:mb-6">
-            <h3 className="text-base md:text-lg font-semibold text-gray-800">
-              Question Navigator
-            </h3>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setIsSidebarOpen(false)}
-              className="h-8 w-8 md:h-9 md:w-9"
-            >
-              <PanelLeftClose className="h-4 w-4" />
-            </Button>
-          </div>
+        {/* Floating Mobile Navigation */}
+        {isMobile && examStatus === "in-progress" && (
+          <FloatingMobileNavBar
+            currentQuestionIndex={currentQuestionIndex}
+            questions={questions}
+            answers={answers}
+            flaggedQuestions={flaggedQuestions}
+            onQuestionSelect={setCurrentQuestionIndex}
+            isOpen={mobileNavOpen}
+            setIsOpen={setMobileNavOpen}
+          />
+        )}
 
-          <div className="flex-1 overflow-y-auto pr-2">
-            <div className="grid grid-cols-4 md:grid-cols-5 gap-2 md:gap-3">
-              {questions.map((_, i) => {
-                const isAnswered =
-                  answers[i] !== null && answers[i] !== undefined;
-                const isCurrent = currentQuestionIndex === i;
-                const isFlagged = flaggedQuestions.has(i);
-
-                return (
-                  <Button
-                    key={i}
-                    variant={
-                      isCurrent
-                        ? "default"
-                        : isAnswered
-                        ? "secondary"
-                        : "outline"
-                    }
-                    className={cn(
-                      "h-10 w-10 md:h-12 md:w-12 p-0 relative text-sm md:text-lg font-medium transition-all",
-                      isAnswered &&
-                        !isCurrent &&
-                        "bg-green-100 text-green-800 border-green-300 hover:bg-green-200",
-                      isFlagged && "border-amber-300"
-                    )}
-                    onClick={() => setCurrentQuestionIndex(i)}
-                  >
-                    {isFlagged && (
-                      <Flag className="absolute -top-1 -right-1 h-3 w-3 md:h-4 md:w-4 text-amber-500 fill-amber-500" />
-                    )}
-                    {i + 1}
-                  </Button>
-                );
-              })}
-            </div>
-          </div>
-
-          <div className="mt-auto pt-4 md:pt-6 border-t space-y-2 md:space-y-3">
-            <div className="flex justify-between items-center text-green-600 bg-green-50 p-2 md:p-3 rounded-lg">
-              <span className="flex items-center gap-1 md:gap-2 font-medium text-sm md:text-base">
-                <CheckCircle2 className="h-3 w-3 md:h-4 md:w-4" /> Answered
-              </span>
-              <span className="font-bold text-base md:text-lg">
-                {stats.answered}
-              </span>
-            </div>
-            <div className="flex justify-between items-center text-gray-600 bg-gray-50 p-2 md:p-3 rounded-lg">
-              <span className="flex items-center gap-1 md:gap-2 font-medium text-sm md:text-base">
-                <HelpCircle className="h-3 w-3 md:h-4 md:w-4" /> Unanswered
-              </span>
-              <span className="font-bold text-base md:text-lg">
-                {stats.unanswered}
-              </span>
-            </div>
-            <div className="flex justify-between items-center text-amber-600 bg-amber-50 p-2 md:p-3 rounded-lg">
-              <span className="flex items-center gap-1 md:gap-2 font-medium text-sm md:text-base">
-                <Flag className="h-3 w-3 md:h-4 md:w-4" /> Flagged
-              </span>
-              <span className="font-bold text-base md:text-lg">
-                {stats.flagged}
-              </span>
+        {/* Sidebar (Desktop) */}
+        {!isMobile && (
+          <aside
+            className={cn(
+              "bg-white border-r flex flex-col transition-all duration-300 ease-in-out shadow-lg",
+              isSidebarOpen
+                ? "w-64 md:w-80 p-3 md:p-4"
+                : "w-0 p-0 border-0 overflow-hidden"
+            )}
+          >
+            <div className="flex items-center justify-between mb-4 md:mb-6">
+              <h3 className="text-base md:text-lg font-semibold text-gray-800">
+                Question Navigator
+              </h3>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setIsSidebarOpen(false)}
+                className="h-8 w-8 md:h-9 md:w-9"
+              >
+                <PanelLeftClose className="h-4 w-4" />
+              </Button>
             </div>
 
-            {/* Security Status */}
-            <div
-              className={cn(
-                "flex justify-between items-center p-2 md:p-3 rounded-lg text-sm md:text-base",
-                connectionStatus === "connected"
-                  ? "text-blue-600 bg-blue-50"
-                  : connectionStatus === "disconnected"
-                  ? "text-red-600 bg-red-50"
-                  : "text-amber-600 bg-amber-50"
-              )}
-            >
-              <span className="flex items-center gap-1 md:gap-2 font-medium">
-                {connectionStatus === "connected" ? (
-                  <Activity className="h-3 w-3 md:h-4 md:w-4" />
-                ) : connectionStatus === "disconnected" ? (
-                  <WifiOff className="h-3 w-3 md:h-4 md:w-4" />
-                ) : (
-                  <AlertTriangle className="h-3 w-3 md:h-4 md:w-4" />
-                )}
-                {connectionStatus === "connected"
-                  ? "Connected"
-                  : connectionStatus === "disconnected"
-                  ? "Disconnected"
-                  : "Poor Connection"}
-              </span>
+            <div className="flex-1 overflow-y-auto pr-2">
+              <div className="grid grid-cols-4 md:grid-cols-5 gap-2 md:gap-3">
+                {questions.map((_, i) => {
+                  const isAnswered =
+                    answers[i] !== null && answers[i] !== undefined;
+                  const isCurrent = currentQuestionIndex === i;
+                  const isFlagged = flaggedQuestions.has(i);
+
+                  return (
+                    <Button
+                      key={i}
+                      variant={
+                        isCurrent
+                          ? "default"
+                          : isAnswered
+                          ? "secondary"
+                          : "outline"
+                      }
+                      className={cn(
+                        "h-10 w-10 md:h-12 md:w-12 p-0 relative text-sm md:text-lg font-medium transition-all",
+                        isAnswered &&
+                          !isCurrent &&
+                          "bg-green-100 text-green-800 border-green-300 hover:bg-green-200",
+                        isFlagged && "border-amber-300"
+                      )}
+                      onClick={() => setCurrentQuestionIndex(i)}
+                    >
+                      {isFlagged && (
+                        <Flag className="absolute -top-1 -right-1 h-3 w-3 md:h-4 md:w-4 text-amber-500 fill-amber-500" />
+                      )}
+                      {i + 1}
+                    </Button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="mt-auto pt-4 md:pt-6 border-t space-y-2 md:space-y-3">
+              <div className="flex justify-between items-center text-green-600 bg-green-50 p-2 md:p-3 rounded-lg">
+                <span className="flex items-center gap-1 md:gap-2 font-medium text-sm md:text-base">
+                  <CheckCircle2 className="h-3 w-3 md:h-4 md:w-4" /> Answered
+                </span>
+                <span className="font-bold text-base md:text-lg">
+                  {stats.answered}
+                </span>
+              </div>
+              <div className="flex justify-between items-center text-gray-600 bg-gray-50 p-2 md:p-3 rounded-lg">
+                <span className="flex items-center gap-1 md:gap-2 font-medium text-sm md:text-base">
+                  <HelpCircle className="h-3 w-3 md:h-4 md:w-4" /> Unanswered
+                </span>
+                <span className="font-bold text-base md:text-lg">
+                  {stats.unanswered}
+                </span>
+              </div>
+              <div className="flex justify-between items-center text-amber-600 bg-amber-50 p-2 md:p-3 rounded-lg">
+                <span className="flex items-center gap-1 md:gap-2 font-medium text-sm md:text-base">
+                  <Flag className="h-3 w-3 md:h-4 md:w-4" /> Flagged
+                </span>
+                <span className="font-bold text-base md:text-lg">
+                  {stats.flagged}
+                </span>
+              </div>
+
+              {/* Security Status */}
               <div
                 className={cn(
-                  "w-2 h-2 rounded-full",
+                  "flex justify-between items-center p-2 md:p-3 rounded-lg text-sm md:text-base",
                   connectionStatus === "connected"
-                    ? "bg-green-500 animate-pulse"
+                    ? "text-blue-600 bg-blue-50"
                     : connectionStatus === "disconnected"
-                    ? "bg-red-500"
-                    : "bg-amber-500"
+                    ? "text-red-600 bg-red-50"
+                    : "text-amber-600 bg-amber-50"
                 )}
-              ></div>
+              >
+                <span className="flex items-center gap-1 md:gap-2 font-medium">
+                  {connectionStatus === "connected" ? (
+                    <Activity className="h-3 w-3 md:h-4 md:w-4" />
+                  ) : connectionStatus === "disconnected" ? (
+                    <WifiOff className="h-3 w-3 md:h-4 md:w-4" />
+                  ) : (
+                    <AlertTriangle className="h-3 w-3 md:h-4 md:w-4" />
+                  )}
+                  {connectionStatus === "connected"
+                    ? "Connected"
+                    : connectionStatus === "disconnected"
+                    ? "Disconnected"
+                    : "Poor Connection"}
+                </span>
+                <div
+                  className={cn(
+                    "w-2 h-2 rounded-full",
+                    connectionStatus === "connected"
+                      ? "bg-green-500 animate-pulse"
+                      : connectionStatus === "disconnected"
+                      ? "bg-red-500"
+                      : "bg-amber-500"
+                  )}
+                ></div>
+              </div>
             </div>
-          </div>
-        </aside>
-      )}
+          </aside>
+        )}
 
-      <div className="flex-1 flex flex-col">
+        <div className="flex-1 flex flex-col">
         {/* Header */}
-        <header className="flex items-center justify-between p-3 md:p-4 border-b bg-white sticky top-0 z-10 shadow-sm">
+        <header className="flex items-center justify-between p-3 md:p-4 border-b border-[#e3e3dd] bg-[#F7F7F4] sticky top-0 z-10">
           <div className="flex items-center gap-2 md:gap-4">
             {!isMobile && (
               <Button
                 variant="outline"
                 size="icon"
                 onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-                className="border-blue-200 hover:bg-blue-50 h-8 w-8 md:h-9 md:w-9"
+                className="border-[#e3e3dd] hover:bg-[#f1f1ec] h-8 w-8 md:h-9 md:w-9"
               >
                 {isSidebarOpen ? (
                   <PanelLeftClose className="h-4 w-4" />
@@ -2716,7 +2789,7 @@ export default function ExamTakingPage() {
               </Button>
             )}
             <div>
-              <h1 className="font-bold text-sm md:text-lg truncate max-w-[180px] md:max-w-[300px]">
+              <h1 className="font-semibold text-sm md:text-base truncate max-w-[180px] md:max-w-[300px]">
                 {examData?.title}
               </h1>
               <p className="text-xs md:text-sm text-gray-500">
@@ -2731,7 +2804,7 @@ export default function ExamTakingPage() {
                 variant="outline"
                 size="icon"
                 onClick={() => setIsTimerVisible(!isTimerVisible)}
-                className="h-7 w-7 md:h-8 md:w-8 border-blue-200 hover:bg-blue-50"
+                  className="h-7 w-7 md:h-8 md:w-8 border-[#e3e3dd] hover:bg-[#f1f1ec]"
               >
                 {isTimerVisible ? (
                   <EyeOff className="h-3 w-3 md:h-4 md:w-4" />
@@ -2742,14 +2815,21 @@ export default function ExamTakingPage() {
               {isTimerVisible && (
                 <div
                   className={cn(
-                    "flex items-center gap-1 md:gap-2 font-mono text-sm md:text-lg font-bold px-2 md:px-3 py-1 rounded-lg",
+                    "flex items-center gap-1 md:gap-2 font-mono text-xs md:text-sm font-semibold px-2 md:px-3 py-1 rounded-lg border border-[#e3e3dd]",
                     timeLeft < 300
-                      ? "bg-red-50 text-red-600 animate-pulse"
-                      : "bg-blue-50 text-blue-600"
+                      ? "bg-red-50 text-red-600"
+                      : "bg-white text-gray-800"
                   )}
                 >
                   <Clock className="h-4 w-4 md:h-5 md:w-5" />
-                  {formatTime(timeLeft)}
+                  <div className="flex items-baseline gap-0.5">
+                    <SlidingNumber
+                      value={Math.floor(timeLeft / 60)}
+                      padStart
+                    />
+                    <span>:</span>
+                    <SlidingNumber value={timeLeft % 60} padStart />
+                  </div>
                   {timeLeft < 300 && (
                     <span className="text-xs ml-1">(Low!)</span>
                   )}
@@ -2757,11 +2837,22 @@ export default function ExamTakingPage() {
               )}
             </div>
 
+            {isMobile && (
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => setMobileNavOpen(true)}
+                className="h-8 w-8 border-[#e3e3dd] hover:bg-[#f1f1ec]"
+              >
+                <Grid className="h-4 w-4" />
+              </Button>
+            )}
+
             <Separator orientation="vertical" className="h-6 md:h-8" />
 
             <div className="flex items-center gap-2 md:gap-3">
               <Avatar className="border border-blue-200 h-8 w-8 md:h-9 md:w-9">
-                <AvatarFallback className="bg-blue-100 text-blue-700 text-xs md:text-sm">
+                <AvatarFallback className="bg-[#ebece4] text-gray-800 text-xs md:text-sm font-medium">
                   {studentInfo?.name?.[0] || "S"}
                 </AvatarFallback>
               </Avatar>
@@ -2776,9 +2867,9 @@ export default function ExamTakingPage() {
             </div>
 
             <Button
-              variant="destructive"
+              variant="outline"
               onClick={() => setIsConfirmModalOpen(true)}
-              className="bg-zinc-900 hover:bg-zinc-700 text-white text-xs md:text-sm px-3 md:px-4 py-1.5 md:py-2 transition-colors"
+              className="border border-[#e3e3dd] bg-white hover:bg-[#f1f1ec] text-xs md:text-sm px-3 md:px-4 py-1.5 md:py-2 font-medium transition-colors"
             >
               Submit
             </Button>
@@ -2788,16 +2879,16 @@ export default function ExamTakingPage() {
         {/* Main Content */}
         <main className="flex-1 p-3 md:p-6 overflow-y-auto pb-20 md:pb-6">
           {currentQ && (
-            <Card className="shadow-xl border-0 overflow-hidden">
-              <CardHeader className="p-4 md:p-8 bg-gradient-to-r from-blue-50 to-indigo-50">
+            <Card className="overflow-hidden border border-[#e3e3dd] bg-white shadow-sm rounded-xl">
+              <CardHeader className="p-4 md:p-6 border-b border-[#e3e3dd] bg-white">
                 <div className="flex justify-between items-start">
                   <div className="flex-1">
                     <div className="flex items-center justify-between mb-3 md:mb-4">
                       <div className="flex items-center gap-2 md:gap-3">
-                        <div className="px-2 md:px-3 py-1 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-full text-xs md:text-sm font-semibold">
+                        <div className="px-2 md:px-3 py-0.5 bg-[#ebece4] text-gray-800 rounded-full text-[11px] md:text-xs font-medium border border-[#e3e3dd]">
                           Q{currentQuestionIndex + 1}
                         </div>
-                        <p className="text-xs md:text-sm font-medium text-gray-600">
+                        <p className="text-[11px] md:text-xs font-medium text-gray-500">
                           {currentQ.type === "matching" &&
                             currentQ.matchingPairs &&
                             `${currentQ.matchingPairs.length} matching pairs`}
@@ -2839,7 +2930,7 @@ export default function ExamTakingPage() {
                     {/* Question Text */}
                     <div className="mt-3 md:mt-4">
                       {currentQ.type === "blank" ? (
-                        <div className="text-sm md:text-lg leading-relaxed font-medium bg-white p-3 md:p-4 rounded-lg border">
+                        <div className="text-sm md:text-base leading-relaxed font-normal bg-[#fafaf6] p-3 md:p-4 rounded-lg border border-[#e3e3dd]">
                           {currentQ.question_text
                             .split(/(\[BLANK:[^\]]+\])/g)
                             .map((part: string, i: number) => {
@@ -2868,18 +2959,18 @@ export default function ExamTakingPage() {
                       ) : currentQ.type === "matching" ? (
                         <div className="space-y-3 md:space-y-4">
                           {currentQ.matchingInstructions && (
-                            <div className="bg-blue-100 p-2 md:p-3 rounded-lg border border-blue-200">
-                              <p className="text-xs md:text-sm font-medium text-blue-800">
+                            <div className="bg-[#fafaf6] p-2 md:p-3 rounded-lg border border-[#e3e3dd]">
+                              <p className="text-xs md:text-sm font-medium text-gray-700">
                                 {renderWithMath(currentQ.matchingInstructions)}
                               </p>
                             </div>
                           )}
-                          <CardTitle className="text-base md:text-xl text-gray-800">
+                          <CardTitle className="text-sm md:text-base text-gray-800 font-medium">
                             {renderWithMath(currentQ.question_text)}
                           </CardTitle>
                         </div>
                       ) : (
-                        <CardTitle className="text-base md:text-xl leading-relaxed text-gray-800">
+                        <CardTitle className="text-sm md:text-base leading-relaxed text-gray-800 font-medium">
                           {renderWithMath(currentQ.question_text)}
                         </CardTitle>
                       )}
@@ -2904,8 +2995,8 @@ export default function ExamTakingPage() {
                 {/* MCQ / TF / Passage Options */}
                 {["mcq", "tf", "passage"].includes(currentQ.type) && (
                   <div className="space-y-3 md:space-y-4">
-                    <p className="text-xs md:text-sm font-medium text-gray-600 mb-1 md:mb-2">
-                      choose the best option
+                    <p className="text-[11px] md:text-xs font-medium text-gray-500 mb-1 md:mb-2 uppercase tracking-wide">
+                      Choose the best option
                     </p>
                     <RadioGroup
                       value={answers[currentQuestionIndex]?.toString() ?? ""}
@@ -2919,10 +3010,10 @@ export default function ExamTakingPage() {
                           <div
                             key={idx}
                             className={cn(
-                              "flex items-center p-3 md:p-5 rounded-lg md:rounded-xl border-2 cursor-pointer transition-all hover:shadow-md",
+                              "flex items-center p-3 md:p-4 rounded-lg border cursor-pointer transition-all",
                               isSelected
-                                ? "border-blue-500 bg-gradient-to-r from-blue-50 to-indigo-50"
-                                : "border-gray-200 hover:border-blue-300"
+                                ? "border-blue-500 bg-[#f3f6ff]"
+                                : "border-[#e3e3dd] bg-white hover:border-blue-300 hover:bg-[#f6f6f0]"
                             )}
                             onClick={() => handleAnswerChange(idx)}
                           >
@@ -2934,15 +3025,15 @@ export default function ExamTakingPage() {
                             <div className="flex w-full items-center">
                               <div
                                 className={cn(
-                                  "h-8 w-8 md:h-12 md:w-12 rounded-lg md:rounded-xl flex items-center justify-center mr-3 md:mr-4 font-bold text-base md:text-lg border-2 transition-all",
+                                  "h-8 w-8 md:h-9 md:w-9 rounded-md flex items-center justify-center mr-3 md:mr-4 font-medium text-sm md:text-base border transition-all",
                                   isSelected
-                                    ? "bg-gradient-to-r from-blue-600 to-indigo-600 text-white border-blue-600"
-                                    : "bg-gray-100 text-gray-600 border-gray-300"
+                                    ? "bg-blue-600 text-white border-blue-600"
+                                    : "bg-[#f3f3ee] text-gray-700 border-[#deded7]"
                                 )}
                               >
                                 {String.fromCharCode(65 + idx)}
                               </div>
-                              <div className="flex-1 font-medium text-sm md:text-base">
+                              <div className="flex-1 font-normal text-sm md:text-sm text-gray-800">
                                 {renderWithMath(opt.text)}
                               </div>
                               {opt.image && (
@@ -3104,6 +3195,9 @@ export default function ExamTakingPage() {
             </div>
           </div>
         </main>
+      </div>
+
+      {/* Close inner layout wrapper */}
       </div>
 
       {/* Submit Confirmation Modal */}
