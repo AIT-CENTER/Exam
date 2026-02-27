@@ -2192,7 +2192,7 @@ export default function EditExamPage() {
         }
       />
       {/* Ensure TipTap editor styles exist on all steps (instructions + passage) */}
-      <style jsx global>{`
+      <style>{`
         .ProseMirror {
           min-height: 180px;
           padding: 1rem;
@@ -2450,7 +2450,7 @@ export default function EditExamPage() {
                           Loading editor...
                         </div>
                       )}
-                      <style jsx global>{`
+                      <style>{`
                         .ProseMirror {
                           min-height: 200px;
                           padding: 1rem;
