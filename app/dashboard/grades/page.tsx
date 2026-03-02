@@ -174,9 +174,28 @@ export default function GradesPage() {
   
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
+  const [canCreateGrade, setCanCreateGrade] = useState(true);
 
   useEffect(() => {
     fetchAllData();
+
+    (async () => {
+      try {
+        const res = await fetch("/api/admin/page-permissions", { cache: "no-store" });
+        if (res.ok) {
+          const json = await res.json();
+          const role = json.role as "super_admin" | "admin" | undefined;
+          const permissions = (json.permissions || {}) as Record<string, boolean>;
+          if (!role || role === "super_admin") {
+            setCanCreateGrade(true);
+          } else {
+            setCanCreateGrade(permissions["grades_create"] !== false);
+          }
+        }
+      } catch {
+        setCanCreateGrade(true);
+      }
+    })();
   }, []);
 
   const fetchAllData = async () => {
@@ -526,9 +545,13 @@ export default function GradesPage() {
             Manage your grades and assign subjects and sections to them.
           </p>
         </div>
-        <Button onClick={handleCreate} className="gap-2 w-full sm:w-auto">
+        <Button
+          onClick={handleCreate}
+          className="gap-2 w-full sm:w-auto"
+          disabled={!canCreateGrade}
+        >
           <PlusCircle className="h-4 w-4" />
-          Create Grade
+          {canCreateGrade ? "Create Grade" : "Create Grade (locked)"}
         </Button>
       </div>
 
@@ -541,9 +564,11 @@ export default function GradesPage() {
           <CardDescription className="mt-2 max-w-sm mx-auto">
             Create your first grade to get started managing subjects and sections.
           </CardDescription>
-          <Button onClick={handleCreate} className="mt-6">
-            Create First Grade
-          </Button>
+          {canCreateGrade && (
+            <Button onClick={handleCreate} className="mt-6">
+              Create First Grade
+            </Button>
+          )}
         </Card>
       ) : (
         <>

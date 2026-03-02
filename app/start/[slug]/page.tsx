@@ -159,28 +159,36 @@ class EnhancedSessionMonitor {
   private heartbeatFailedCount = 0;
   private deviceChanged = false;
 
+  private onExpired?: () => void;
+  private onServerTimeSync?: (serverTimeRemaining: number) => void;
+  private onRiskSync?: (riskCount: number, maxRiskBeforeSubmit: number) => void;
+
   constructor(
     sessionId: string,
     securityToken: string,
     deviceFingerprint: string,
     onSessionTerminated: (reason: string) => void,
-    onRedirectHome: () => void
+    onRedirectHome: () => void,
+    options?: { onExpired?: () => void; onServerTimeSync?: (sec: number) => void; onRiskSync?: (riskCount: number, maxRisk: number) => void }
   ) {
     this.sessionId = sessionId;
     this.securityToken = securityToken;
     this.deviceFingerprint = deviceFingerprint;
     this.onSessionTerminated = onSessionTerminated;
     this.onRedirectHome = onRedirectHome;
+    this.onExpired = options?.onExpired;
+    this.onServerTimeSync = options?.onServerTimeSync;
+    this.onRiskSync = options?.onRiskSync;
   }
 
   async start() {
     // Send immediate heartbeat to claim session
     await this.sendHeartbeat(true);
 
-    // Start heartbeat every 3 seconds
+    // Server-authoritative heartbeat every 5 seconds (security: cannot pause timer)
     this.heartbeatInterval = setInterval(async () => {
       await this.sendHeartbeat();
-    }, 3000);
+    }, 5000);
 
     // Check device ownership every 5 seconds
     this.deviceCheckInterval = setInterval(async () => {
@@ -200,36 +208,35 @@ class EnhancedSessionMonitor {
 
     try {
       this.lastHeartbeatTime = Date.now();
+      const timeRemaining = this.getTimeRemainingCallback?.() ?? 0;
 
-      // Update both tables atomically
-      const updates = [
-        supabase
-          .from("exam_sessions")
-          .update({
-            last_activity_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-            time_remaining: this.getTimeRemainingCallback?.(),
-          })
-          .eq("id", this.sessionId)
-          .eq("security_token", this.securityToken),
+      // Server-authoritative heartbeat: server computes time_remaining and returns sync
+      const base = typeof window !== "undefined" ? window.location.origin : "";
+      const res = await fetch(`${base}/api/exam/heartbeat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sessionId: this.sessionId,
+          securityToken: this.securityToken,
+          timeRemaining,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
 
-        supabase
-          .from("session_security")
-          .update({
-            last_verified: new Date().toISOString(),
-            device_fingerprint: this.deviceFingerprint,
-            is_active: true,
-          })
-          .eq("session_id", this.sessionId)
-          .eq("token", this.securityToken),
-      ];
+      if (!res.ok) {
+        throw new Error(data?.error || "Heartbeat failed");
+      }
 
-      const results = await Promise.all(updates);
+      if (data.expired) {
+        this.onExpired?.();
+        return;
+      }
 
-      // Check for errors
-      const hasError = results.some((result) => result.error);
-      if (hasError) {
-        throw new Error("Heartbeat update failed");
+      if (typeof data.serverTimeRemaining === "number" && data.serverTimeRemaining >= 0) {
+        this.onServerTimeSync?.(data.serverTimeRemaining);
+      }
+      if (typeof data.risk_count === "number" && typeof data.max_risk_before_submit === "number") {
+        this.onRiskSync?.(data.risk_count, data.max_risk_before_submit);
       }
 
       this.heartbeatFailedCount = 0;
@@ -243,10 +250,30 @@ class EnhancedSessionMonitor {
     } catch (error) {
       console.error("Heartbeat failed:", error);
       this.heartbeatFailedCount++;
+      await this.logActivity("heartbeat_fail", { count: this.heartbeatFailedCount });
 
       if (this.heartbeatFailedCount >= 3) {
         this.terminateSession("Connection lost. Multiple heartbeat failures.");
       }
+    }
+  }
+
+  /** Log security-relevant activity (tab switch, fullscreen exit, device change, etc.) */
+  private async logActivity(eventType: string, metadata?: Record<string, unknown>) {
+    try {
+      const base = typeof window !== "undefined" ? window.location.origin : "";
+      await fetch(`${base}/api/exam/activity`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sessionId: this.sessionId,
+          securityToken: this.securityToken,
+          eventType,
+          metadata: metadata ?? {},
+        }),
+      });
+    } catch {
+      // best-effort
     }
   }
 
@@ -272,9 +299,13 @@ class EnhancedSessionMonitor {
         return;
       }
 
-      // Check if device fingerprint matches
+      // Check if device fingerprint matches (soft device binding: log and terminate)
       if (security.device_fingerprint !== this.deviceFingerprint) {
         this.deviceChanged = true;
+        await this.logActivity("device_change", {
+          previousFingerprint: this.deviceFingerprint,
+          currentFingerprint: security.device_fingerprint,
+        });
         this.terminateSession(
           "Device changed. Session taken over by another device."
         );
@@ -1078,6 +1109,8 @@ export default function ExamTakingPage() {
     "connected" | "disconnected" | "poor"
   >("connected");
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [riskCount, setRiskCount] = useState(0);
+  const [maxRiskBeforeSubmit, setMaxRiskBeforeSubmit] = useState(7);
 
   // Refs
   const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -1086,6 +1119,10 @@ export default function ExamTakingPage() {
   const lastFullscreenCheckRef = useRef<number>(0);
   const sessionMonitorRef = useRef<EnhancedSessionMonitor | null>(null);
   const lastAnswerSaveRef = useRef<number>(0);
+  const riskCountRef = useRef<number>(0);
+  const maxRiskBeforeSubmitRef = useRef<number>(7);
+  const tabExitPendingRef = useRef<boolean>(false);
+  const tabExitLastSentAtRef = useRef<number>(0);
 
   // Refs to track latest state for timer callback
   const questionsRef = useRef<any[]>([]);
@@ -1103,7 +1140,18 @@ export default function ExamTakingPage() {
     studentInfoRef.current = studentInfo;
     sessionIdRef.current = sessionId;
     securityTokenRef.current = securityToken;
-  }, [questions, answers, examData, studentInfo, sessionId, securityToken]);
+    riskCountRef.current = riskCount;
+    maxRiskBeforeSubmitRef.current = maxRiskBeforeSubmit;
+  }, [
+    questions,
+    answers,
+    examData,
+    studentInfo,
+    sessionId,
+    securityToken,
+    riskCount,
+    maxRiskBeforeSubmit,
+  ]);
 
   // Initialize device fingerprinting
   useEffect(() => {
@@ -1146,10 +1194,26 @@ export default function ExamTakingPage() {
         handleSessionInvalidation,
         () => {
           router.push("/");
+        },
+        {
+          onExpired: () => {
+            if (!autoSubmitTriggeredRef.current) {
+              autoSubmitTriggeredRef.current = true;
+              submitExam(true);
+            }
+          },
+          onServerTimeSync: (serverTimeRemaining) => {
+            setTimeLeft(serverTimeRemaining);
+            timeLeftRef.current = serverTimeRemaining;
+          },
+          onRiskSync: (riskCount, maxRisk) => {
+            setRiskCount(riskCount);
+            setMaxRiskBeforeSubmit(maxRisk);
+          },
         }
       );
 
-      // Set time remaining callback
+      // Set time remaining callback for heartbeat payload
       monitor.setTimeRemainingCallback(() => timeLeftRef.current);
 
       monitor.start();
@@ -1501,42 +1565,70 @@ export default function ExamTakingPage() {
         setAnswers(initialAnswers);
         answersRef.current = initialAnswers;
 
-        // Check for existing session (resume or new)
-        let activeSession = null;
-        let sessionToken = tokenParam;
+        // Session: from URL (index flow) or from server APIs (no duplicate creation).
+        let activeSession: any = null;
+        let sessionToken = tokenParam || null;
 
-        // If session ID is provided in URL, try to resume that specific session
-        if (sessionParam) {
-          const { data: session } = await supabase
-            .from("exam_sessions")
-            .select("*")
-            .eq("id", sessionParam)
-            .eq("student_id", student.id)
-            .eq("exam_id", exam.id)
-            .eq("status", "in_progress")
-            .single();
-
-          activeSession = session;
-
-          if (activeSession && !sessionToken) {
-            sessionToken = activeSession.security_token;
-          }
-        } else {
-          // Otherwise look for any active session
-          const { data: activeSessions } = await supabase
-            .from("exam_sessions")
-            .select("*")
-            .eq("student_id", student.id)
-            .eq("exam_id", exam.id)
-            .eq("status", "in_progress");
-
-          activeSession =
-            activeSessions && activeSessions.length > 0
-              ? activeSessions[0]
-              : null;
-
-          if (activeSession && !sessionToken) {
-            sessionToken = activeSession.security_token;
+        if (sessionParam && sessionToken) {
+          // Index page sent session + token; trust and validate via server-time (no client session query).
+          activeSession = {
+            id: sessionParam,
+            security_token: sessionToken,
+            student_id: student.id,
+            exam_id: exam.id,
+            status: "in_progress",
+          };
+        } else if (!sessionParam) {
+          // No session in URL: check/create via API so we never create duplicate sessions from client.
+          const base = typeof window !== "undefined" ? window.location.origin : "";
+          const fp = await getBrowserFingerprint();
+          const checkRes = await fetch(`${base}/api/exam/check-session`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              studentId: student.id,
+              examId: exam.id,
+              deviceFingerprint: fp,
+            }),
+          });
+          const checkData = await checkRes.json();
+          if (checkData.exists && checkData.session) {
+            activeSession = {
+              id: checkData.session.id,
+              security_token: checkData.session.security_token,
+              student_id: student.id,
+              exam_id: exam.id,
+              status: "in_progress",
+              time_remaining: checkData.session.time_remaining,
+            };
+            sessionToken = checkData.session.security_token;
+          } else {
+            const createRes = await fetch(`${base}/api/exam/create-session`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                studentId: student.id,
+                examId: exam.id,
+                teacherId: exam.created_by,
+                deviceFingerprint: fp,
+                ipAddress: typeof window !== "undefined" ? localStorage.getItem("ip_address") || undefined : undefined,
+                userAgent: typeof navigator !== "undefined" ? navigator.userAgent : "",
+              }),
+            });
+            const createData = await createRes.json();
+            if (!createRes.ok || !createData.session) {
+              toast.error(createData.error || "Failed to start exam");
+              return;
+            }
+            activeSession = {
+              id: createData.session.id,
+              security_token: createData.session.security_token,
+              student_id: student.id,
+              exam_id: exam.id,
+              status: "in_progress",
+              time_remaining: createData.session.time_remaining,
+            };
+            sessionToken = createData.session.security_token;
           }
         }
 
@@ -1568,15 +1660,32 @@ export default function ExamTakingPage() {
             localStorage.setItem("security_token", sessionToken);
           }
 
-          // Resume existing session
+          // Resume existing session; timer is server-based (do not trust client-stored duration).
           setSessionId(activeSession.id);
           sessionIdRef.current = activeSession.id;
-          const remaining =
-            activeSession.time_remaining !== null
-              ? activeSession.time_remaining
-              : examDurationRef.current;
-          setTimeLeft(remaining);
-          timeLeftRef.current = remaining;
+
+          const base = typeof window !== "undefined" ? window.location.origin : "";
+          const timeRes = await fetch(
+            `${base}/api/exam/server-time?sessionId=${encodeURIComponent(activeSession.id)}&securityToken=${encodeURIComponent(sessionToken)}`
+          );
+          const timeData = await timeRes.json();
+          if (timeRes.ok && typeof timeData.serverTimeRemaining === "number") {
+            const remaining = Math.max(0, timeData.serverTimeRemaining);
+            setTimeLeft(remaining);
+            timeLeftRef.current = remaining;
+            if (timeData.risk_count != null) setRiskCount(timeData.risk_count);
+            if (timeData.max_risk_before_submit != null) setMaxRiskBeforeSubmit(timeData.max_risk_before_submit);
+            if (timeData.expired) {
+              toast.error("Exam time has expired");
+              router.push("/");
+              return;
+            }
+          } else {
+            const fallback = activeSession.time_remaining ?? examDurationRef.current;
+            setTimeLeft(fallback);
+            timeLeftRef.current = fallback;
+          }
+          const instructionSeen = timeRes.ok && timeData.instruction_seen === true;
 
         // Load saved answers
         const { data: savedAnswers } = await supabase
@@ -1646,12 +1755,8 @@ export default function ExamTakingPage() {
           (typeof activeSession.time_remaining === "number" &&
             activeSession.time_remaining < examDurationRef.current);
 
-        if (hasProgress) {
-          // Resume directly into exam when there is any progress
-          // (saved answers or time already spent in this session)
+        if (instructionSeen || hasProgress) {
           setExamStatus("in-progress");
-
-          // Enter fullscreen if required
           if (exam.fullscreen_required) {
             try {
               await document.documentElement.requestFullscreen();
@@ -1660,7 +1765,6 @@ export default function ExamTakingPage() {
             }
           }
         } else {
-          // First-time start for this exam session -> show instructions once
           setExamStatus("instructions");
         }
         } else {
@@ -1852,13 +1956,12 @@ export default function ExamTakingPage() {
         sessionMonitorRef.current.stop();
       }
 
-      // Update Session
+      // Update Session (never store time_remaining; timer is end_time - now)
       const { error: sessionError } = await supabase
         .from("exam_sessions")
         .update({
           status: "submitted",
           submitted_at: new Date().toISOString(),
-          time_remaining: 0,
           score: result.totalMarks,
         })
         .eq("id", currentSessionId);
@@ -1938,7 +2041,7 @@ export default function ExamTakingPage() {
       localStorage.removeItem("security_token");
 
       if (isAutoSubmit) {
-        toast.info("Exam auto-submitted due to time expiration");
+        toast.info("Exam auto-submitted (time expired or risk limit reached)");
       } else {
         toast.success("Exam submitted successfully!");
       }
@@ -1988,7 +2091,137 @@ export default function ExamTakingPage() {
     };
   }, [examStatus, sessionId]);
 
-  // --- Fullscreen Check ---
+  // --- Tab visibility: ONLY tab exit increments risk_count (once per exit, deduplicated server-side) ---
+  useEffect(() => {
+    if (examStatus !== "in-progress" || !sessionId) return;
+
+    const base = typeof window !== "undefined" ? window.location.origin : "";
+    const incrementUrl = `${base}/api/exam/increment-risk`;
+
+    const syncFromServer = async (opts?: { showToastIfIncreased?: boolean }) => {
+      try {
+        if (!securityTokenRef.current) return;
+        const params = new URLSearchParams({
+          sessionId,
+          securityToken: securityTokenRef.current,
+        });
+        const res = await fetch(`${base}/api/exam/server-time?${params.toString()}`, {
+          cache: "no-store",
+        });
+        const data = await res.json().catch(() => null);
+        if (!data) return;
+
+        const newRiskCount =
+          typeof data.risk_count === "number" ? data.risk_count : null;
+        const newMaxRisk =
+          typeof data.max_risk_before_submit === "number"
+            ? data.max_risk_before_submit
+            : null;
+
+        if (newRiskCount != null) setRiskCount(newRiskCount);
+        if (newMaxRisk != null) setMaxRiskBeforeSubmit(newMaxRisk);
+
+        if (opts?.showToastIfIncreased && newRiskCount != null) {
+          const prev = riskCountRef.current ?? 0;
+          const max = newMaxRisk ?? maxRiskBeforeSubmitRef.current ?? 7;
+          if (newRiskCount > prev) {
+            toast.warning(`Tab switch detected. Risk: ${newRiskCount}/${max}`);
+          }
+        }
+      } catch {
+        // ignore sync failures
+      }
+    };
+
+    const sendIncrement = async () => {
+      if (!securityTokenRef.current) return;
+      const now = Date.now();
+      // Local throttle to avoid multiple triggers (server also dedupes)
+      if (now - tabExitLastSentAtRef.current < 1500) return;
+      tabExitLastSentAtRef.current = now;
+      tabExitPendingRef.current = true;
+
+      const payload = JSON.stringify({
+        sessionId,
+        securityToken: securityTokenRef.current,
+      });
+
+      // Prefer fetch with keepalive for reliability when backgrounding/unloading.
+      try {
+        const res = await fetch(incrementUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: payload,
+          cache: "no-store",
+          // @ts-expect-error - keepalive is supported in browsers; TS lib may vary
+          keepalive: true,
+        });
+        const data = await res.json().catch(() => null);
+        if (data) {
+          if (typeof data.risk_count === "number") setRiskCount(data.risk_count);
+          if (typeof data.max_risk_before_submit === "number") {
+            setMaxRiskBeforeSubmit(data.max_risk_before_submit);
+          }
+          // We can't reliably show a toast while hidden; sync + toast on return instead.
+          if (data.autoSubmitted && !autoSubmitTriggeredRef.current) {
+            autoSubmitTriggeredRef.current = true;
+            submitExam(true);
+          }
+          return;
+        }
+      } catch {
+        // fall through to sendBeacon
+      }
+
+      // Fallback: sendBeacon (no response) to avoid missing increments.
+      try {
+        if (typeof navigator !== "undefined" && "sendBeacon" in navigator) {
+          const blob = new Blob([payload], { type: "application/json" });
+          navigator.sendBeacon(incrementUrl, blob);
+        }
+      } catch {
+        // ignore
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        void sendIncrement();
+        return;
+      }
+
+      if (document.visibilityState === "visible" && tabExitPendingRef.current) {
+        tabExitPendingRef.current = false;
+        void syncFromServer({ showToastIfIncreased: true });
+      }
+    };
+
+    const handlePageHide = () => {
+      // pagehide is more reliable than beforeunload across browsers
+      void sendIncrement();
+    };
+
+    const handleFocus = () => {
+      // If student returns via focus without a visibilitychange (edge cases), sync and toast.
+      if (tabExitPendingRef.current) {
+        tabExitPendingRef.current = false;
+        void syncFromServer({ showToastIfIncreased: true });
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("pagehide", handlePageHide);
+    window.addEventListener("focus", handleFocus);
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("pagehide", handlePageHide);
+      window.removeEventListener("focus", handleFocus);
+    };
+  }, [examStatus, sessionId]);
+
+  // --- Fullscreen Check + log fullscreen_exit activity ---
+  // First exit: toast warning only, no risk increment. Subsequent: increment risk_count, may auto-submit.
   useEffect(() => {
     const checkFullscreen = () => {
       const isFs = !!document.fullscreenElement;
@@ -2001,12 +2234,36 @@ export default function ExamTakingPage() {
       ) {
         setShowFullscreenWarning(true);
         lastFullscreenCheckRef.current = Date.now();
+        if (sessionId && securityTokenRef.current) {
+          const base = typeof window !== "undefined" ? window.location.origin : "";
+          fetch(`${base}/api/exam/activity`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              sessionId,
+              securityToken: securityTokenRef.current,
+              eventType: "fullscreen_exit",
+              metadata: { at: new Date().toISOString() },
+            }),
+          })
+            .then((r) => r.json())
+            .then((data) => {
+              if (data.firstExit) {
+                toast.warning("Do not leave fullscreen; continuing may increase risk.");
+              }
+              if (data.autoSubmitted && !autoSubmitTriggeredRef.current) {
+                autoSubmitTriggeredRef.current = true;
+                submitExam(true);
+              }
+            })
+            .catch(() => {});
+        }
       }
     };
 
     const interval = setInterval(checkFullscreen, 2000);
     return () => clearInterval(interval);
-  }, [examStatus, examData]);
+  }, [examStatus, examData, sessionId]);
 
   // --- Network Connection Monitor ---
   useEffect(() => {
@@ -2052,10 +2309,16 @@ export default function ExamTakingPage() {
 
   const handleStartExam = async () => {
     try {
-      // If a session already exists (created during login or takeover)
-      // and we're currently on the instructions screen, just move into
-      // the in-progress state instead of creating a new session.
       if (sessionIdRef.current && sessionId) {
+        const base = typeof window !== "undefined" ? window.location.origin : "";
+        await fetch(`${base}/api/exam/instruction-seen`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sessionId: sessionIdRef.current,
+            securityToken: securityTokenRef.current,
+          }),
+        }).catch(() => {});
         setExamStatus("in-progress");
         if (examData?.fullscreen_required) {
           try {
@@ -2067,57 +2330,38 @@ export default function ExamTakingPage() {
         return;
       }
 
-      // Generate security token
-      const newSecurityToken = [...Array(32)]
-        .map(() => Math.random().toString(36)[2])
-        .join("");
-
-      const { data: newSession, error } = await supabase
-        .from("exam_sessions")
-        .insert({
-          student_id: studentInfo.id,
-          exam_id: examData.id,
-          teacher_id: examData.created_by,
-          status: "in_progress",
-          time_remaining: examDurationRef.current,
-          security_token: newSecurityToken,
-          device_takeover_count: 0,
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      // Create session security record
-      const { error: securityError } = await supabase
-        .from("session_security")
-        .insert({
-          session_id: newSession.id,
-          student_id: studentInfo.id,
-          device_fingerprint: deviceFingerprint,
-          ip_address: ipAddress || "unknown",
-          user_agent: navigator.userAgent,
-          token: newSecurityToken,
-          is_active: true,
-          last_verified: new Date().toISOString(),
-        });
-
-      if (securityError) {
-        // Rollback session creation
-        await supabase.from("exam_sessions").delete().eq("id", newSession.id);
-        throw securityError;
+      // Edge case: no session yet (e.g. instructions with missing token). Create via API (server sets end_time).
+      const base = typeof window !== "undefined" ? window.location.origin : "";
+      const fp = deviceFingerprint || (await getBrowserFingerprint());
+      const createRes = await fetch(`${base}/api/exam/create-session`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          studentId: studentInfo.id,
+          examId: examData.id,
+          teacherId: examData.created_by,
+          deviceFingerprint: fp,
+          ipAddress: ipAddress || "unknown",
+          userAgent: typeof navigator !== "undefined" ? navigator.userAgent : "",
+        }),
+      });
+      const createData = await createRes.json();
+      if (!createRes.ok || !createData.session) {
+        toast.error(createData.error || "Failed to start exam");
+        return;
       }
 
-      // Store security token
-      setSecurityToken(newSecurityToken);
-      securityTokenRef.current = newSecurityToken;
-      localStorage.setItem("security_token", newSecurityToken);
+      const newSession = createData.session;
+      setSecurityToken(newSession.security_token);
+      securityTokenRef.current = newSession.security_token;
+      localStorage.setItem("security_token", newSession.security_token);
 
       setSessionId(newSession.id);
       sessionIdRef.current = newSession.id;
       setExamStatus("in-progress");
-      setTimeLeft(examDurationRef.current);
-      timeLeftRef.current = examDurationRef.current;
+      const initialRemaining = newSession.time_remaining ?? examDurationRef.current;
+      setTimeLeft(initialRemaining);
+      timeLeftRef.current = initialRemaining;
 
       if (examData.fullscreen_required) {
         try {
@@ -2835,6 +3079,20 @@ export default function ExamTakingPage() {
                   )}
                 </div>
               )}
+              {/* Risk display: current count and remaining before auto-submit */}
+              <div
+                className={cn(
+                  "flex items-center gap-1.5 px-2 py-1 rounded-lg border text-xs font-medium",
+                  riskCount > 0
+                    ? "bg-amber-50 border-amber-200 text-amber-800"
+                    : "bg-gray-50 border-gray-200 text-gray-600"
+                )}
+                title="Tab exits increase risk; max reached = auto-submit"
+              >
+                <ShieldAlert className="h-3.5 w-3.5" />
+                <span>Risk: {riskCount}/{maxRiskBeforeSubmit}</span>
+                <span className="text-muted-foreground">({Math.max(0, maxRiskBeforeSubmit - riskCount)} left)</span>
+              </div>
             </div>
 
             {isMobile && (

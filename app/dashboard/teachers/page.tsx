@@ -2,8 +2,8 @@
 
 import type React from "react"
 import { useState, useMemo, useEffect } from "react"
-import { createClient } from "@supabase/supabase-js"
 import { useRouter } from "next/navigation"
+import { supabase } from "@/lib/supabaseClient"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -55,15 +55,6 @@ import {
 import { toast } from "sonner"
 import { format } from "date-fns"
 import bcrypt from "bcryptjs"
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-
-if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error("Missing env vars: NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY")
-}
-
-const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
 const USERS_PER_PAGE = 10
 
@@ -179,6 +170,7 @@ export default function TeacherManagementPage() {
   const [resetPasswordForm, setResetPasswordForm] = useState({ newPassword: "", confirmPassword: "" })
   const [loading, setLoading] = useState(true)
   const [assignmentError, setAssignmentError] = useState<string | null>(null)
+  const [canCreateTeacher, setCanCreateTeacher] = useState(true)
 
   const handleInputChange = (formSetter: any, e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target
@@ -290,6 +282,24 @@ export default function TeacherManagementPage() {
 
   useEffect(() => {
     loadData()
+
+    ;(async () => {
+      try {
+        const res = await fetch("/api/admin/page-permissions", { cache: "no-store" })
+        if (res.ok) {
+          const json = await res.json()
+          const role = json.role as "super_admin" | "admin" | undefined
+          const permissions = (json.permissions || {}) as Record<string, boolean>
+          if (!role || role === "super_admin") {
+            setCanCreateTeacher(true)
+          } else {
+            setCanCreateTeacher(permissions["teachers_create"] !== false)
+          }
+        }
+      } catch {
+        setCanCreateTeacher(true)
+      }
+    })()
   }, [])
 
   // 選択されたグレードに割り当てられている科目だけをフィルタリング
@@ -598,9 +608,9 @@ export default function TeacherManagementPage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-foreground">Teacher Management</h1>
         </div>
-        <Button onClick={openCreate} className="gap-2">
+        <Button onClick={openCreate} className="gap-2" disabled={!canCreateTeacher}>
           <UserPlus className="h-4 w-4" />
-          Create Teacher
+          {canCreateTeacher ? "Create Teacher" : "Create Teacher (locked)"}
         </Button>
       </div>
 

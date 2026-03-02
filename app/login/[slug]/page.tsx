@@ -10,9 +10,7 @@ import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
 import { toast } from "sonner"
-import { supabase } from "@/lib/supabaseClient"
 import { Loader2, Mail, Phone, Lock, Shield, BookOpen, ChevronRight, Home } from "lucide-react"
-import bcrypt from "bcryptjs"
 import { setTeacherDataCookie } from "@/utils/teacherCookie"
 
 const VALID_SLUG = process.env.NEXT_PUBLIC_TEACHER_LOGIN_SLUG || "tech"
@@ -140,55 +138,24 @@ export default function TeacherLogin() {
     }
 
     try {
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-      const isEmail = emailRegex.test(data.emailOrPhone)
+      const res = await fetch("/api/teacher/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          emailOrPhone: data.emailOrPhone,
+          password: data.password,
+        }),
+      })
 
-      let query = supabase.from("teacher").select(`
-          id,
-          username,
-          full_name,
-          email,
-          phone_number,
-          password,
-          grade_id,
-          subject_id,
-          section,
-          stream,
-          grades (id, grade_name),
-          subjects (id, subject_name)
-        `)
+      const json = await res.json()
 
-      if (isEmail) {
-        query = query.eq("email", data.emailOrPhone)
-      } else {
-        query = query.eq("phone_number", data.emailOrPhone)
+      if (!res.ok) {
+        toast.error(json.error || "Login failed. Please check your credentials.")
+        return
       }
 
-      const { data: teacherRecords, error: teacherError } = await query
-
-      if (teacherError) {
-        console.error("Teacher query error:", teacherError)
-        throw new Error("Teacher not found. Please check your credentials.")
-      }
-
-      if (!teacherRecords || teacherRecords.length === 0) {
-        throw new Error("Teacher not found. Please check your credentials.")
-      }
-
-      // Verify password with the first record (all records should have the same password)
-      const firstRecord = teacherRecords[0]
-      if (!firstRecord.password) {
-        throw new Error("Password not set. Please contact administrator.")
-      }
-
-      const isPasswordValid = await bcrypt.compare(data.password, firstRecord.password)
-
-      if (!isPasswordValid) {
-        throw new Error("Invalid password. Please try again.")
-      }
-
-      if (teacherRecords.length > 1) {
-        const assignments: TeacherAssignment[] = teacherRecords.map((record: any) => ({
+      if (json.multiple && json.multiple.length > 1) {
+        const assignments: TeacherAssignment[] = json.multiple.map((record: any) => ({
           id: record.id,
           username: record.username,
           full_name: record.full_name,
@@ -199,16 +166,20 @@ export default function TeacherLogin() {
           section: record.section,
           grade_name: record.grades?.grade_name || "Not assigned",
           subject_name: record.subjects?.subject_name || "Not assigned",
-          stream: record.stream, // Using actual stream from database
+          stream: record.stream ?? null,
         }))
-
         setTeacherAssignments(assignments)
         setShowSubjectSelection(true)
         return
       }
 
-      // Single assignment - proceed directly to dashboard
-      await proceedToDashboard(teacherRecords[0])
+      const teacherRecord = json.single ?? (json.multiple && json.multiple[0])
+      if (!teacherRecord) {
+        toast.error("Invalid response. Please try again.")
+        return
+      }
+
+      await proceedToDashboard(teacherRecord)
     } catch (error: any) {
       console.error("Login error:", error)
       toast.error(error.message || "Login failed. Please check your credentials.")

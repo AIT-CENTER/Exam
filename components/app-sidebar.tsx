@@ -12,6 +12,7 @@ import {
   UserCheck,
   BarChart3,
   User,
+  Activity,
 } from "lucide-react"
 
 import {
@@ -140,6 +141,12 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         url: "/teacher/individual",
         icon: User,
         isActive: pathname === "/teacher/individual",
+      },
+      {
+        title: "Live Monitoring",
+        url: "/teacher/monitor",
+        icon: Activity,
+        isActive: pathname === "/teacher/monitor",
       },
     ] as NavItem[],
     quickAccess: [] as QuickAccessItem[],

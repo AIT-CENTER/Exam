@@ -1,9 +1,9 @@
 {
-  "name": "ALPHA",
-  "version": "3.2.0",
+  "name": "online-exam",
+  "version": "3.8.2",
   "type": "module",
-  "description": "Alpha Institute Examination Desktop Application",
-  "author": "Alpha Institute of Technology",
+  "description": "Online Exam Platform",
+  "author": "Alpha Institute Tech Center",
   "main": "main.cjs",
   "private": true,
   "scripts": {
@@ -17,8 +17,8 @@
   },
   "build": {
     "appId": "com.alpha.exam",
-    "productName": "ALPHA COLLEGE | Exam |",
-    "copyright": "Copyright © 2026 Alpha Institute of Technology",
+    "productName": "EUEE",
+    "copyright": "Copyright © 2026 Online Exam",
     "win": {
       "icon": "build/icon.png",
       "target": [
@@ -33,7 +33,10 @@
       "main.cjs",
       "icon.png",
       "build/**/*"
-    ]
+    ],
+    "directories": {
+    "output": "dist"
+     }
   },
   "dependencies": {
     "@base-ui/react": "^1.2.0",
@@ -158,12 +161,24 @@
     "@types/node": "^22",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "electron": "^39.2.7",
-    "electron-builder": "^26.4.0",
+    "concurrently": "^9.2.1",
+    "electron": "^39.7.0",
+    "electron-builder": "^26.8.1",
     "electron-is-dev": "^3.0.1",
     "postcss": "^8.5",
     "tailwindcss": "^4.1.9",
     "tw-animate-css": "1.3.3",
-    "typescript": "^5"
-  }
+    "typescript": "^5",
+    "wait-on": "^9.0.4"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AIT-CENTER/Exam.git"
+  },
+  "keywords": [],
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/AIT-CENTER/Exam/issues"
+  },
+  "homepage": "https://github.com/AIT-CENTER/Exam#readme"
 }

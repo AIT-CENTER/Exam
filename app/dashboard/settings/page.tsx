@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/dialog"
 import { Progress } from "@/components/ui/progress"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
+import { Switch } from "@/components/ui/switch"
 import {
   Settings,
   RotateCw,
@@ -65,6 +66,7 @@ interface Admin {
   full_name: string
   email: string
   phone_number?: string | null
+  role?: "super_admin" | "admin" | null
 }
 
 interface TableInfo {
@@ -145,16 +147,24 @@ export default function SettingsPage() {
   const [newAdminEmail, setNewAdminEmail] = useState("")
   const [newAdminPhone, setNewAdminPhone] = useState("")
   const [newAdminPassword, setNewAdminPassword] = useState("")
+  const [newAdminRole, setNewAdminRole] = useState<"super_admin" | "admin">("admin")
   const [deleteAdminConfirmOpen, setDeleteAdminConfirmOpen] = useState(false)
   const [adminToDelete, setAdminToDelete] = useState<Admin | null>(null)
   const [deleteAdminLoading, setDeleteAdminLoading] = useState(false)
   const [confirmDeleteText, setConfirmDeleteText] = useState("")
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
+  const [currentUserRole, setCurrentUserRole] = useState<"super_admin" | "admin" | null>(null)
+  const [adminPageAccess, setAdminPageAccess] = useState<Record<string, boolean>>({})
 
   // Exam Sessions
   const [showDeleteSessionsDialog, setShowDeleteSessionsDialog] = useState(false)
   const [deletingSessionsLoading, setDeletingSessionsLoading] = useState(false)
   const [sessionStats, setSessionStats] = useState({ total: 0, inProgress: 0, submitted: 0 })
+
+  // Risk & Time Control (system_settings)
+  const [maxRiskBeforeSubmit, setMaxRiskBeforeSubmit] = useState(7)
+  const [maxTimeExtensionMinutes, setMaxTimeExtensionMinutes] = useState(30)
+  const [savingSystemSettings, setSavingSystemSettings] = useState(false)
 
   // Table Management
   const [tables, setTables] = useState<TableInfo[]>([])
@@ -187,21 +197,37 @@ export default function SettingsPage() {
   const [isDragOver, setIsDragOver] = useState(false)
 
   const systemTables: TableInfo[] = [
+    { name: "admin", icon: Shield, description: "Admin accounts", color: "bg-slate-100 text-slate-700 dark:bg-slate-900/30 dark:text-slate-400" },
     { name: "students", icon: User, description: "Student records and information", color: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400" },
     { name: "teacher", icon: Users, description: "Teacher accounts and details", color: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400" },
     { name: "grades", icon: GraduationCap, description: "Grade levels and classes", color: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" },
     { name: "subjects", icon: Book, description: "Subjects taught in school", color: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400" },
-    { name: "exams", icon: FileText, description: "Exams and test papers", color: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400" },
-    { name: "questions", icon: CheckSquare, description: "Exam questions and answers", color: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400" },
-    { name: "exam_sessions", icon: Layers, description: "Active exam sessions", color: "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400" },
-    { name: "student_answers", icon: CheckSquare, description: "Student exam answers", color: "bg-pink-100 text-pink-700 dark:bg-pink-900/30 dark:text-pink-400" },
-    { name: "assign_exams", icon: ClipboardList, description: "Assigned exams to students", color: "bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400" },
-    { name: "results", icon: BarChart, description: "Exam results and grades", color: "bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400" },
     { name: "grade_sections", icon: Grid, description: "Grade sections and divisions", color: "bg-lime-100 text-lime-700 dark:bg-lime-900/30 dark:text-lime-400" },
     { name: "grade_subjects", icon: BookOpen, description: "Subjects per grade", color: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400" },
+    { name: "exams", icon: FileText, description: "Exams and test papers", color: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400" },
+    { name: "questions", icon: CheckSquare, description: "Exam questions and answers", color: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400" },
+    { name: "assign_exams", icon: ClipboardList, description: "Assigned exams to students", color: "bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400" },
+    { name: "exam_sessions", icon: Layers, description: "Active exam sessions", color: "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400" },
+    { name: "session_security", icon: ShieldAlert, description: "Session device security", color: "bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400" },
+    { name: "student_answers", icon: CheckSquare, description: "Student exam answers", color: "bg-pink-100 text-pink-700 dark:bg-pink-900/30 dark:text-pink-400" },
+    { name: "results", icon: BarChart, description: "Exam results and grades", color: "bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400" },
+    { name: "activity_logs", icon: Database, description: "Security activity events", color: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400" },
+    { name: "audit_logs", icon: FileText, description: "Admin and teacher audit trail", color: "bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400" },
     { name: "images", icon: Image, description: "Uploaded images and files", color: "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400" },
     { name: "settings", icon: Settings, description: "System settings and config", color: "bg-gray-100 text-gray-700 dark:bg-zinc-800 dark:text-zinc-300" },
   ]
+
+  // Import order respects foreign keys (parents before children)
+  const IMPORT_INSERT_ORDER = [
+    "admin", "grades", "subjects", "teacher", "students", "grade_sections", "grade_subjects",
+    "exams", "assign_exams", "exam_sessions", "session_security", "questions", "results",
+    "student_answers", "activity_logs", "audit_logs", "images", "settings",
+  ]
+  // Tables that use composite unique for upsert (others use "id")
+  const TABLE_CONFLICT_KEYS: Record<string, string> = {
+    results: "exam_id,student_id",
+    assign_exams: "exam_id,student_id",
+  }
 
   const backupTables = systemTables.map(t => t.name)
 
@@ -269,29 +295,53 @@ export default function SettingsPage() {
     return { isValid: true };
   };
 
+  // Sanitize row for Supabase: remove undefined (Postgres/API reject it), keep null and other values
+  const sanitizeRow = (row: Record<string, unknown>): Record<string, unknown> => {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(row)) {
+      if (v === undefined) continue;
+      out[k] = v;
+    }
+    return out;
+  };
+
   // File preview processing
   const processFilePreview = async (file: File) => {
     try {
       const content = await file.text();
-      let parsedData: Record<string, any>;
+      let parsedData: Record<string, unknown>;
 
       if (file.name.endsWith(".csv")) {
-        parsedData = parseCSVToJSON(content);
+        parsedData = parseCSVToJSON(content) as Record<string, unknown>;
       } else {
-        parsedData = JSON.parse(content);
+        try {
+          parsedData = JSON.parse(content) as Record<string, unknown>;
+        } catch (parseErr) {
+          const msg = parseErr instanceof Error ? parseErr.message : "Invalid JSON";
+          toast.error(`Invalid JSON: ${msg}`);
+          setImportFile(null);
+          setImportPreview(null);
+          return;
+        }
+      }
+
+      if (typeof parsedData !== "object" || parsedData === null || Array.isArray(parsedData)) {
+        toast.error("Backup file must be a JSON object with table names as keys");
+        setImportFile(null);
+        setImportPreview(null);
+        return;
       }
 
       const tables = Object.keys(parsedData).filter((k) => k !== "metadata");
       let totalRecords = 0;
       tables.forEach((t) => {
-        if (Array.isArray(parsedData[t])) {
-          totalRecords += parsedData[t].length;
-        }
+        const arr = parsedData[t];
+        if (Array.isArray(arr)) totalRecords += arr.length;
       });
 
       setImportPreview({ tables, recordCount: totalRecords });
     } catch (err) {
-      toast.error("Invalid backup file format");
+      toast.error(err instanceof Error ? err.message : "Invalid backup file format");
       setImportFile(null);
       setImportPreview(null);
     }
@@ -358,13 +408,12 @@ export default function SettingsPage() {
 
   const parseCSVToJSON = (csvContent: string): Record<string, any[]> => {
     const result: Record<string, any[]> = {}
-    const tableBlocks = csvContent.split(/### TABLE: (\w+) ###\n/).filter(Boolean)
-
-    for (let i = 0; i < tableBlocks.length; i += 2) {
-      const tableName = tableBlocks[i]
-      const tableData = tableBlocks[i + 1]
-
-      if (!tableData) continue
+    // Split includes captures: [prefix, name1, data1, name2, data2, ...]
+    const parts = csvContent.split(/### TABLE: (\w+) ###\n/)
+    for (let i = 1; i < parts.length - 1; i += 2) {
+      const tableName = parts[i]?.trim()
+      const tableData = parts[i + 1]
+      if (!tableName || !tableData) continue
 
       const lines = tableData
         .trim()
@@ -372,16 +421,15 @@ export default function SettingsPage() {
         .filter((line) => line.trim())
       if (lines.length < 2) continue
 
-      const headers = lines[0].split(",")
+      const headers = parseCSVLine(lines[0])
       const rows: any[] = []
 
       for (let j = 1; j < lines.length; j++) {
         const values = parseCSVLine(lines[j])
-        const row: any = {}
+        const row: Record<string, unknown> = {}
         headers.forEach((header, index) => {
-          let value = values[index] || ""
-          // Try to parse JSON objects
-          if (value.startsWith("{") || value.startsWith("[")) {
+          let value: unknown = values[index] ?? ""
+          if (typeof value === "string" && (value.startsWith("{") || value.startsWith("["))) {
             try {
               value = JSON.parse(value)
             } catch {
@@ -525,36 +573,59 @@ export default function SettingsPage() {
 
     try {
       const content = await importFile.text()
-      let backupData: Record<string, any>
+      let backupData: Record<string, unknown>
 
       if (importFile.name.endsWith(".csv")) {
-        backupData = parseCSVToJSON(content)
+        backupData = parseCSVToJSON(content) as Record<string, unknown>
       } else {
-        backupData = JSON.parse(content)
+        try {
+          backupData = JSON.parse(content) as Record<string, unknown>
+        } catch (parseErr) {
+          const msg = parseErr instanceof Error ? parseErr.message : "Invalid JSON"
+          toast.error(`Invalid JSON: ${msg}`)
+          setIsImporting(false)
+          return
+        }
       }
 
-      const tables = Object.keys(backupData).filter((k) => k !== "metadata")
-      const totalTables = tables.length
+      if (typeof backupData !== "object" || backupData === null || Array.isArray(backupData)) {
+        toast.error("Backup file must be a JSON object with table names as keys")
+        setIsImporting(false)
+        return
+      }
+
+      // Process in dependency order so foreign keys exist
+      const tablesToImport = IMPORT_INSERT_ORDER.filter((t) => {
+        const val = backupData[t]
+        return Array.isArray(val) && val.length > 0
+      })
+      const totalTables = tablesToImport.length
       let completedTables = 0
       let totalRecordsImported = 0
 
-      for (const tableName of tables) {
-        const tableData = backupData[tableName]
-        if (!Array.isArray(tableData) || tableData.length === 0) {
+      for (const tableName of tablesToImport) {
+        const rawTableData = backupData[tableName]
+        if (!Array.isArray(rawTableData) || rawTableData.length === 0) {
           completedTables++
           setImportProgress(Math.round((completedTables / totalTables) * 100))
           continue
         }
 
-        // Upsert data in batches
-        const batchSize = 100
-        for (let i = 0; i < tableData.length; i += batchSize) {
-          const batch = tableData.slice(i, i + batchSize)
+        const batchSize = 50
+        const onConflict = TABLE_CONFLICT_KEYS[tableName] ?? "id"
 
-          const { error } = await supabase.from(tableName).upsert(batch, { onConflict: "id", ignoreDuplicates: false })
+        for (let i = 0; i < rawTableData.length; i += batchSize) {
+          const batch = rawTableData
+            .slice(i, i + batchSize)
+            .map((row) => sanitizeRow(row as Record<string, unknown>) as Record<string, unknown>)
+
+          const { error } = await supabase
+            .from(tableName)
+            .upsert(batch, { onConflict, ignoreDuplicates: false })
 
           if (error) {
             console.error(`Error importing ${tableName}:`, error)
+            toast.error(`Import error in ${tableName}: ${error.message}`)
           } else {
             totalRecordsImported += batch.length
           }
@@ -562,22 +633,21 @@ export default function SettingsPage() {
 
         completedTables++
         setImportProgress(Math.round((completedTables / totalTables) * 100))
-        await new Promise((resolve) => setTimeout(resolve, 100))
+        await new Promise((resolve) => setTimeout(resolve, 50))
       }
 
-      toast.success(`Import completed! ${totalRecordsImported} records restored across ${tables.length} tables.`)
+      toast.success(`Import completed! ${totalRecordsImported} records restored across ${tablesToImport.length} tables.`)
       setShowImportDialog(false)
       setImportFile(null)
       setImportPreview(null)
       setImportProgress(0)
 
-      // Refresh data
       fetchAdmins()
       fetchSessionStats()
       fetchTableStats()
     } catch (err) {
       console.error("Error importing backup:", err)
-      toast.error("Failed to import backup")
+      toast.error(err instanceof Error ? err.message : "Failed to import backup")
     } finally {
       setIsImporting(false)
     }
@@ -615,18 +685,55 @@ export default function SettingsPage() {
     }
   }
 
+  const fetchSystemSettings = async () => {
+    try {
+      const res = await fetch("/api/admin/system-settings")
+      const data = await res.json()
+      setMaxRiskBeforeSubmit(data.max_risk_before_submit ?? 7)
+      setMaxTimeExtensionMinutes(data.max_time_extension_minutes ?? 30)
+    } catch { /* use defaults */ }
+  }
+
   useEffect(() => {
     const loadAllData = async () => {
       setLoading(true);
       const fetchCurrentUser = async () => {
         const { data } = await supabase.auth.getUser()
-        setCurrentUserId(data.user?.id || null)
+        const userId = data.user?.id || null
+        setCurrentUserId(userId)
+
+        if (userId) {
+          const { data: adminRow } = await supabase
+            .from("admin")
+            .select("id, role")
+            .eq("id", userId)
+            .maybeSingle()
+          if (adminRow && adminRow.role) {
+            setCurrentUserRole(adminRow.role as "super_admin" | "admin")
+          } else {
+            setCurrentUserRole("super_admin")
+          }
+        }
+      }
+      const fetchAccessConfig = async () => {
+        try {
+          const res = await fetch("/api/admin/page-permissions", { cache: "no-store" })
+          if (res.ok) {
+            const json = await res.json()
+            setCurrentUserRole(json.role ?? "super_admin")
+            setAdminPageAccess(json.permissions ?? {})
+          }
+        } catch {
+          /* ignore; fall back to super_admin UX */
+        }
       }
       await Promise.all([
         fetchCurrentUser(),
         fetchAdmins(),
         fetchSessionStats(),
-        fetchTableStats()
+        fetchTableStats(),
+        fetchSystemSettings(),
+        fetchAccessConfig(),
       ]);
       setLoading(false);
     }
@@ -651,7 +758,11 @@ export default function SettingsPage() {
         return
       }
 
-      setAdmins(data || [])
+      const withRoles = (data || []).map((a) => ({
+        ...a,
+        role: (a.role as "super_admin" | "admin" | undefined) ?? "super_admin",
+      }))
+      setAdmins(withRoles)
     } catch (err) {
       console.error("Error fetching admins:", err)
     }
@@ -916,6 +1027,7 @@ export default function SettingsPage() {
           full_name: newAdminFullName,
           email: newAdminEmail,
           phone_number: newAdminPhone || null,
+          role: newAdminRole,
         })
 
         if (insertError) {
@@ -1098,27 +1210,44 @@ export default function SettingsPage() {
         )}
       </div>
 
-      <Tabs defaultValue="system" className="space-y-6">
+      {loading ? (
+        <PageSpinner />
+      ) : (
+      <Tabs
+        defaultValue={
+          currentUserRole === "admin" && adminPageAccess["settings_system"] === false
+            ? "security"
+            : "system"
+        }
+        className="space-y-6"
+      >
         <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 lg:w-auto lg:inline-flex">
-          <TabsTrigger value="system" className="gap-2">
-            <Database className="h-4 w-4" />
-            <span className="hidden sm:inline">System</span>
-          </TabsTrigger>
-          <TabsTrigger value="backup" className="gap-2">
-            <HardDrive className="h-4 w-4" />
-            <span className="hidden sm:inline">Backup</span>
-          </TabsTrigger>
+          {!(currentUserRole === "admin" && adminPageAccess["settings_system"] === false) && (
+            <>
+              <TabsTrigger value="system" className="gap-2">
+                <Database className="h-4 w-4" />
+                <span className="hidden sm:inline">System</span>
+              </TabsTrigger>
+              <TabsTrigger value="backup" className="gap-2">
+                <HardDrive className="h-4 w-4" />
+                <span className="hidden sm:inline">Backup</span>
+              </TabsTrigger>
+            </>
+          )}
           <TabsTrigger value="security" className="gap-2">
             <Key className="h-4 w-4" />
             <span className="hidden sm:inline">Security</span>
           </TabsTrigger>
-          <TabsTrigger value="admins" className="gap-2">
-            <Users className="h-4 w-4" />
-            <span className="hidden sm:inline">Admins</span>
-          </TabsTrigger>
+          {currentUserRole === "super_admin" && (
+            <TabsTrigger value="admins" className="gap-2">
+              <Users className="h-4 w-4" />
+              <span className="hidden sm:inline">Admins</span>
+            </TabsTrigger>
+          )}
         </TabsList>
 
         {/* System Tab */}
+        {!(currentUserRole === "admin" && adminPageAccess["settings_system"] === false) && (
         <TabsContent value="system" className="space-y-6">
           {/* Exam Sessions Card */}
           <Card>
@@ -1157,6 +1286,75 @@ export default function SettingsPage() {
                   Delete All Session Data
                 </Button>
               </div>
+            </CardContent>
+          </Card>
+
+          {/* Risk & Time Control Card */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <ShieldAlert className="h-5 w-5 text-amber-600" />
+                Risk & Time Control
+              </CardTitle>
+              <CardDescription>
+                Configure max tab switches before auto-submit and max time extension teachers can add.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <Label htmlFor="maxRisk">Max risk count before auto-submit</Label>
+                  <Input
+                    id="maxRisk"
+                    type="number"
+                    min={1}
+                    max={20}
+                    value={maxRiskBeforeSubmit}
+                    onChange={(e) => setMaxRiskBeforeSubmit(parseInt(e.target.value, 10) || 7)}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Each tab switch increments risk_count. When it reaches this value, exam auto-submits. (Default: 7)
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="maxTimeExt">Max time extension (minutes)</Label>
+                  <Input
+                    id="maxTimeExt"
+                    type="number"
+                    min={0}
+                    max={120}
+                    value={maxTimeExtensionMinutes}
+                    onChange={(e) => setMaxTimeExtensionMinutes(parseInt(e.target.value, 10) || 30)}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Teachers cannot add more than this total per student. (Default: 30)
+                  </p>
+                </div>
+              </div>
+              <Button
+                onClick={async () => {
+                  setSavingSystemSettings(true)
+                  try {
+                    const res = await fetch("/api/admin/system-settings", {
+                      method: "PUT",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        max_risk_before_submit: maxRiskBeforeSubmit,
+                        max_time_extension_minutes: maxTimeExtensionMinutes,
+                      }),
+                    })
+                    if (res.ok) toast.success("Settings saved")
+                    else toast.error("Failed to save")
+                  } catch {
+                    toast.error("Failed to save")
+                  } finally {
+                    setSavingSystemSettings(false)
+                  }
+                }}
+                disabled={savingSystemSettings}
+              >
+                Save settings
+              </Button>
             </CardContent>
           </Card>
 
@@ -1269,67 +1467,72 @@ export default function SettingsPage() {
 
               {/* Tables List */}
               {showTablesList && (
-                <div className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className="space-y-5">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
                     {tables.map((table) => (
                       <div
                         key={table.name}
-                        className={`p-4 rounded-lg border ${table.selected ? 'ring-2 ring-indigo-500 ring-offset-2 dark:ring-offset-zinc-900 border-indigo-300 dark:border-indigo-700 bg-indigo-50 dark:bg-indigo-900/20' : 'border-gray-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:bg-gray-50 dark:hover:bg-zinc-800/80'} transition-all cursor-pointer`}
+                        role="button"
+                        tabIndex={0}
                         onClick={() => handleTableSelect(table.name)}
+                        onKeyDown={(e) => e.key === "Enter" && handleTableSelect(table.name)}
+                        className={`
+                          group flex items-start gap-3 p-4 rounded-xl border-2 transition-all cursor-pointer
+                          ${table.selected
+                            ? "border-indigo-500 bg-indigo-50/80 dark:bg-indigo-950/30 dark:border-indigo-500 shadow-sm"
+                            : "border-border bg-card hover:border-muted-foreground/30 hover:shadow-sm"
+                          }
+                        `}
                       >
-                        <div className="flex items-center justify-between mb-3">
-                          <div className="flex items-center gap-3">
-                            <div className={`p-2 rounded-lg ${table.color}`}>
-                              <table.icon className="h-5 w-5" />
-                            </div>
-                            <div className="flex-1">
-                              <h3 className="font-semibold text-gray-900 dark:text-gray-100">{table.name}</h3>
-                              <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{table.description}</p>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <div className={`h-4 w-4 rounded-full border-2 ${table.selected ? 'bg-indigo-600 border-indigo-600 dark:bg-indigo-500 dark:border-indigo-500' : 'border-gray-300 dark:border-zinc-700'}`}>
-                              {table.selected && <Check className="h-3 w-3 text-white" />}
-                            </div>
-                          </div>
+                        <div className={`shrink-0 p-2.5 rounded-lg ${table.color}`}>
+                          <table.icon className="h-5 w-5" aria-hidden />
                         </div>
-                        <div className="flex items-center justify-between mt-4">
-                          <Badge variant="outline" className={table.count === 0 ? "text-gray-500 dark:text-gray-500" : "text-gray-700 dark:text-gray-300"}>
-                            {table.count.toLocaleString()} records
-                          </Badge>
-                          <div className="flex items-center gap-2">
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleDeleteTableClick(table);
-                              }}
-                              disabled={table.count === 0}
-                              className="h-7 px-2 text-red-600 hover:text-red-700 hover:bg-red-50"
-                            >
-                              <Trash2 className="h-3 w-3" />
-                            </Button>
-                            <Badge variant="outline" className="text-xs">
-                              {table.name === "admin" ? "Protected" : "System"}
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="font-semibold text-sm text-foreground truncate">{table.name}</span>
+                            <span className={`shrink-0 flex items-center justify-center w-5 h-5 rounded-md border-2 transition-colors ${table.selected ? "bg-indigo-600 border-indigo-600 text-white" : "border-muted-foreground/40"}`}>
+                              {table.selected && <Check className="h-3 w-3" strokeWidth={2.5} />}
+                            </span>
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{table.description}</p>
+                          <div className="flex items-center justify-between mt-3 flex-wrap gap-2">
+                            <Badge variant="secondary" className="text-xs font-normal tabular-nums">
+                              {table.count.toLocaleString()} rows
                             </Badge>
+                            <div className="flex items-center gap-1">
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                className="h-7 w-7 p-0 opacity-70 hover:opacity-100 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteTableClick(table);
+                                }}
+                                disabled={table.count === 0}
+                                title={table.count === 0 ? "No data" : `Clear ${table.name}`}
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                              {table.name === "admin" && (
+                                <Badge variant="outline" className="text-[10px] px-1.5 py-0">Protected</Badge>
+                              )}
+                            </div>
                           </div>
                         </div>
                       </div>
                     ))}
                   </div>
-                  
-                  <div className="mt-6 p-4 bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800 rounded-lg">
+
+                  <div className="rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50/80 dark:bg-amber-950/20 p-4">
                     <div className="flex gap-3">
-                      <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-500 flex-shrink-0 mt-0.5" />
-                      <div className="text-sm text-amber-800 dark:text-amber-300">
-                        <p className="font-semibold">Important Notes:</p>
-                        <ul className="list-disc list-inside mt-2 space-y-1">
-                          <li>Click on any table to select/deselect it</li>
-                          <li>Deleting data from tables is permanent and cannot be undone</li>
-                          <li>Admin table deletion will preserve your current account</li>
-                          <li>Some tables may have foreign key constraints</li>
-                          <li>Always backup before deleting large amounts of data</li>
+                      <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-500 shrink-0 mt-0.5" />
+                      <div className="text-sm text-amber-800 dark:text-amber-200">
+                        <p className="font-medium">Important</p>
+                        <ul className="list-disc list-inside mt-1.5 space-y-0.5 text-amber-700 dark:text-amber-300">
+                          <li>Click a table to select or deselect it for bulk delete</li>
+                          <li>Deletion is permanent; backup first</li>
+                          <li>Admin table: your account is never removed</li>
                         </ul>
                       </div>
                     </div>
@@ -1339,6 +1542,7 @@ export default function SettingsPage() {
             </CardContent>
           </Card>
         </TabsContent>
+        )}
 
         {/* Backup Tab */}
         <TabsContent value="backup" className="space-y-6">
@@ -1386,7 +1590,7 @@ export default function SettingsPage() {
 
               <div className="p-4 bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800 rounded-lg">
                 <div className="flex gap-3">
-                  <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-500 flex-shrink-0 mt-0.5" />
+                  <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-500 shrink-0 mt-0.5" />
                   <div className="text-sm text-amber-800 dark:text-amber-300">
                     <p className="font-semibold">Backup Tips:</p>
                     <ul className="list-disc list-inside mt-2 space-y-1">
@@ -1455,7 +1659,8 @@ export default function SettingsPage() {
           </Card>
         </TabsContent>
 
-        {/* Admins Tab */}
+        {/* Admins Tab (super admin only) */}
+        {currentUserRole === "super_admin" && (
         <TabsContent value="admins" className="space-y-6">
           <Card>
             <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -1464,7 +1669,7 @@ export default function SettingsPage() {
                   <Users className="h-5 w-5 text-indigo-600" />
                   Admin Management
                 </CardTitle>
-                <CardDescription>Manage admin accounts</CardDescription>
+                <CardDescription>Manage admin accounts and access</CardDescription>
               </div>
               <Button onClick={() => setShowAddAdmin(true)} className="gap-2">
                 <Plus className="h-4 w-4" />
@@ -1536,15 +1741,112 @@ export default function SettingsPage() {
               )}
             </CardContent>
           </Card>
+
+          {/* Admin Access Control (global toggles for Admin role) */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Shield className="h-5 w-5 text-indigo-600" />
+                Admin Access Control
+              </CardTitle>
+              <CardDescription>
+                Configure which dashboard pages Admin accounts can open. Super Admins always have full access.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <p className="text-sm font-medium text-gray-900 dark:text-gray-100">Core pages</p>
+                  <p className="text-xs text-muted-foreground mb-3">
+                    Toggle visibility of the main dashboard pages for Admins.
+                  </p>
+                  {[
+                    { key: "dashboard_home", label: "Dashboard Home" },
+                    { key: "analytics", label: "Analytics" },
+                    { key: "settings_system", label: "System & Backup Settings" },
+                  ].map((item) => (
+                    <div key={item.key} className="flex items-center justify-between py-1">
+                      <div>
+                        <p className="text-sm">{item.label}</p>
+                      </div>
+                      <Switch
+                        checked={adminPageAccess[item.key] !== false}
+                        onCheckedChange={async (checked) => {
+                          try {
+                            const res = await fetch("/api/admin/page-permissions", {
+                              method: "PUT",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ pageKey: item.key, allowed: checked }),
+                            })
+                            if (!res.ok) {
+                              toast.error("Failed to update access")
+                              return
+                            }
+                            setAdminPageAccess((prev) => ({ ...prev, [item.key]: checked }))
+                            toast.success("Access updated")
+                          } catch {
+                            toast.error("Failed to update access")
+                          }
+                        }}
+                      />
+                    </div>
+                  ))}
+                </div>
+
+                <div className="space-y-2">
+                  <p className="text-sm font-medium text-gray-900 dark:text-gray-100">Management pages</p>
+                  <p className="text-xs text-muted-foreground mb-3">
+                    Control access to teacher and student management for Admins.
+                  </p>
+                  {[
+                    { key: "teachers_page", label: "Teachers page" },
+                    { key: "teachers_create", label: "Can create teachers" },
+                    { key: "students_page", label: "Students page" },
+                    { key: "students_create", label: "Can create students" },
+                    { key: "grades_page", label: "Grades page" },
+                    { key: "grades_create", label: "Can create grades" },
+                    { key: "subjects_page", label: "Subjects page" },
+                    { key: "subjects_create", label: "Can create subjects" },
+                  ].map((item) => (
+                    <div key={item.key} className="flex items-center justify-between py-1">
+                      <p className="text-sm">{item.label}</p>
+                      <Switch
+                        checked={adminPageAccess[item.key] !== false}
+                        onCheckedChange={async (checked) => {
+                          try {
+                            const res = await fetch("/api/admin/page-permissions", {
+                              method: "PUT",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ pageKey: item.key, allowed: checked }),
+                            })
+                            if (!res.ok) {
+                              toast.error("Failed to update access")
+                              return
+                            }
+                            setAdminPageAccess((prev) => ({ ...prev, [item.key]: checked }))
+                            toast.success("Access updated")
+                          } catch {
+                            toast.error("Failed to update access")
+                          }
+                        }}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
+        )}
       </Tabs>
+      )}
 
       {/* Add Admin Dialog */}
       <Dialog open={showAddAdmin} onOpenChange={setShowAddAdmin}>
-        <DialogContent>
+        <DialogContent className="max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Add New Admin</DialogTitle>
-            <DialogDescription>Create a new admin account</DialogDescription>
+            <DialogDescription>Create a new admin or super admin account</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
@@ -1598,6 +1900,37 @@ export default function SettingsPage() {
                 required
               />
               <p className="text-xs text-gray-500">Password must be at least 6 characters</p>
+            </div>
+            <div className="space-y-2">
+              <Label>Role *</Label>
+              <RadioGroup
+                value={newAdminRole}
+                onValueChange={(value) => setNewAdminRole(value as "super_admin" | "admin")}
+                className="grid grid-cols-1 sm:grid-cols-2 gap-3"
+              >
+                <div className="flex items-center space-x-2 rounded-md border p-3">
+                  <RadioGroupItem value="admin" id="role-admin" />
+                  <div className="space-y-1">
+                    <Label htmlFor="role-admin" className="text-sm font-medium">
+                      Admin
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                      Limited access. Honors page permissions configured in Admin Access Control.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center space-x-2 rounded-md border p-3">
+                  <RadioGroupItem value="super_admin" id="role-super-admin" />
+                  <div className="space-y-1">
+                    <Label htmlFor="role-super-admin" className="text-sm font-medium">
+                      Super Admin
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                      Full access to all admin features, including managing other admins.
+                    </p>
+                  </div>
+                </div>
+              </RadioGroup>
             </div>
           </div>
           <DialogFooter>
@@ -1749,7 +2082,7 @@ export default function SettingsPage() {
             {tableToDelete?.name === "admin" && (
               <div className="p-3 bg-blue-50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-800 rounded-lg">
                 <div className="flex items-start gap-2">
-                  <Info className="h-4 w-4 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
+                  <Info className="h-4 w-4 text-blue-600 dark:text-blue-400 mt-0.5 shrink-0" />
                   <div className="text-sm text-blue-800 dark:text-blue-300">
                     <p className="font-semibold">Note:</p>
                     <p>Your current admin account will be preserved. Only other admin accounts will be deleted.</p>
@@ -1761,7 +2094,7 @@ export default function SettingsPage() {
             {/* Warning */}
             <div className="p-3 bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-800 rounded-lg">
               <div className="flex items-start gap-2">
-                <AlertTriangle className="h-4 w-4 text-red-600 dark:text-red-500 mt-0.5 flex-shrink-0" />
+                <AlertTriangle className="h-4 w-4 text-red-600 dark:text-red-500 mt-0.5 shrink-0" />
                 <div className="text-sm text-red-800 dark:text-red-300">
                   <p className="font-semibold">Warning:</p>
                   <p>This action is permanent and cannot be undone. All data in this table will be deleted.</p>
@@ -1869,7 +2202,7 @@ export default function SettingsPage() {
             {selectedTables.includes("admin") && (
               <div className="p-3 bg-blue-50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-800 rounded-lg">
                 <div className="flex items-start gap-2">
-                  <Info className="h-4 w-4 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
+                  <Info className="h-4 w-4 text-blue-600 dark:text-blue-400 mt-0.5 shrink-0" />
                   <div className="text-sm text-blue-800 dark:text-blue-300">
                     <p className="font-semibold">Note:</p>
                     <p>Your current admin account will be preserved. Only other admin accounts will be deleted.</p>
@@ -1881,7 +2214,7 @@ export default function SettingsPage() {
             {/* Warning */}
             <div className="p-3 bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-800 rounded-lg">
               <div className="flex items-start gap-2">
-                <AlertTriangle className="h-4 w-4 text-red-600 dark:text-red-500 mt-0.5 flex-shrink-0" />
+                <AlertTriangle className="h-4 w-4 text-red-600 dark:text-red-500 mt-0.5 shrink-0" />
                 <div className="text-sm text-red-800 dark:text-red-300">
                   <p className="font-semibold">Warning:</p>
                   <p>This action is permanent and cannot be undone. All data in selected tables will be deleted.</p>

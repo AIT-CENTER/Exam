@@ -110,9 +110,27 @@ export default function SubjectsPage() {
   const [subjectToDelete, setSubjectToDelete] = useState<any>(null);
   const [page, setPage] = useState(1);
   const [totalSubjects, setTotalSubjects] = useState(0);
+  const [canCreateSubject, setCanCreateSubject] = useState(true);
 
   useEffect(() => {
     fetchSubjects(page);
+    (async () => {
+      try {
+        const res = await fetch("/api/admin/page-permissions", { cache: "no-store" });
+        if (res.ok) {
+          const json = await res.json();
+          const role = json.role as "super_admin" | "admin" | undefined;
+          const permissions = (json.permissions || {}) as Record<string, boolean>;
+          if (!role || role === "super_admin") {
+            setCanCreateSubject(true);
+          } else {
+            setCanCreateSubject(permissions["subjects_create"] !== false);
+          }
+        }
+      } catch {
+        setCanCreateSubject(true);
+      }
+    })();
   }, [page]);
 
   const fetchSubjects = async (pageNumber: number) => {
@@ -327,9 +345,9 @@ export default function SubjectsPage() {
           <h1 className="text-3xl font-bold tracking-tight text-foreground">Subjects</h1>
           <p className="text-muted-foreground mt-1">Manage your academic subjects and their details.</p>
         </div>
-        <Button onClick={handleCreate} className="gap-2">
+        <Button onClick={handleCreate} className="gap-2" disabled={!canCreateSubject}>
           <PlusCircle className="h-4 w-4" />
-          Create Subject
+          {canCreateSubject ? "Create Subject" : "Create Subject (locked)"}
         </Button>
       </div>
 
@@ -344,9 +362,11 @@ export default function SubjectsPage() {
           <CardDescription className="mb-6 max-w-sm mx-auto">
             Create your first subject to get started adding exams and managing your curriculum.
           </CardDescription>
-          <Button onClick={handleCreate}>
-            Create First Subject
-          </Button>
+          {canCreateSubject && (
+            <Button onClick={handleCreate}>
+              Create First Subject
+            </Button>
+          )}
         </Card>
       ) : (
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">

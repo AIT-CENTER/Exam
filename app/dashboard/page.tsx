@@ -106,10 +106,26 @@ async function DashboardContent() {
     redirect(`/`);
   }
 
-  // Additional check: Ensure user exists in admin table
-  const { data: admin } = await supabase.from('admin').select('id').eq('id', user.id).single();
-  if (!admin) {
+  // Additional check: Ensure user exists in admin table and has permission for dashboard home
+  const { data: adminRow } = await supabase.from('admin').select('id, role').eq('id', user.id).maybeSingle();
+  if (!adminRow) {
     redirect('/unauthorized');
+  }
+
+  const role = (adminRow.role as "super_admin" | "admin" | null) ?? "super_admin";
+
+  if (role === "admin") {
+    const { data: permRow } = await supabase
+      .from("admin_page_permissions")
+      .select("allowed")
+      .eq("role", "admin")
+      .eq("page_key", "dashboard_home")
+      .maybeSingle();
+
+    const allowed = permRow?.allowed ?? false;
+    if (!allowed) {
+      redirect("/dashboard/students");
+    }
   }
 
   // Fetch total students

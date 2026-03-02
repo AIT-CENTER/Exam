@@ -11,6 +11,9 @@ import {
   Plus,
   GraduationCap,
   Award,
+  ClipboardList,
+  BarChart3,
+  Lock,
 } from "lucide-react"
 
 import {
@@ -35,6 +38,7 @@ interface NavItem {
   url: string
   icon: LucideIcon
   isActive: boolean
+  pageKey?: string
 }
 
 interface QuickAccessItem {
@@ -49,6 +53,8 @@ export function AdminSidebar({ ...props }: React.ComponentProps<typeof Sidebar>)
   const pathname = usePathname()
   const [user, setUser] = React.useState<{ name: string; email: string; avatar?: string } | null>(null)
   const [loading, setLoading] = React.useState(true)
+  const [role, setRole] = React.useState<"super_admin" | "admin" | null>(null)
+  const [pageAccess, setPageAccess] = React.useState<Record<string, boolean>>({})
   
   const { state } = useSidebar()
 
@@ -69,6 +75,18 @@ export function AdminSidebar({ ...props }: React.ComponentProps<typeof Sidebar>)
               email: adminData.email,
             })
           }
+
+          // Fetch role + permissions
+          try {
+            const res = await fetch("/api/admin/page-permissions", { cache: "no-store" })
+            if (res.ok) {
+              const json = await res.json()
+              setRole(json.role ?? "super_admin")
+              setPageAccess(json.permissions ?? {})
+            }
+          } catch {
+            // ignore; fallback is unrestricted
+          }
         }
       } finally {
         setLoading(false)
@@ -88,6 +106,12 @@ export function AdminSidebar({ ...props }: React.ComponentProps<typeof Sidebar>)
     return () => subscription.unsubscribe()
   }, [router])
 
+  const canAccess = (pageKey?: string) => {
+    if (!pageKey) return true
+    if (!role || role === "super_admin") return true
+    return pageAccess[pageKey] ?? true
+  }
+
   // Re-ordered Navigation Links
   const data = {
     navMain: [
@@ -96,30 +120,49 @@ export function AdminSidebar({ ...props }: React.ComponentProps<typeof Sidebar>)
         url: "/dashboard",
         icon: Home,
         isActive: pathname === "/dashboard",
+        pageKey: "dashboard_home",
       },
       {
         title: "Students",
         url: "/dashboard/students",
         icon: Users,
         isActive: pathname.startsWith("/dashboard/students"),
+        pageKey: "students_page",
       },
       {
         title: "Teachers",
         url: "/dashboard/teachers",
         icon: GraduationCap,
         isActive: pathname.startsWith("/dashboard/teachers"),
+        pageKey: "teachers_page",
       },
       {
         title: "Subjects",
         url: "/dashboard/subject",
         icon: BookOpen,
         isActive: pathname.startsWith("/dashboard/subject"),
+        pageKey: "subjects_page",
       },
       {
         title: "Grades",
         url: "/dashboard/grades",
         icon: Award,
         isActive: pathname.startsWith("/dashboard/grades"),
+        pageKey: "grades_page",
+      },
+      {
+        title: "Exam Oversight",
+        url: "/dashboard/exams",
+        icon: ClipboardList,
+        isActive: pathname.startsWith("/dashboard/exams"),
+        pageKey: "exams_page",
+      },
+      {
+        title: "Analytics",
+        url: "/dashboard/analytics",
+        icon: BarChart3,
+        isActive: pathname.startsWith("/dashboard/analytics"),
+        pageKey: "analytics",
       },
     ] as NavItem[],
     quickActions: [
@@ -137,29 +180,51 @@ export function AdminSidebar({ ...props }: React.ComponentProps<typeof Sidebar>)
     url: string
     icon: LucideIcon
     isActive: boolean
+    pageKey?: string
   }) => (
-    <SidebarMenuButton
-      key={item.title}
-      asChild
-      isActive={item.isActive}
-      tooltip={item.title}
-      className="h-9 text-sm font-medium transition-colors duration-200"
-    >
-      {/* 
-        Using flex and items-center natively supports Shadcn's collapse.
-        The icon gets shrink-0 so it doesn't compress, keeping it perfectly centered.
-      */}
-      <Link href={item.url} className="flex items-center gap-3">
-        <item.icon className="h-4 w-4 shrink-0" />
-        <span className="truncate">{item.title}</span>
-      </Link>
-    </SidebarMenuButton>
+    (() => {
+      const locked = !canAccess(item.pageKey)
+      const content = (
+        <div className="flex items-center gap-3 w-full">
+          <item.icon className="h-4 w-4 shrink-0" />
+          <span className="truncate flex-1">{item.title}</span>
+          {locked && <Lock className="h-3.5 w-3.5 text-amber-500 shrink-0" />}
+        </div>
+      )
+
+      if (locked) {
+        return (
+          <SidebarMenuButton
+            key={item.title}
+            isActive={false}
+            tooltip={`${item.title} (locked)`}
+            className="h-9 text-sm font-medium opacity-60 cursor-not-allowed select-none"
+          >
+            {content}
+          </SidebarMenuButton>
+        )
+      }
+
+      return (
+        <SidebarMenuButton
+          key={item.title}
+          asChild
+          isActive={item.isActive}
+          tooltip={item.title}
+          className="h-9 text-sm font-medium transition-colors duration-200"
+        >
+          <Link href={item.url} className="flex items-center gap-3">
+            {content}
+          </Link>
+        </SidebarMenuButton>
+      )
+    })()
   )
 
   // Loading State with Adaptive Skeletons (bg-zinc-200 for light, bg-zinc-800 for dark)
   if (loading || !user) {
     return (
-      <Sidebar collapsible="icon" className="!border-r-0 border-none bg-transparent" {...props}>
+      <Sidebar collapsible="icon" className="border-r-0! border-none bg-transparent" {...props}>
         <SidebarHeader className="p-4 flex items-center justify-center">
           <Skeleton className="h-10 w-full rounded-lg bg-zinc-200 dark:bg-zinc-800 animate-pulse" />
         </SidebarHeader>
@@ -180,7 +245,7 @@ export function AdminSidebar({ ...props }: React.ComponentProps<typeof Sidebar>)
   return (
     <Sidebar
       collapsible="icon"
-      className="!border-r-0 border-none bg-transparent"
+      className="border-r-0! border-none bg-transparent"
       {...props}
     >
       <SidebarHeader className="">

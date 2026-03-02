@@ -137,6 +137,7 @@ export default function StudentsPage() {
   const [editSubmitAttempted, setEditSubmitAttempted] = useState(false);
   const [loading, setLoading] = useState(true);
   const [gradeStats, setGradeStats] = useState<any>({});
+  const [canCreateStudent, setCanCreateStudent] = useState(true);
 
   const streamOptions = ["Natural", "Social"];
 
@@ -148,6 +149,24 @@ export default function StudentsPage() {
       setLoading(false);
     };
     loadData();
+
+    (async () => {
+      try {
+        const res = await fetch("/api/admin/page-permissions", { cache: "no-store" });
+        if (res.ok) {
+          const json = await res.json();
+          const role = json.role as "super_admin" | "admin" | undefined;
+          const permissions = (json.permissions || {}) as Record<string, boolean>;
+          if (!role || role === "super_admin") {
+            setCanCreateStudent(true);
+          } else {
+            setCanCreateStudent(permissions["students_create"] !== false);
+          }
+        }
+      } catch {
+        setCanCreateStudent(true);
+      }
+    })();
   }, []);
 
   useEffect(() => {
@@ -548,9 +567,13 @@ export default function StudentsPage() {
           <h1 className="text-3xl font-bold tracking-tight text-foreground">Assigned Students</h1>
           <p className="text-muted-foreground mt-1">List of assigned students with detailed information</p>
         </div>
-        <Button onClick={() => router.push("/dashboard/students/new")} className="gap-2">
+        <Button
+          onClick={() => router.push("/dashboard/students/new")}
+          className="gap-2"
+          disabled={!canCreateStudent}
+        >
           <Users className="h-4 w-4" />
-          Assign Student
+          {canCreateStudent ? "Assign Student" : "Assign Student (locked)"}
         </Button>
       </div>
 

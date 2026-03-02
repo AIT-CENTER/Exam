@@ -73,127 +73,6 @@ const getIPAddress = async (): Promise<string> => {
   }
 };
 
-// Enhanced Session Validator
-class SessionValidator {
-  static async checkActiveSession(
-    studentId: string,
-    examId: string,
-    currentDeviceFingerprint: string
-  ) {
-    try {
-      const { data: activeSessions, error } = await supabase
-        .from("exam_sessions")
-        .select(
-          `
-          id,
-          time_remaining,
-          started_at,
-          updated_at,
-          security_token,
-          status,
-          session_security!inner (
-            device_fingerprint,
-            is_active,
-            last_verified
-          )
-        `
-        )
-        .eq("student_id", studentId)
-        .eq("exam_id", examId)
-        .eq("status", "in_progress")
-        .eq("session_security.is_active", true);
-
-      if (error || !activeSessions || activeSessions.length === 0) {
-        return {
-          hasActiveSession: false,
-          isSameDevice: false,
-          canLogin: true,
-          timeRemaining: 0,
-        };
-      }
-
-      const activeSession = activeSessions[0];
-      const now = Date.now();
-      const lastUpdate = new Date(activeSession.updated_at).getTime();
-      const secondsSinceUpdate = (now - lastUpdate) / 1000;
-
-      const isSameDevice =
-        activeSession.session_security.device_fingerprint ===
-        currentDeviceFingerprint;
-
-      if (isSameDevice) {
-        return {
-          hasActiveSession: true,
-          isSameDevice: true,
-          canLogin: true,
-          sessionId: activeSession.id,
-          securityToken: activeSession.security_token,
-          timeRemaining: activeSession.time_remaining,
-          session: activeSession,
-          secondsSinceUpdate,
-        };
-      }
-
-      if (secondsSinceUpdate < 10) {
-        return {
-          hasActiveSession: true,
-          isSameDevice: false,
-          canLogin: false,
-          reason: `active_within_10s`,
-          secondsSinceUpdate,
-          waitSeconds: Math.ceil(10 - secondsSinceUpdate),
-          session: activeSession,
-        };
-      }
-
-      return {
-        hasActiveSession: true,
-        isSameDevice: false,
-        canLogin: true,
-        requiresTakeover: true,
-        sessionId: activeSession.id,
-        securityToken: activeSession.security_token,
-        timeRemaining: activeSession.time_remaining,
-        session: activeSession,
-        secondsSinceUpdate,
-      };
-    } catch (error) {
-      console.error("Session validation error:", error);
-      return {
-        hasActiveSession: false,
-        isSameDevice: false,
-        canLogin: true,
-        error: "Validation failed",
-      };
-    }
-  }
-
-  static async terminateOldSession(sessionId: string, securityToken: string) {
-    try {
-      await supabase
-        .from("session_security")
-        .update({
-          is_active: false,
-          last_verified: new Date().toISOString(),
-        })
-        .eq("session_id", sessionId);
-
-      await supabase
-        .from("exam_sessions")
-        .update({
-          status: "inactive",
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", sessionId);
-
-      return true;
-    } catch (error) {
-      console.error("Failed to terminate old session:", error);
-      return false;
-    }
-  }
-}
-
 export default function StudentLogin() {
   const router = useRouter();
   const [studentId, setStudentId] = useState("");
@@ -507,54 +386,77 @@ export default function StudentLogin() {
     try {
       const validationResult = await validateExamAccess(studentId, examId);
 
-      const sessionCheck = await SessionValidator.checkActiveSession(
-        validationResult.student.id,
-        validationResult.exam.id,
-        deviceFingerprint
-      );
-
-      if (sessionCheck.hasActiveSession && !sessionCheck.canLogin && sessionCheck.reason === "active_within_10s") {
-        setActiveSessionBlockInfo({
-          waitSeconds: sessionCheck.waitSeconds,
-          session: sessionCheck.session,
-          student: validationResult.student,
-          exam: validationResult.exam,
-        });
-        setCountdown(sessionCheck.waitSeconds);
-        setShowActiveSessionBlockDialog(true);
-        setLoading(false);
-        return;
+      // Server-based session check: do not create duplicate; reuse existing if any.
+      const checkRes = await fetch("/api/exam/check-session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          studentId: validationResult.student.id,
+          examId: validationResult.exam.id,
+          deviceFingerprint,
+        }),
+      });
+      const checkData = await checkRes.json();
+      if (!checkRes.ok) {
+        throw new Error(checkData.error || "Session check failed");
       }
 
-      if (sessionCheck.hasActiveSession && sessionCheck.isSameDevice) {
-        setResumeSession({
-          student: validationResult.student,
-          exam: validationResult.exam,
-          assignment: validationResult.assignment,
-          existingSession: sessionCheck.session,
-          timeRemaining: sessionCheck.timeRemaining,
-        });
-        setShowResumeDialog(true);
-        setLoading(false);
-        return;
-      }
+      if (checkData.exists) {
+        const apiSession = checkData.session;
+        const existingSession = {
+          id: apiSession.id,
+          security_token: apiSession.security_token,
+          started_at: apiSession.started_at,
+          end_time: apiSession.end_time,
+          time_remaining: apiSession.time_remaining,
+        };
 
-      if (sessionCheck.hasActiveSession && sessionCheck.requiresTakeover) {
+        if (checkData.isSameDevice) {
+          setResumeSession({
+            student: validationResult.student,
+            exam: validationResult.exam,
+            assignment: validationResult.assignment,
+            existingSession,
+            timeRemaining: apiSession.time_remaining,
+          });
+          setShowResumeDialog(true);
+          setLoading(false);
+          return;
+        }
+
         setDeviceConflict({
-          session: sessionCheck.session,
+          session: existingSession,
           student: validationResult.student,
           exam: validationResult.exam,
           assignment: validationResult.assignment,
-          oldSessionId: sessionCheck.sessionId,
-          oldSecurityToken: sessionCheck.securityToken,
-          timeRemaining: sessionCheck.timeRemaining,
+          oldSessionId: apiSession.id,
+          oldSecurityToken: apiSession.security_token,
+          timeRemaining: apiSession.time_remaining,
         });
         setShowDeviceConflictDialog(true);
         setLoading(false);
         return;
       }
 
-      const sessionData = await createNewExamSession(validationResult);
+      // No active session: create one via API (server sets start_time and end_time).
+      const createRes = await fetch("/api/exam/create-session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          studentId: validationResult.student.id,
+          examId: validationResult.exam.id,
+          teacherId: validationResult.assignment?.teacher_id,
+          deviceFingerprint,
+          ipAddress,
+          userAgent: typeof navigator !== "undefined" ? navigator.userAgent : "",
+        }),
+      });
+      const createData = await createRes.json();
+      if (!createRes.ok) {
+        throw new Error(createData.error || "Failed to create exam session");
+      }
+
+      const sessionData = createData.session;
       toast.success("Login successful! Starting exam...");
       redirectToExam(sessionData, validationResult);
     } catch (error: any) {
@@ -563,56 +465,6 @@ export default function StudentLogin() {
       toast.error(errorMsg);
       setLoading(false);
     }
-  };
-
-  const createNewExamSession = async (validationResult: any) => {
-    const { student, exam, assignment, duration } = validationResult;
-
-    const securityToken = [...Array(32)].map(() => Math.random().toString(36)[2]).join("");
-
-    const { data: session, error: sessionError } = await supabase
-      .from("exam_sessions")
-      .insert({
-        student_id: student.id,
-        exam_id: exam.id,
-        teacher_id: assignment.teacher_id,
-        started_at: new Date().toISOString(),
-        last_activity_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        time_remaining: duration,
-        status: "in_progress",
-        security_token: securityToken,
-        device_takeover_count: 0,
-      })
-      .select()
-      .single();
-
-    if (sessionError) {
-      if (sessionError.code === "23505") {
-        throw new Error("You already have an active exam session.");
-      }
-      throw new Error("Failed to create exam session. Please try again.");
-    }
-
-    const { error: securityError } = await supabase
-      .from("session_security")
-      .insert({
-        session_id: session.id,
-        student_id: student.id,
-        device_fingerprint: deviceFingerprint,
-        ip_address: ipAddress,
-        user_agent: navigator.userAgent,
-        token: securityToken,
-        is_active: true,
-        last_verified: new Date().toISOString(),
-      });
-
-    if (securityError) {
-      await supabase.from("exam_sessions").delete().eq("id", session.id);
-      throw new Error("Security setup failed. Please try again.");
-    }
-
-    return { ...session, security_token: securityToken };
   };
 
   const handleResumeSession = async () => {
@@ -645,52 +497,26 @@ export default function StudentLogin() {
 
     setLoading(true);
     try {
-      const terminated = await SessionValidator.terminateOldSession(
-        deviceConflict.oldSessionId,
-        deviceConflict.oldSecurityToken
-      );
-
-      if (!terminated) throw new Error("Failed to terminate old session");
-
-      const securityToken = [...Array(32)].map(() => Math.random().toString(36)[2]).join("");
-
-      const { data: session, error: sessionError } = await supabase
-        .from("exam_sessions")
-        .insert({
-          student_id: deviceConflict.student.id,
-          exam_id: deviceConflict.exam.id,
-          teacher_id: deviceConflict.assignment.teacher_id,
-          started_at: deviceConflict.session.started_at,
-          last_activity_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-          time_remaining: deviceConflict.timeRemaining,
-          status: "in_progress",
-          security_token: securityToken,
-          device_takeover_count: 1,
-          last_takeover_time: new Date().toISOString(),
-        })
-        .select()
-        .single();
-
-      if (sessionError) throw sessionError;
-
-      const { error: securityError } = await supabase
-        .from("session_security")
-        .insert({
-          session_id: session.id,
-          student_id: deviceConflict.student.id,
-          device_fingerprint: deviceFingerprint,
-          ip_address: ipAddress,
-          user_agent: navigator.userAgent,
-          token: securityToken,
-          is_active: true,
-          last_verified: new Date().toISOString(),
-        });
-
-      if (securityError) {
-        await supabase.from("exam_sessions").delete().eq("id", session.id);
-        throw securityError;
+      // Server creates new session with same end_time (timer does not reset), marks old inactive.
+      const createRes = await fetch("/api/exam/create-session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          studentId: deviceConflict.student.id,
+          examId: deviceConflict.exam.id,
+          teacherId: deviceConflict.assignment?.teacher_id,
+          deviceFingerprint,
+          ipAddress,
+          userAgent: typeof navigator !== "undefined" ? navigator.userAgent : "",
+          takeoverSessionId: deviceConflict.oldSessionId,
+        }),
+      });
+      const createData = await createRes.json();
+      if (!createRes.ok) {
+        throw new Error(createData.error || "Takeover failed");
       }
+
+      const session = createData.session;
 
       const { data: oldAnswers } = await supabase
         .from("student_answers")
@@ -698,7 +524,7 @@ export default function StudentLogin() {
         .eq("session_id", deviceConflict.oldSessionId);
 
       if (oldAnswers && oldAnswers.length > 0) {
-        const newAnswers = oldAnswers.map((answer) => ({
+        const newAnswers = oldAnswers.map((answer: any) => ({
           session_id: session.id,
           question_id: answer.question_id,
           selected_option_id: answer.selected_option_id,
@@ -716,14 +542,14 @@ export default function StudentLogin() {
 
       const examSession = {
         sessionId: session.id,
-        securityToken: securityToken,
+        securityToken: session.security_token,
         studentId: deviceConflict.student.id,
         studentNumber: deviceConflict.student.student_id,
         studentName: deviceConflict.student.name,
         examId: deviceConflict.exam.id,
         examCode: deviceConflict.exam.exam_code,
         examTitle: deviceConflict.exam.title,
-        timeRemaining: deviceConflict.timeRemaining,
+        timeRemaining: session.time_remaining ?? deviceConflict.timeRemaining,
         deviceFingerprint: deviceFingerprint,
         isTakeover: true,
       };
@@ -732,7 +558,7 @@ export default function StudentLogin() {
 
       const slug = deviceConflict.exam.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)+/g, "");
 
-      router.push(`/start/${slug}?student=${deviceConflict.student.student_id}&exam=${deviceConflict.exam.exam_code}&session=${session.id}&token=${securityToken}`);
+      router.push(`/start/${slug}?student=${deviceConflict.student.student_id}&exam=${deviceConflict.exam.exam_code}&session=${session.id}&token=${session.security_token}`);
     } catch (error: any) {
       toast.error(error.message || "Takeover failed. Please try again.");
       setLoading(false);
@@ -741,6 +567,8 @@ export default function StudentLogin() {
 
   const redirectToExam = (session: any, validationResult: any) => {
     const { student, exam, duration } = validationResult;
+    // Use server-provided time_remaining when available (server-based timer).
+    const timeRemaining = session.time_remaining ?? duration;
 
     const examSession = {
       sessionId: session.id,
@@ -751,7 +579,7 @@ export default function StudentLogin() {
       examId: exam.id,
       examCode: exam.exam_code,
       examTitle: exam.title,
-      timeRemaining: duration,
+      timeRemaining,
       deviceFingerprint: deviceFingerprint,
       ipAddress: ipAddress,
       isTakeover: false,
@@ -801,43 +629,80 @@ export default function StudentLogin() {
 
     try {
       const validationResult = await validateExamAccess(studentId, examId);
-      const sessionCheck = await SessionValidator.checkActiveSession(
-        validationResult.student.id,
-        validationResult.exam.id,
-        deviceFingerprint
-      );
 
-      if (sessionCheck.hasActiveSession && !sessionCheck.canLogin) {
-        setActiveSessionBlockInfo({
-          waitSeconds: sessionCheck.waitSeconds,
-          session: sessionCheck.session,
-          student: validationResult.student,
-          exam: validationResult.exam,
-        });
-        setCountdown(sessionCheck.waitSeconds);
-        setShowActiveSessionBlockDialog(true);
+      const checkRes = await fetch("/api/exam/check-session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          studentId: validationResult.student.id,
+          examId: validationResult.exam.id,
+          deviceFingerprint,
+        }),
+      });
+      const checkData = await checkRes.json();
+      if (!checkRes.ok) {
+        toast.error(checkData.error || "Session check failed");
         setLoading(false);
         return;
       }
 
-      if (sessionCheck.hasActiveSession && sessionCheck.requiresTakeover) {
-        setDeviceConflict({
-          session: sessionCheck.session,
-          student: validationResult.student,
-          exam: validationResult.exam,
-          assignment: validationResult.assignment,
-          oldSessionId: sessionCheck.sessionId,
-          oldSecurityToken: sessionCheck.securityToken,
-          timeRemaining: sessionCheck.timeRemaining,
-        });
-        setShowDeviceConflictDialog(true);
-      } else {
-        const sessionData = await createNewExamSession(validationResult);
-        toast.success("Login successful! Starting exam...");
-        redirectToExam(sessionData, validationResult);
+      if (checkData.exists) {
+        const apiSession = checkData.session;
+        const existingSession = {
+          id: apiSession.id,
+          security_token: apiSession.security_token,
+          started_at: apiSession.started_at,
+          end_time: apiSession.end_time,
+          time_remaining: apiSession.time_remaining,
+        };
+        if (checkData.isSameDevice) {
+          setResumeSession({
+            student: validationResult.student,
+            exam: validationResult.exam,
+            assignment: validationResult.assignment,
+            existingSession,
+            timeRemaining: apiSession.time_remaining,
+          });
+          setShowResumeDialog(true);
+        } else {
+          setDeviceConflict({
+            session: existingSession,
+            student: validationResult.student,
+            exam: validationResult.exam,
+            assignment: validationResult.assignment,
+            oldSessionId: apiSession.id,
+            oldSecurityToken: apiSession.security_token,
+            timeRemaining: apiSession.time_remaining,
+          });
+          setShowDeviceConflictDialog(true);
+        }
+        setLoading(false);
+        return;
       }
+
+      const createRes = await fetch("/api/exam/create-session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          studentId: validationResult.student.id,
+          examId: validationResult.exam.id,
+          teacherId: validationResult.assignment?.teacher_id,
+          deviceFingerprint,
+          ipAddress,
+          userAgent: typeof navigator !== "undefined" ? navigator.userAgent : "",
+        }),
+      });
+      const createData = await createRes.json();
+      if (!createRes.ok) {
+        toast.error(createData.error || "Failed to create session");
+        setLoading(false);
+        return;
+      }
+      toast.success("Login successful! Starting exam...");
+      redirectToExam(createData.session, validationResult);
     } catch (error: any) {
       toast.error(error.message || "Login failed");
+    } finally {
       setLoading(false);
     }
   };

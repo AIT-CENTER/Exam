@@ -17,14 +17,29 @@ export interface LiveStudent {
   examDurationMinutes: number
   extraTimeSeconds: number
   timeRemainingSeconds: number
+  riskScore: number
+  riskCount: number
+  maxRiskBeforeSubmit: number
+  lastActivityAt: string | null
+  /** Derived: true if riskCount > 0 or riskScore > 0 or disconnect */
+  isFlagged: boolean
 }
 
-export function useLiveMonitor() {
+export interface RiskLogEntry {
+  id: string
+  session_id: string
+  student_id: number
+  exam_id: number
+  event_type: string
+  timestamp: string
+}
+
+export function useLiveMonitor(teacherId?: string | null) {
   const [students, setStudents] = useState<LiveStudent[]>([])
+  const [riskLogs, setRiskLogs] = useState<RiskLogEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const { toast } = useToast()
-  const subscriptionRef = useRef<any>(null)
 
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -33,190 +48,114 @@ export function useLiveMonitor() {
 
   const fetchLiveData = useCallback(async () => {
     try {
-      console.log("[v2.5] Fetching live exam data...")
+      const params = new URLSearchParams()
+      if (teacherId) params.set("teacherId", teacherId)
+      const res = await fetch(`/api/teacher/fetch-live-monitor?${params}`)
+      if (!res.ok) throw new Error("Fetch failed")
+      const { sessions, riskLogs: logs } = await res.json()
 
-      const { data: sessions, error: sessionsError } = await supabase
-        .from("exam_sessions")
-        .select(
-          `
-          id,
-          student_id,
-          exam_id,
-          status,
-          started_at,
-          extra_time_seconds,
-          score,
-          time_remaining_seconds,
-          students (name, student_id),
-          exams (name, duration_minutes)
-        `
-        )
-        .in("status", ["in_progress", "submitted", "expired"])
-
-      if (sessionsError) {
-        const errorMessage = sessionsError?.message || JSON.stringify(sessionsError) || "Unknown error"
-        console.error("[v2.5] Supabase error details:", {
-          message: errorMessage,
-          code: (sessionsError as any)?.code,
-          details: (sessionsError as any)?.details,
-        })
-        throw new Error(`Sessions fetch error: ${errorMessage}`)
-      }
-
-      if (!sessions || sessions.length === 0) {
-        console.log("[v2.5] No sessions found")
-        setStudents([])
-        setError(null)
-        setLoading(false)
-        return
-      }
-
-      console.log("[v2.5] Fetched sessions:", sessions.length)
-
-      const now = Date.now()
-
-      const liveStudents: LiveStudent[] = sessions.map((session: any) => {
-        let status = session.status === "in_progress" ? "In Progress" : session.status === "submitted" ? "Submitted" : "Time Expired"
-
-        const startedAt = session.started_at ? new Date(session.started_at).toISOString() : new Date(now).toISOString()
-        const exam = session.exams || { name: "Unknown Exam", duration_minutes: 0 }
-        const totalMs = ((exam.duration_minutes * 60) + (session.extra_time_seconds || 0)) * 1000
-        const elapsedMs = now - new Date(startedAt).getTime()
-        let remainingTime = Math.floor((totalMs - elapsedMs) / 1000)
-        if (remainingTime < 0) remainingTime = 0
-
-        return {
-          sessionId: session.id,
-          studentId: session.students?.student_id || "Unknown",
-          name: session.students?.name || "Unknown",
-          examId: session.exam_id,
-          examName: exam.name,
-          status,
-          remainingTime,
-          score: session.score || 0,
-          startedAt,
-          examDurationMinutes: exam.duration_minutes || 0,
-          extraTimeSeconds: session.extra_time_seconds || 0,
-          timeRemainingSeconds: session.time_remaining_seconds || 0,
-        }
-      })
-
-      setStudents(liveStudents)
+      setStudents(sessions ?? [])
+      setRiskLogs(logs ?? [])
       setError(null)
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Unknown error"
-      console.error("[v2.5] Error fetching live data:", errorMessage)
+      console.error("[useLiveMonitor] Error:", errorMessage)
       setError("Failed to load exam data")
       setStudents([])
+      setRiskLogs([])
       toast.error("Failed to load exam data")
     } finally {
       setLoading(false)
     }
-  }, [supabase, toast])
+  }, [toast, teacherId])
 
   useEffect(() => {
     fetchLiveData()
-
-    const channel = supabase
-      .channel("exam_sessions_changes")
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "exam_sessions",
-        },
-        (payload) => {
-          console.log("[v2.5] Real-time update received:", payload)
-          fetchLiveData()
-        }
-      )
-      .subscribe((status) => {
-        console.log("[v2.5] Subscription status:", status)
-      })
-
-    subscriptionRef.current = channel
-
-    return () => {
-      if (subscriptionRef.current) {
-        supabase.removeChannel(subscriptionRef.current)
-      }
-    }
-  }, [fetchLiveData, supabase])
+    const interval = setInterval(fetchLiveData, 5000)
+    return () => clearInterval(interval)
+  }, [fetchLiveData, teacherId])
 
   const addTimeToStudent = useCallback(
     async (sessionId: string, minutes: number) => {
       try {
-        console.log("[v2.5] Adding time to student:", sessionId, minutes)
-        const seconds = minutes * 60
-
-        const { data: session, error: sessionError } = await supabase
-          .from("exam_sessions")
-          .select("extra_time_seconds, status")
-          .eq("id", sessionId)
-          .single()
-
-        if (sessionError) throw new Error(`Fetch session error: ${sessionError.message}`)
-        if (session.status !== "in_progress") throw new Error("Cannot add time to a completed exam")
-
-        const newExtraTime = (session.extra_time_seconds || 0) + seconds
-
-        const { error: updateError } = await supabase
-          .from("exam_sessions")
-          .update({ extra_time_seconds: newExtraTime })
-          .eq("id", sessionId)
-
-        if (updateError) throw new Error(`Update session error: ${updateError.message}`)
-
-        console.log("[v2.5] Time added successfully:", { sessionId, extraTime: newExtraTime })
+        const res = await fetch("/api/teacher/add-time", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionId, minutes }),
+        })
+        const data = await res.json()
+        if (!res.ok) throw new Error(data.error || "Add time failed")
         await fetchLiveData()
         return true
       } catch (err) {
-        console.error("[v2.5] Error adding time:", err)
+        console.error("[useLiveMonitor] Error adding time:", err)
         throw err
       }
     },
-    [fetchLiveData, supabase]
+    [fetchLiveData]
+  )
+
+  const removeStudentFromMonitor = useCallback(
+    async (sessionId: string) => {
+      try {
+        const res = await fetch("/api/teacher/remove-student", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionId }),
+        })
+        const data = await res.json()
+        if (!res.ok) throw new Error(data.error || "Remove failed")
+        await fetchLiveData()
+        return true
+      } catch (err) {
+        console.error("[useLiveMonitor] Error removing student:", err)
+        throw err
+      }
+    },
+    [fetchLiveData]
+  )
+
+  const removeRiskFromStudent = useCallback(
+    async (sessionId: string) => {
+      try {
+        const res = await fetch("/api/teacher/remove-risk", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionId }),
+        })
+        const data = await res.json()
+        if (!res.ok) throw new Error(data.error || "Remove risk failed")
+        await fetchLiveData()
+        return true
+      } catch (err) {
+        console.error("[useLiveMonitor] Error removing risk:", err)
+        throw err
+      }
+    },
+    [fetchLiveData]
   )
 
   const addTimeToAll = useCallback(
     async (minutes: number) => {
       try {
-        console.log("[v2.5] Adding time to all students:", minutes)
-        const seconds = minutes * 60
-
-        const { data: sessions, error: sessionsError } = await supabase
-          .from("exam_sessions")
-          .select("id, extra_time_seconds, status")
-          .eq("status", "in_progress")
-
-        if (sessionsError) throw new Error(`Fetch sessions error: ${sessionsError.message}`)
-
-        if (!sessions || sessions.length === 0) {
-          throw new Error("No active sessions found")
+        const activeSessions = students.filter((s) => s.status === "Active" || s.status === "Disconnected")
+        for (const s of activeSessions) {
+          try {
+            await fetch("/api/teacher/add-time", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ sessionId: s.sessionId, minutes }),
+            })
+          } catch { /* skip failed */ }
         }
-
-        const updates = sessions.map((session) => ({
-          id: session.id,
-          extra_time_seconds: (session.extra_time_seconds || 0) + seconds,
-          status: session.status,
-        }))
-
-        const { error: updateError } = await supabase
-          .from("exam_sessions")
-          .upsert(updates, { onConflict: "id" })
-
-        if (updateError) throw new Error(`Update sessions error: ${updateError.message}`)
-
-        console.log("[v2.5] Time added to all successfully:", updates.length)
         await fetchLiveData()
         return true
       } catch (err) {
-        console.error("[v2.5] Error adding time to all:", err)
+        console.error("[useLiveMonitor] Error adding time to all:", err)
         throw err
       }
     },
-    [fetchLiveData, supabase]
+    [fetchLiveData, students]
   )
 
   const forceSubmitExam = useCallback(
@@ -226,7 +165,7 @@ export function useLiveMonitor() {
 
         const { data: session, error: sessionError } = await supabase
           .from("exam_sessions")
-          .select("exam_id, status, started_at, extra_time_seconds, time_remaining_seconds")
+          .select("exam_id, student_id, teacher_id, status, started_at, extra_time_seconds")
           .eq("id", sessionId)
           .single()
 
@@ -235,46 +174,53 @@ export function useLiveMonitor() {
 
         const { data: answers, error: answersError } = await supabase
           .from("student_answers")
-          .select(`
-            selected_option_id,
-            question_id,
-            options!student_answers_selected_option_id_fkey (is_correct)
-          `)
+          .select("question_id, selected_option_id, answer_text")
           .eq("session_id", sessionId)
 
         if (answersError) throw new Error(`Fetch answers error: ${answersError.message}`)
 
-        const { count: questionCount, error: questionCountError } = await supabase
+        const { data: questions, error: qError } = await supabase
           .from("questions")
-          .select("id", { count: "exact", head: true })
+          .select("id, marks, correct_option_id, question_type")
           .eq("exam_id", session.exam_id)
 
-        if (questionCountError) throw new Error(`Fetch question count error: ${questionCountError.message}`)
+        if (qError) throw new Error(`Fetch questions error: ${qError.message}`)
 
-        const totalQuestions = questionCount || 0
-        const correctCount = answers?.filter((a: any) => a.selected_option_id && a.options?.is_correct).length || 0
-        const score = totalQuestions > 0 ? (correctCount / totalQuestions) * 100 : 0
-
-        // Calculate remaining time at submission
-        const now = Date.now()
-        const startedAt = new Date(session.started_at).getTime()
-        const totalMs = ((session.exam_duration_minutes * 60) + (session.extra_time_seconds || 0)) * 1000
-        const elapsedMs = now - startedAt
-        const timeRemainingSeconds = Math.floor((totalMs - elapsedMs) / 1000)
+        const qMap = new Map((questions || []).map((q) => [q.id, q]))
+        let totalMarks = 0
+        ;(answers || []).forEach((a: any) => {
+          const q = qMap.get(a.question_id)
+          if (!q) return
+          const correct = q.correct_option_id != null && a.selected_option_id === q.correct_option_id
+          if (correct) totalMarks += q.marks || 1
+        })
 
         const { error: updateError } = await supabase
           .from("exam_sessions")
           .update({
             status: "submitted",
-            score,
+            score: totalMarks,
             submitted_at: new Date().toISOString(),
-            time_remaining_seconds: timeRemainingSeconds >= 0 ? timeRemainingSeconds : 0,
           })
           .eq("id", sessionId)
 
         if (updateError) throw new Error(`Update session error: ${updateError.message}`)
 
-        console.log("[v2.5] Exam force submitted successfully:", { sessionId, score })
+        await supabase.from("session_security").update({ is_active: false }).eq("session_id", sessionId)
+
+        await supabase.from("results").upsert(
+          {
+            exam_id: session.exam_id,
+            student_id: session.student_id,
+            teacher_id: session.teacher_id,
+            total_marks_obtained: totalMarks,
+            comments: "Force-submitted by teacher.",
+            submission_time: new Date().toISOString(),
+          },
+          { onConflict: "exam_id,student_id" }
+        )
+
+        console.log("[v2.5] Exam force submitted successfully:", { sessionId, totalMarks })
         await fetchLiveData()
         return true
       } catch (err) {
@@ -287,10 +233,13 @@ export function useLiveMonitor() {
 
   return {
     students,
+    riskLogs,
     loading,
     error,
     addTimeToStudent,
     addTimeToAll,
+    removeRiskFromStudent,
+    removeStudentFromMonitor,
     forceSubmitExam,
     fetchLiveData,
   }
