@@ -1565,7 +1565,7 @@ export default function ExamTakingPage() {
         setAnswers(initialAnswers);
         answersRef.current = initialAnswers;
 
-        // Session: from URL (index flow) or from server APIs (no duplicate creation).
+        // Session: from URL (index flow). New sessions are created only when the student clicks "Start".
         let activeSession: any = null;
         let sessionToken = tokenParam || null;
 
@@ -1578,58 +1578,6 @@ export default function ExamTakingPage() {
             exam_id: exam.id,
             status: "in_progress",
           };
-        } else if (!sessionParam) {
-          // No session in URL: check/create via API so we never create duplicate sessions from client.
-          const base = typeof window !== "undefined" ? window.location.origin : "";
-          const fp = await getBrowserFingerprint();
-          const checkRes = await fetch(`${base}/api/exam/check-session`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              studentId: student.id,
-              examId: exam.id,
-              deviceFingerprint: fp,
-            }),
-          });
-          const checkData = await checkRes.json();
-          if (checkData.exists && checkData.session) {
-            activeSession = {
-              id: checkData.session.id,
-              security_token: checkData.session.security_token,
-              student_id: student.id,
-              exam_id: exam.id,
-              status: "in_progress",
-              time_remaining: checkData.session.time_remaining,
-            };
-            sessionToken = checkData.session.security_token;
-          } else {
-            const createRes = await fetch(`${base}/api/exam/create-session`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                studentId: student.id,
-                examId: exam.id,
-                teacherId: exam.created_by,
-                deviceFingerprint: fp,
-                ipAddress: typeof window !== "undefined" ? localStorage.getItem("ip_address") || undefined : undefined,
-                userAgent: typeof navigator !== "undefined" ? navigator.userAgent : "",
-              }),
-            });
-            const createData = await createRes.json();
-            if (!createRes.ok || !createData.session) {
-              toast.error(createData.error || "Failed to start exam");
-              return;
-            }
-            activeSession = {
-              id: createData.session.id,
-              security_token: createData.session.security_token,
-              student_id: student.id,
-              exam_id: exam.id,
-              status: "in_progress",
-              time_remaining: createData.session.time_remaining,
-            };
-            sessionToken = createData.session.security_token;
-          }
         }
 
         if (activeSession) {

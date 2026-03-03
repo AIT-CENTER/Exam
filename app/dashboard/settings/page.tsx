@@ -3,6 +3,7 @@
 import type React from "react"
 
 import { useState, useEffect, useRef } from "react"
+import { useRouter } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -59,6 +60,15 @@ import {
 } from "lucide-react"
 import { supabase } from "@/lib/supabaseClient"
 import { format } from "date-fns"
+import {
+  Drawer,
+  DrawerContent,
+  DrawerHeader,
+  DrawerTitle,
+  DrawerDescription,
+  DrawerFooter,
+  DrawerClose,
+} from "@/components/ui/drawer"
 
 interface Admin {
   id: string
@@ -132,6 +142,7 @@ function PageSpinner() {
 }
 
 export default function SettingsPage() {
+  const router = useRouter()
   const [loading, setLoading] = useState(true)
 
   // Security Settings
@@ -179,7 +190,8 @@ export default function SettingsPage() {
   const [showDeleteMultipleDialog, setShowDeleteMultipleDialog] = useState(false)
   const [deletingMultipleLoading, setDeletingMultipleLoading] = useState(false)
   const [selectAllTables, setSelectAllTables] = useState(false)
-  const [showTablesList, setShowTablesList] = useState(true)
+  // Start with the tables list hidden so "Hide List" behavior is effectively active
+  const [showTablesList, setShowTablesList] = useState(false)
 
   // Backup
   const [backupLoading, setBackupLoading] = useState(false)
@@ -326,7 +338,7 @@ export default function SettingsPage() {
       }
 
       if (typeof parsedData !== "object" || parsedData === null || Array.isArray(parsedData)) {
-        toast.error("Backup file must be a JSON object with table names as keys");
+        toast.error("Backup file must map table names to arrays of rows (JSON or CSV).");
         setImportFile(null);
         setImportPreview(null);
         return;
@@ -589,7 +601,7 @@ export default function SettingsPage() {
       }
 
       if (typeof backupData !== "object" || backupData === null || Array.isArray(backupData)) {
-        toast.error("Backup file must be a JSON object with table names as keys")
+        toast.error("Backup file must map table names to arrays of rows (JSON or CSV).")
         setIsImporting(false)
         return
       }
@@ -708,37 +720,47 @@ export default function SettingsPage() {
             .select("id, role")
             .eq("id", userId)
             .maybeSingle()
-          if (adminRow && adminRow.role) {
-            setCurrentUserRole(adminRow.role as "super_admin" | "admin")
-          } else {
-            setCurrentUserRole("super_admin")
-          }
+          const role = (adminRow?.role as ("super_admin" | "admin" | null) | undefined) ?? "super_admin"
+          setCurrentUserRole(role)
+          return role
         }
+        return null
       }
       const fetchAccessConfig = async () => {
         try {
           const res = await fetch("/api/admin/page-permissions", { cache: "no-store" })
           if (res.ok) {
             const json = await res.json()
-            setCurrentUserRole(json.role ?? "super_admin")
+            const role = (json.role as "super_admin" | "admin" | undefined) ?? "super_admin"
+            setCurrentUserRole(role)
             setAdminPageAccess(json.permissions ?? {})
+            return role
           }
         } catch {
           /* ignore; fall back to super_admin UX */
         }
+        return null
       }
+      const roleFromUser = await fetchCurrentUser()
+      const roleFromAccess = await fetchAccessConfig()
+      const role = roleFromAccess ?? roleFromUser ?? "super_admin"
+
+      // Admins may access Settings only to change password (Security tab)
+      if (role === "admin") {
+        setLoading(false)
+        return
+      }
+
       await Promise.all([
-        fetchCurrentUser(),
         fetchAdmins(),
         fetchSessionStats(),
         fetchTableStats(),
         fetchSystemSettings(),
-        fetchAccessConfig(),
-      ]);
+      ])
       setLoading(false);
     }
     loadAllData()
-  }, [])
+  }, [router])
 
   // Update tables when selectedTables changes
   useEffect(() => {
@@ -1215,14 +1237,14 @@ export default function SettingsPage() {
       ) : (
       <Tabs
         defaultValue={
-          currentUserRole === "admin" && adminPageAccess["settings_system"] === false
+          currentUserRole === "admin"
             ? "security"
             : "system"
         }
         className="space-y-6"
       >
         <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 lg:w-auto lg:inline-flex">
-          {!(currentUserRole === "admin" && adminPageAccess["settings_system"] === false) && (
+          {currentUserRole !== "admin" && (
             <>
               <TabsTrigger value="system" className="gap-2">
                 <Database className="h-4 w-4" />
@@ -1247,48 +1269,8 @@ export default function SettingsPage() {
         </TabsList>
 
         {/* System Tab */}
-        {!(currentUserRole === "admin" && adminPageAccess["settings_system"] === false) && (
+        {currentUserRole !== "admin" && (
         <TabsContent value="system" className="space-y-6">
-          {/* Exam Sessions Card */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <FileX className="h-5 w-5 text-red-600" />
-                Exam Session Data
-              </CardTitle>
-              <CardDescription>Manage exam session records and clean up old data</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {/* Session Stats */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800 text-center">
-                  <p className="text-3xl font-bold text-blue-600 dark:text-blue-400">{sessionStats.total}</p>
-                  <p className="text-sm text-blue-700 dark:text-blue-300">Total Sessions</p>
-                </div>
-                <div className="p-4 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-200 dark:border-amber-800 text-center">
-                  <p className="text-3xl font-bold text-amber-600 dark:text-amber-400">{sessionStats.inProgress}</p>
-                  <p className="text-sm text-amber-700 dark:text-amber-300">In Progress</p>
-                </div>
-                <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800 text-center">
-                  <p className="text-3xl font-bold text-green-600 dark:text-green-400">{sessionStats.submitted}</p>
-                  <p className="text-sm text-green-700 dark:text-green-300">Submitted</p>
-                </div>
-              </div>
-
-              <div className="flex justify-end">
-                <Button
-                  variant="destructive"
-                  onClick={() => setShowDeleteSessionsDialog(true)}
-                  className="gap-2"
-                  disabled={sessionStats.total === 0}
-                >
-                  <Trash2 className="h-4 w-4" />
-                  Delete All Session Data
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-
           {/* Risk & Time Control Card */}
           <Card>
             <CardHeader>
@@ -1355,6 +1337,46 @@ export default function SettingsPage() {
               >
                 Save settings
               </Button>
+            </CardContent>
+          </Card>
+
+          {/* Exam Session Data Card */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <FileX className="h-5 w-5 text-red-600" />
+                Exam Session Data
+              </CardTitle>
+              <CardDescription>Manage exam session records and clean up old data</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Session Stats */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800 text-center">
+                  <p className="text-3xl font-bold text-blue-600 dark:text-blue-400">{sessionStats.total}</p>
+                  <p className="text-sm text-blue-700 dark:text-blue-300">Total Sessions</p>
+                </div>
+                <div className="p-4 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-200 dark:border-amber-800 text-center">
+                  <p className="text-3xl font-bold text-amber-600 dark:text-amber-400">{sessionStats.inProgress}</p>
+                  <p className="text-sm text-amber-700 dark:text-amber-300">In Progress</p>
+                </div>
+                <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800 text-center">
+                  <p className="text-3xl font-bold text-green-600 dark:text-green-400">{sessionStats.submitted}</p>
+                  <p className="text-sm text-green-700 dark:text-green-300">Submitted</p>
+                </div>
+              </div>
+
+              <div className="flex justify-end">
+                <Button
+                  variant="destructive"
+                  onClick={() => setShowDeleteSessionsDialog(true)}
+                  className="gap-2"
+                  disabled={sessionStats.total === 0}
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Delete All Session Data
+                </Button>
+              </div>
             </CardContent>
           </Card>
 
@@ -1688,152 +1710,138 @@ export default function SettingsPage() {
                   </Button>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {admins.map((admin) => (
-                    <div
-                      key={admin.id}
-                      className={`flex items-center justify-between p-4 rounded-lg border ${
-                        admin.id === currentUserId 
-                          ? 'bg-indigo-50 dark:bg-indigo-900/10 border-indigo-200 dark:border-indigo-800' 
-                          : 'bg-white dark:bg-zinc-900 border-gray-200 dark:border-zinc-800'
-                      }`}
-                    >
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          <p className="font-medium">{admin.full_name}</p>
-                          {admin.id === currentUserId && (
-                            <Badge variant="outline" className="text-xs">
-                              You
-                            </Badge>
-                          )}
-                        </div>
-                        <p className="text-sm text-gray-500">{admin.username}</p>
-                        <p className="text-sm text-gray-500 truncate">{admin.email}</p>
-                        {admin.phone_number && (
-                          <p className="text-xs text-gray-400 mt-1">{admin.phone_number}</p>
-                        )}
-                      </div>
-                      {canDeleteAdmin(admin) ? (
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50"
-                          onClick={() => handleDeleteAdminClick(admin)}
-                          title="Delete admin"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      ) : (
-                        <div 
-                          className="h-8 w-8 flex items-center justify-center text-gray-400"
-                          title={
-                            admin.id === currentUserId 
-                              ? "Cannot delete your own account" 
-                              : "Cannot delete the last admin"
-                          }
-                        >
-                          <ShieldAlert className="h-4 w-4" />
-                        </div>
-                      )}
+                <div className="space-y-8">
+                  <div>
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="text-sm font-semibold text-muted-foreground">Super Admins</h3>
+                      <Badge variant="secondary" className="text-xs">
+                        {admins.filter((a) => (a.role ?? "super_admin") === "super_admin").length}
+                      </Badge>
                     </div>
-                  ))}
+                    {admins.filter((a) => (a.role ?? "super_admin") === "super_admin").length === 0 ? (
+                      <p className="text-xs text-muted-foreground">No super admin accounts.</p>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                        {admins
+                          .filter((admin) => (admin.role ?? "super_admin") === "super_admin")
+                          .map((admin) => (
+                            <div
+                              key={admin.id}
+                              className={`flex items-center justify-between p-4 rounded-lg border ${
+                                admin.id === currentUserId 
+                                  ? 'bg-indigo-50 dark:bg-indigo-900/10 border-indigo-200 dark:border-indigo-800' 
+                                  : 'bg-white dark:bg-zinc-900 border-gray-200 dark:border-zinc-800'
+                              }`}
+                            >
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2 mb-1">
+                                  <p className="font-medium">{admin.full_name}</p>
+                                  {admin.id === currentUserId && (
+                                    <Badge variant="outline" className="text-xs">
+                                      You
+                                    </Badge>
+                                  )}
+                                </div>
+                                <p className="text-sm text-gray-500">{admin.username}</p>
+                                <p className="text-sm text-gray-500 truncate">{admin.email}</p>
+                                {admin.phone_number && (
+                                  <p className="text-xs text-gray-400 mt-1">{admin.phone_number}</p>
+                                )}
+                              </div>
+                              {canDeleteAdmin(admin) ? (
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50"
+                                  onClick={() => handleDeleteAdminClick(admin)}
+                                  title="Delete admin"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              ) : (
+                                <div 
+                                  className="h-8 w-8 flex items-center justify-center text-gray-400"
+                                  title={
+                                    admin.id === currentUserId 
+                                      ? "Cannot delete your own account" 
+                                      : "Cannot delete the last admin"
+                                  }
+                                >
+                                  <ShieldAlert className="h-4 w-4" />
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div>
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="text-sm font-semibold text-muted-foreground">Admins</h3>
+                      <Badge variant="outline" className="text-xs">
+                        {admins.filter((a) => (a.role ?? "super_admin") === "admin").length}
+                      </Badge>
+                    </div>
+                    {admins.filter((a) => (a.role ?? "super_admin") === "admin").length === 0 ? (
+                      <p className="text-xs text-muted-foreground">No admin accounts.</p>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                        {admins
+                          .filter((admin) => (admin.role ?? "super_admin") === "admin")
+                          .map((admin) => (
+                            <div
+                              key={admin.id}
+                              className={`flex items-center justify-between p-4 rounded-lg border ${
+                                admin.id === currentUserId 
+                                  ? 'bg-indigo-50 dark:bg-indigo-900/10 border-indigo-200 dark:border-indigo-800' 
+                                  : 'bg-white dark:bg-zinc-900 border-gray-200 dark:border-zinc-800'
+                              }`}
+                            >
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2 mb-1">
+                                  <p className="font-medium">{admin.full_name}</p>
+                                  {admin.id === currentUserId && (
+                                    <Badge variant="outline" className="text-xs">
+                                      You
+                                    </Badge>
+                                  )}
+                                </div>
+                                <p className="text-sm text-gray-500">{admin.username}</p>
+                                <p className="text-sm text-gray-500 truncate">{admin.email}</p>
+                                {admin.phone_number && (
+                                  <p className="text-xs text-gray-400 mt-1">{admin.phone_number}</p>
+                                )}
+                              </div>
+                              {canDeleteAdmin(admin) ? (
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50"
+                                  onClick={() => handleDeleteAdminClick(admin)}
+                                  title="Delete admin"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              ) : (
+                                <div 
+                                  className="h-8 w-8 flex items-center justify-center text-gray-400"
+                                  title={
+                                    admin.id === currentUserId 
+                                      ? "Cannot delete your own account" 
+                                      : "Cannot delete the last admin"
+                                  }
+                                >
+                                  <ShieldAlert className="h-4 w-4" />
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
-            </CardContent>
-          </Card>
-
-          {/* Admin Access Control (global toggles for Admin role) */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Shield className="h-5 w-5 text-indigo-600" />
-                Admin Access Control
-              </CardTitle>
-              <CardDescription>
-                Configure which dashboard pages Admin accounts can open. Super Admins always have full access.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <p className="text-sm font-medium text-gray-900 dark:text-gray-100">Core pages</p>
-                  <p className="text-xs text-muted-foreground mb-3">
-                    Toggle visibility of the main dashboard pages for Admins.
-                  </p>
-                  {[
-                    { key: "dashboard_home", label: "Dashboard Home" },
-                    { key: "analytics", label: "Analytics" },
-                    { key: "settings_system", label: "System & Backup Settings" },
-                  ].map((item) => (
-                    <div key={item.key} className="flex items-center justify-between py-1">
-                      <div>
-                        <p className="text-sm">{item.label}</p>
-                      </div>
-                      <Switch
-                        checked={adminPageAccess[item.key] !== false}
-                        onCheckedChange={async (checked) => {
-                          try {
-                            const res = await fetch("/api/admin/page-permissions", {
-                              method: "PUT",
-                              headers: { "Content-Type": "application/json" },
-                              body: JSON.stringify({ pageKey: item.key, allowed: checked }),
-                            })
-                            if (!res.ok) {
-                              toast.error("Failed to update access")
-                              return
-                            }
-                            setAdminPageAccess((prev) => ({ ...prev, [item.key]: checked }))
-                            toast.success("Access updated")
-                          } catch {
-                            toast.error("Failed to update access")
-                          }
-                        }}
-                      />
-                    </div>
-                  ))}
-                </div>
-
-                <div className="space-y-2">
-                  <p className="text-sm font-medium text-gray-900 dark:text-gray-100">Management pages</p>
-                  <p className="text-xs text-muted-foreground mb-3">
-                    Control access to teacher and student management for Admins.
-                  </p>
-                  {[
-                    { key: "teachers_page", label: "Teachers page" },
-                    { key: "teachers_create", label: "Can create teachers" },
-                    { key: "students_page", label: "Students page" },
-                    { key: "students_create", label: "Can create students" },
-                    { key: "grades_page", label: "Grades page" },
-                    { key: "grades_create", label: "Can create grades" },
-                    { key: "subjects_page", label: "Subjects page" },
-                    { key: "subjects_create", label: "Can create subjects" },
-                  ].map((item) => (
-                    <div key={item.key} className="flex items-center justify-between py-1">
-                      <p className="text-sm">{item.label}</p>
-                      <Switch
-                        checked={adminPageAccess[item.key] !== false}
-                        onCheckedChange={async (checked) => {
-                          try {
-                            const res = await fetch("/api/admin/page-permissions", {
-                              method: "PUT",
-                              headers: { "Content-Type": "application/json" },
-                              body: JSON.stringify({ pageKey: item.key, allowed: checked }),
-                            })
-                            if (!res.ok) {
-                              toast.error("Failed to update access")
-                              return
-                            }
-                            setAdminPageAccess((prev) => ({ ...prev, [item.key]: checked }))
-                            toast.success("Access updated")
-                          } catch {
-                            toast.error("Failed to update access")
-                          }
-                        }}
-                      />
-                    </div>
-                  ))}
-                </div>
-              </div>
             </CardContent>
           </Card>
         </TabsContent>
@@ -1841,14 +1849,14 @@ export default function SettingsPage() {
       </Tabs>
       )}
 
-      {/* Add Admin Dialog */}
-      <Dialog open={showAddAdmin} onOpenChange={setShowAddAdmin}>
-        <DialogContent className="max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Add New Admin</DialogTitle>
-            <DialogDescription>Create a new admin or super admin account</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
+      {/* Add Admin Drawer */}
+      <Drawer open={showAddAdmin} onOpenChange={setShowAddAdmin}>
+        <DrawerContent className="data-[vaul-drawer-direction=right]:sm:max-w-md">
+          <DrawerHeader>
+            <DrawerTitle>Add New Admin</DrawerTitle>
+            <DrawerDescription>Create a new admin or super admin account</DrawerDescription>
+          </DrawerHeader>
+          <div className="px-4 pb-4 space-y-4 overflow-y-auto max-h-[calc(100vh-8rem)]">
             <div className="space-y-2">
               <Label htmlFor="username">Username *</Label>
               <Input
@@ -1915,7 +1923,7 @@ export default function SettingsPage() {
                       Admin
                     </Label>
                     <p className="text-xs text-muted-foreground">
-                      Limited access. Honors page permissions configured in Admin Access Control.
+                      Limited access. Cannot open Dashboard Home, Settings, or Teacher Create, but can use other pages.
                     </p>
                   </div>
                 </div>
@@ -1933,16 +1941,26 @@ export default function SettingsPage() {
               </RadioGroup>
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowAddAdmin(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleAddAdmin} disabled={!newAdminUsername || !newAdminFullName || !newAdminEmail || !newAdminPassword}>
+          <DrawerFooter className="border-t">
+            <DrawerClose asChild>
+              <Button variant="outline">
+                Cancel
+              </Button>
+            </DrawerClose>
+            <Button
+              onClick={handleAddAdmin}
+              disabled={
+                !newAdminUsername ||
+                !newAdminFullName ||
+                !newAdminEmail ||
+                !newAdminPassword
+              }
+            >
               Add Admin
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </DrawerFooter>
+        </DrawerContent>
+      </Drawer>
 
       {/* Delete Admin Confirmation */}
       <Dialog open={deleteAdminConfirmOpen} onOpenChange={setDeleteAdminConfirmOpen}>

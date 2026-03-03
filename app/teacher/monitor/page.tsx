@@ -203,10 +203,6 @@ export default function LiveMonitorPage() {
     }
   };
 
-  if (loading && !teacherId) {
-    return <DashboardSpinner />;
-  }
-
   const activeCount = students.filter((s) => s.status === "Active").length;
   const disconnectedCount = students.filter((s) => s.status === "Disconnected").length;
   const flaggedCount = students.filter((s) => s.isFlagged).length;
@@ -223,6 +219,10 @@ export default function LiveMonitorPage() {
   const [addTimeConfirmOpen, setAddTimeConfirmOpen] = useState(false);
   const [addTimeAllOpen, setAddTimeAllOpen] = useState(false);
   const [addTimeAllMinutes, setAddTimeAllMinutes] = useState("5");
+
+  if (loading && !teacherId) {
+    return <DashboardSpinner />;
+  }
 
   const handleOpenAddSpecificTime = (sessionId: string) => {
     setAddTimeSessionId(sessionId);

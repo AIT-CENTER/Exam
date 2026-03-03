@@ -111,6 +111,7 @@ export default function StudentLogin() {
   const [idsVerified, setIdsVerified] = useState(false);
   const [verifyingIds, setVerifyingIds] = useState(false);
   const [idCheckError, setIdCheckError] = useState("");
+  const [validatedSessionInfo, setValidatedSessionInfo] = useState<any | null>(null);
 
   useEffect(() => {
     fetchStudentIdFormat();
@@ -141,6 +142,7 @@ export default function StudentLogin() {
   useEffect(() => {
     setIdsVerified(false);
     setIdCheckError("");
+     setValidatedSessionInfo(null);
 
     const trimmedStudent = studentId.trim();
     const trimmedExam = examId.trim();
@@ -160,10 +162,11 @@ export default function StudentLogin() {
 
     const timer = setTimeout(async () => {
       try {
-        await validateExamAccess(trimmedStudent, trimmedExam);
+        const result = await validateExamAccess(trimmedStudent, trimmedExam);
         if (!cancelled) {
           setIdsVerified(true);
           setIdCheckError("");
+          setValidatedSessionInfo(result);
         }
       } catch (error: any) {
         if (!cancelled) {
@@ -173,7 +176,7 @@ export default function StudentLogin() {
       } finally {
         if (!cancelled) setVerifyingIds(false);
       }
-    }, 500);
+    }, 200);
 
     return () => {
       cancelled = true;
@@ -384,7 +387,11 @@ export default function StudentLogin() {
 
     setLoading(true);
     try {
-      const validationResult = await validateExamAccess(studentId, examId);
+      const validationResult =
+        validatedSessionInfo ?? (await validateExamAccess(studentId, examId));
+      if (!validatedSessionInfo) {
+        setValidatedSessionInfo(validationResult);
+      }
 
       // Server-based session check: do not create duplicate; reuse existing if any.
       const checkRes = await fetch("/api/exam/check-session", {
@@ -438,27 +445,10 @@ export default function StudentLogin() {
         return;
       }
 
-      // No active session: create one via API (server sets start_time and end_time).
-      const createRes = await fetch("/api/exam/create-session", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          studentId: validationResult.student.id,
-          examId: validationResult.exam.id,
-          teacherId: validationResult.assignment?.teacher_id,
-          deviceFingerprint,
-          ipAddress,
-          userAgent: typeof navigator !== "undefined" ? navigator.userAgent : "",
-        }),
-      });
-      const createData = await createRes.json();
-      if (!createRes.ok) {
-        throw new Error(createData.error || "Failed to create exam session");
-      }
-
-      const sessionData = createData.session;
-      toast.success("Login successful! Starting exam...");
-      redirectToExam(sessionData, validationResult);
+      // No active session yet: route to exam instructions. The actual timer/session will start after student clicks "Start".
+      toast.success("Login successful! You can review the instructions before starting.");
+      redirectToInstructions(validationResult);
+      setLoading(false);
     } catch (error: any) {
       console.error("Login error:", error);
       const errorMsg = error.message || "Login failed";
@@ -590,6 +580,18 @@ export default function StudentLogin() {
     const slug = exam.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)+/g, "");
 
     router.push(`/start/${slug}?student=${student.student_id}&exam=${exam.exam_code}&session=${session.id}&token=${session.security_token}`);
+  };
+
+  const redirectToInstructions = (validationResult: any) => {
+    const { student, exam } = validationResult;
+    const slug = exam.title
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/(^-|-$)+/g, "");
+
+    router.push(
+      `/start/${slug}?student=${student.student_id}&exam=${exam.exam_code}`
+    );
   };
 
   const redirectToResumeSession = (resumeData: any) => {

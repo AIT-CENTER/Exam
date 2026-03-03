@@ -289,11 +289,11 @@ export default function TeacherManagementPage() {
         if (res.ok) {
           const json = await res.json()
           const role = json.role as "super_admin" | "admin" | undefined
-          const permissions = (json.permissions || {}) as Record<string, boolean>
-          if (!role || role === "super_admin") {
-            setCanCreateTeacher(true)
+          // Hard-lock teacher creation for Admin role; other roles can create
+          if (role === "admin") {
+            setCanCreateTeacher(false)
           } else {
-            setCanCreateTeacher(permissions["teachers_create"] !== false)
+            setCanCreateTeacher(true)
           }
         }
       } catch {
