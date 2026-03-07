@@ -2506,12 +2506,12 @@ export default function ExamTakingPage() {
         onCopy={(e) => e.preventDefault()}
         onCut={(e) => e.preventDefault()}
       >
-        <Card className="w-full max-w-2xl shadow-xl border-0">
-          <CardHeader className="text-center bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-t-lg">
+        <Card className="w-full bg-[#F7F7F4] dark:bg-[#14120B] max-w-2xl shadow-xl border-0">
+          <CardHeader className="text-center  text-[#26251E] rounded-t-lg">
             <CardTitle className="text-lg md:text-2xl font-bold">
               {examData?.title}
             </CardTitle>
-            <p className="text-blue-100 pt-1 text-xs md:text-sm">
+            <p className="text-[#3A251E] pt-1 text-xs md:text-sm">
               Read all instructions carefully before you begin.
             </p>
           </CardHeader>
@@ -2554,87 +2554,6 @@ export default function ExamTakingPage() {
                     dangerouslySetInnerHTML={{ __html: examData.description }}
                   />
                 </div>
-              </div>
-            )}
-
-            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 p-3 md:p-4 rounded-lg">
-              <div className="flex items-center gap-2 mb-2 md:mb-3">
-                <AlertTriangle className="h-4 w-4 md:h-5 md:w-5 text-blue-600" />
-                <p className="font-bold text-blue-800 text-xs md:text-sm">
-                  Exam Settings:
-                </p>
-              </div>
-              <ul className="space-y-1 md:space-y-2 text-xs md:text-sm text-blue-800">
-                {examData?.questions_shuffled && (
-                  <li className="flex items-center gap-2">
-                    <div className="h-1 w-1 md:h-2 md:w-2 rounded-full bg-blue-600"></div>
-                    <span>
-                      <strong>Questions are randomized</strong> - Each student
-                      gets different order
-                    </span>
-                  </li>
-                )}
-                {examData?.options_shuffled && (
-                  <li className="flex items-center gap-2">
-                    <div className="h-1 w-1 md:h-2 md:w-2 rounded-full bg-blue-600"></div>
-                    <span>
-                      <strong>Options are shuffled</strong> - Answer choices
-                      appear in different order
-                    </span>
-                  </li>
-                )}
-                {examData?.fullscreen_required && (
-                  <li className="flex items-center gap-2">
-                    <div className="h-1 w-1 md:h-2 md:w-2 rounded-full bg-blue-600"></div>
-                    <span>
-                      <strong>Fullscreen required</strong> - You must stay in
-                      fullscreen mode
-                    </span>
-                  </li>
-                )}
-                <li className="flex items-center gap-2">
-                  <div className="h-1 w-1 md:h-2 md:w-2 rounded-full bg-blue-600"></div>
-                  <span>
-                    <strong>Device locking enabled</strong> - One device per
-                    student only
-                  </span>
-                </li>
-                <li className="flex items-center gap-2">
-                  <div className="h-1 w-1 md:h-2 md:w-2 rounded-full bg-blue-600"></div>
-                  <span>
-                    <strong>Auto-save enabled</strong> - Answers are saved
-                    automatically
-                  </span>
-                </li>
-                {examData?.show_results && (
-                  <li className="flex items-center gap-2">
-                    <div className="h-1 w-1 md:h-2 md:w-2 rounded-full bg-green-600"></div>
-                    <span>
-                      <strong>Results will be shown</strong> - You'll see your
-                      score after submission
-                    </span>
-                  </li>
-                )}
-              </ul>
-            </div>
-
-            {deviceFingerprint && (
-              <div className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 p-3 md:p-4 rounded-lg">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Shield className="h-4 w-4 md:h-5 md:w-5 text-green-600" />
-                    <span className="font-medium text-green-800 text-xs md:text-sm">
-                      Device Verified
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <div className="w-1 h-1 md:w-2 md:h-2 bg-green-500 rounded-full animate-pulse"></div>
-                    <span className="text-xs text-green-600">Secure</span>
-                  </div>
-                </div>
-                <p className="text-xs text-green-700 mt-1 md:mt-2">
-                  Device ID: {deviceFingerprint.substring(0, 12)}...
-                </p>
               </div>
             )}
 

@@ -208,10 +208,21 @@ export default function TeacherDashboardPage() {
       // If teacher has grade_id, include students from that grade
       if (teacher.gradeId) {
         studentsQuery = studentsQuery.eq("grade_id", teacher.gradeId)
-        
+
         // If teacher has specific sections, filter by those sections too
         if (teacher.sections && teacher.sections.length > 0) {
           studentsQuery = studentsQuery.in("section", teacher.sections)
+        }
+
+        // For streamed grades (e.g. Grade 11/12) limit students to the teacher's stream
+        const gradeName = (teacher as any).gradeName as string | undefined
+        const stream = (teacher as any).stream as string | null | undefined
+        const isStreamedGrade =
+          typeof gradeName === "string" &&
+          (gradeName.includes("11") || gradeName.includes("12"))
+
+        if (isStreamedGrade && stream) {
+          studentsQuery = studentsQuery.eq("stream", stream)
         }
       }
 

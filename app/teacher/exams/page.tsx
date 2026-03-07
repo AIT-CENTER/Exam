@@ -263,9 +263,18 @@ export default function ExamsPage() {
 
       // Filter students based on teacher's assigned grade and sections from cookie
       if (teacher.gradeId && teacher.sections && teacher.sections.length > 0) {
-        query = query
-          .eq("grade_id", teacher.gradeId)
-          .in("section", teacher.sections);
+        query = query.eq("grade_id", teacher.gradeId).in("section", teacher.sections);
+
+        // For streamed grades (e.g. Grade 11/12) further limit by the teacher's stream
+        const gradeName = teacher.gradeName as string | undefined;
+        const stream = teacher.stream as string | null | undefined;
+        const isStreamedGrade =
+          typeof gradeName === "string" &&
+          (gradeName.includes("11") || gradeName.includes("12"));
+
+        if (isStreamedGrade && stream) {
+          query = query.eq("stream", stream);
+        }
       }
 
       const { data, error } = await query;
@@ -297,7 +306,7 @@ export default function ExamsPage() {
     }
   };
 
-  const fetchAvailableStudents = async (examId, gradeId, sections) => {
+  const fetchAvailableStudents = async (examId, gradeId, sections, stream?: string | null) => {
     try {
       const { data: assignedStudents } = await supabase
         .from("assign_exams")
@@ -311,6 +320,11 @@ export default function ExamsPage() {
         .select("id, student_id, name, father_name, grandfather_name, gender, grade_id, section, email")
         .eq("grade_id", gradeId)
         .in("section", sections);
+
+      // For streamed grades (e.g. Grade 11/12) optionally limit by stream
+      if (stream) {
+        query = query.eq("stream", stream);
+      }
 
       if (assignedStudentIds.length > 0) {
         query = query.not("id", "in", `(${assignedStudentIds.join(",")})`);
@@ -364,15 +378,20 @@ export default function ExamsPage() {
 
     if (teacherData && teacherData.gradeId) {
       setSelectedGrade(teacherData.gradeId.toString());
-      
+
       if (teacherData.sections && teacherData.sections.length > 0) {
-        const teacherSections = teacherData.sections.map(s => 
-          s.includes('-') ? s.split('-')[0] : s
+        const teacherSections = teacherData.sections.map((s) =>
+          s.includes("-") ? s.split("-")[0] : s
         );
         setSelectedSections(teacherSections);
         setSelectAllSections(teacherSections.length === sections.length);
-        
-        await fetchAvailableStudents(exam.id, teacherData.gradeId, teacherSections);
+
+        await fetchAvailableStudents(
+          exam.id,
+          teacherData.gradeId,
+          teacherSections,
+          teacherData.stream as string | null | undefined
+        );
       }
     } else {
       setSelectedGrade("");
@@ -440,7 +459,12 @@ export default function ExamsPage() {
     setSelectedSections(newSections);
     
     if (currentExam && selectedGrade && newSections.length > 0) {
-      await fetchAvailableStudents(currentExam.id, parseInt(selectedGrade), newSections);
+      await fetchAvailableStudents(
+        currentExam.id,
+        parseInt(selectedGrade),
+        newSections,
+        teacherData?.stream as string | null | undefined
+      );
     }
   };
 
@@ -450,7 +474,12 @@ export default function ExamsPage() {
     setSelectedSections(newSections);
     
     if (currentExam && selectedGrade && newSections.length > 0) {
-      await fetchAvailableStudents(currentExam.id, parseInt(selectedGrade), newSections);
+      await fetchAvailableStudents(
+        currentExam.id,
+        parseInt(selectedGrade),
+        newSections,
+        teacherData?.stream as string | null | undefined
+      );
     }
   };
 

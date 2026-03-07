@@ -15,6 +15,13 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -67,6 +74,7 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const supabase = createBrowserClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -77,6 +85,8 @@ interface Grade {
   id: number | null;
   name: string;
   description: string;
+  // Whether this grade uses streams (e.g. Natural / Social)
+  hasStream?: boolean;
 }
 
 interface Subject {
@@ -89,9 +99,10 @@ interface GradeSection {
   id: number;
   grade_id: number;
   section_name: string;
+  stream: string | null;
 }
 
-const emptyGrade: Grade = { id: null, name: "", description: "" };
+const emptyGrade: Grade = { id: null, name: "", description: "", hasStream: false };
 const ITEMS_PER_PAGE = 6;
 
 // Premium spinner matching the dashboard
@@ -165,13 +176,15 @@ export default function GradesPage() {
   const [selectedGradeForViewSubjects, setSelectedGradeForViewSubjects] = useState<Grade | null>(null);
   const [selectedGradeForSections, setSelectedGradeForSections] = useState<Grade | null>(null);
   
-  const [selectedSubjectIds, setSelectedSubjectIds] = useState<number[]>([]);
+  // Selected subjects per stream in Assign modal: { Common: [], Natural: [], Social: [] }
+  const [selectedByStream, setSelectedByStream] = useState<Record<string, number[]>>({ Common: [], Natural: [], Social: [] });
   const [sectionInput, setSectionInput] = useState("");
+  const [sectionStream, setSectionStream] = useState<string>("Natural");
   
-  // Data Maps
-  const [assignedSubjects, setAssignedSubjects] = useState<Record<number, number[]>>({});
+  // Data Maps: gradeId -> stream -> subjectIds; gradeId -> sections (with stream)
+  const [assignedSubjects, setAssignedSubjects] = useState<Record<number, Record<string, number[]>>>({});
   const [assignedSections, setAssignedSections] = useState<Record<number, GradeSection[]>>({});
-  
+  const [supportsStreamFlag, setSupportsStreamFlag] = useState(false);
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
   const [canCreateGrade, setCanCreateGrade] = useState(true);
@@ -221,11 +234,19 @@ export default function GradesPage() {
         return;
       }
 
+      if (data && data.length > 0 && typeof (data[0] as any).has_stream === "boolean") {
+        setSupportsStreamFlag(true);
+      }
+
       setGrades(
-        data.map((grade) => ({
+        data.map((grade: any) => ({
           id: grade.id,
           name: grade.grade_name,
           description: grade.description,
+          hasStream:
+            typeof grade.has_stream === "boolean"
+              ? grade.has_stream
+              : undefined,
         }))
       );
     } catch (error) {
@@ -249,21 +270,24 @@ export default function GradesPage() {
 
   const fetchSections = async () => {
     try {
-      // Fetch ALL sections at once to populate cards correctly
       const { data, error } = await supabase
         .from("grade_sections")
-        .select("*")
+        .select("id, grade_id, section_name, stream")
         .order("section_name", { ascending: true });
 
       if (error) return;
 
-      // Group sections by grade_id
       const grouped: Record<number, GradeSection[]> = {};
-      (data || []).forEach(section => {
+      (data || []).forEach((section: any) => {
         if (!grouped[section.grade_id]) {
           grouped[section.grade_id] = [];
         }
-        grouped[section.grade_id].push(section);
+        grouped[section.grade_id].push({
+          id: section.id,
+          grade_id: section.grade_id,
+          section_name: section.section_name,
+          stream: section.stream ?? null,
+        });
       });
 
       setAssignedSections(grouped);
@@ -276,16 +300,20 @@ export default function GradesPage() {
     try {
       const { data, error } = await supabase
         .from("grade_subjects")
-        .select("grade_id, subject_id");
+        .select("grade_id, subject_id, stream");
 
       if (error) return;
 
-      const grouped: Record<number, number[]> = {};
-      data.forEach((assignment) => {
+      const grouped: Record<number, Record<string, number[]>> = {};
+      (data || []).forEach((assignment: any) => {
+        const stream = assignment.stream ?? "Common";
         if (!grouped[assignment.grade_id]) {
-          grouped[assignment.grade_id] = [];
+          grouped[assignment.grade_id] = { Common: [], Natural: [], Social: [] };
         }
-        grouped[assignment.grade_id].push(assignment.subject_id);
+        if (!grouped[assignment.grade_id][stream]) {
+          grouped[assignment.grade_id][stream] = [];
+        }
+        grouped[assignment.grade_id][stream].push(assignment.subject_id);
       });
 
       setAssignedSubjects(grouped);
@@ -298,19 +326,18 @@ export default function GradesPage() {
     return subjects;
   }, [subjects]);
 
-  // Get assigned subjects grouped by stream for a grade
+  // Get assigned subjects grouped by assignment stream for a grade
   const getAssignedSubjectsByStream = (gradeId: number) => {
-    const assignedIds = assignedSubjects[gradeId] || [];
-    const natural = subjects.filter(
-      (s) => assignedIds.includes(s.id) && s.stream === "Natural"
+    const byStream = assignedSubjects[gradeId] || { Common: [], Natural: [], Social: [] };
+    const naturalIds = byStream.Natural || [];
+    const socialIds = byStream.Social || [];
+    const commonIds = byStream.Common || [];
+    const natural = subjects.filter((s) => naturalIds.includes(s.id));
+    const social = subjects.filter((s) => socialIds.includes(s.id));
+    const common = subjects.filter((s) => commonIds.includes(s.id));
+    const all = subjects.filter((s) =>
+      naturalIds.includes(s.id) || socialIds.includes(s.id) || commonIds.includes(s.id)
     );
-    const social = subjects.filter(
-      (s) => assignedIds.includes(s.id) && s.stream === "Social"
-    );
-    const common = subjects.filter(
-      (s) => assignedIds.includes(s.id) && (!s.stream || s.stream === "Common")
-    );
-    const all = subjects.filter((s) => assignedIds.includes(s.id));
     return { natural, social, common, all };
   };
 
@@ -337,10 +364,12 @@ export default function GradesPage() {
   };
 
   const handleEdit = (grade: Grade) => {
+    // Preserve hasStream flag when editing if available
     setCurrentGrade({
       id: grade.id,
       name: grade.name,
       description: grade.description,
+      hasStream: grade.hasStream,
     });
     setIsFormOpen(true);
   };
@@ -352,7 +381,12 @@ export default function GradesPage() {
 
   const handleOpenAssignSubjects = (grade: Grade) => {
     setSelectedGradeForSubjects(grade);
-    setSelectedSubjectIds(assignedSubjects[grade.id!] || []);
+    const byStream = assignedSubjects[grade.id!] || { Common: [], Natural: [], Social: [] };
+    setSelectedByStream({
+      Common: byStream.Common || [],
+      Natural: byStream.Natural || [],
+      Social: byStream.Social || [],
+    });
     setIsSubjectModalOpen(true);
   };
 
@@ -361,9 +395,15 @@ export default function GradesPage() {
     setIsViewSubjectsModalOpen(true);
   };
 
+  const isStreamedGrade = (grade: Grade) => {
+    if (typeof grade.hasStream === "boolean") return grade.hasStream;
+    return grade.name.includes("11") || grade.name.includes("12");
+  };
+
   const handleOpenAssignSections = (grade: Grade) => {
     setSelectedGradeForSections(grade);
     setSectionInput("");
+    setSectionStream("Natural");
     setIsSectionModalOpen(true);
   };
 
@@ -378,20 +418,32 @@ export default function GradesPage() {
 
     try {
       if (currentGrade.id) {
+        const updatePayload: any = {
+          grade_name: currentGrade.name.trim(),
+          description: currentGrade.description || null,
+        };
+        if (supportsStreamFlag && typeof currentGrade.hasStream === "boolean") {
+          updatePayload.has_stream = currentGrade.hasStream;
+        }
+
         const { error: updateError } = await supabase
           .from("grades")
-          .update({
-            grade_name: currentGrade.name.trim(),
-            description: currentGrade.description || null,
-          })
+          .update(updatePayload)
           .eq("id", currentGrade.id);
 
         error = updateError;
       } else {
-        const { error: insertError } = await supabase.from("grades").insert({
+        const insertPayload: any = {
           grade_name: currentGrade.name.trim(),
           description: currentGrade.description || null,
-        });
+        };
+        if (supportsStreamFlag && typeof currentGrade.hasStream === "boolean") {
+          insertPayload.has_stream = currentGrade.hasStream;
+        }
+
+        const { error: insertError } = await supabase
+          .from("grades")
+          .insert(insertPayload);
 
         error = insertError;
       }
@@ -452,16 +504,20 @@ export default function GradesPage() {
         .delete()
         .eq("grade_id", selectedGradeForSubjects.id);
 
-      if (selectedSubjectIds.length > 0) {
-        const newAssignments = selectedSubjectIds.map((subjectId) => ({
-          grade_id: selectedGradeForSubjects.id,
-          subject_id: subjectId,
-        }));
+      const newAssignments: { grade_id: number; subject_id: number; stream: string }[] = [];
+      (["Common", "Natural", "Social"] as const).forEach((stream) => {
+        const ids = selectedByStream[stream] || [];
+        ids.forEach((subjectId) => {
+          newAssignments.push({
+            grade_id: selectedGradeForSubjects.id!,
+            subject_id: subjectId,
+            stream,
+          });
+        });
+      });
 
-        const { error } = await supabase
-          .from("grade_subjects")
-          .insert(newAssignments);
-
+      if (newAssignments.length > 0) {
+        const { error } = await supabase.from("grade_subjects").insert(newAssignments);
         if (error) {
           toast.error(`Failed to assign subjects: ${error.message}`);
           return;
@@ -483,10 +539,13 @@ export default function GradesPage() {
       return;
     }
 
+    const streamValue = isStreamedGrade(selectedGradeForSections) ? sectionStream : null;
+
     try {
       const { error } = await supabase.from("grade_sections").insert({
         grade_id: selectedGradeForSections.id,
         section_name: sectionInput.trim(),
+        stream: streamValue,
       });
 
       if (error) {
@@ -496,7 +555,7 @@ export default function GradesPage() {
 
       toast.success("Section added successfully");
       setSectionInput("");
-      fetchSections(); // Re-fetch all to update state
+      fetchSections();
     } catch (error) {
       toast.error("Unexpected error adding section.");
     }
@@ -521,13 +580,32 @@ export default function GradesPage() {
     }
   };
 
-  const toggleSubject = (subjectId: number) => {
-    setSelectedSubjectIds((prev) =>
-      prev.includes(subjectId)
-        ? prev.filter((id) => id !== subjectId)
-        : [...prev, subjectId]
-    );
+  const toggleSubjectInStream = (subjectId: number, stream: string) => {
+    setSelectedByStream((prev) => {
+      const list = prev[stream] || [];
+      const next = list.includes(subjectId)
+        ? list.filter((id) => id !== subjectId)
+        : [...list, subjectId];
+      return { ...prev, [stream]: next };
+    });
   };
+
+  const isSubjectSelectedInStream = (subjectId: number, stream: string) =>
+    (selectedByStream[stream] || []).includes(subjectId);
+
+  // Subjects that can be assigned to each stream (by subject's own stream type)
+  const subjectsForCommon = useMemo(
+    () => subjects.filter((s) => !s.stream || s.stream === "Common"),
+    [subjects]
+  );
+  const subjectsForNatural = useMemo(
+    () => subjects.filter((s) => s.stream === "Natural" || s.stream === "Common" || !s.stream),
+    [subjects]
+  );
+  const subjectsForSocial = useMemo(
+    () => subjects.filter((s) => s.stream === "Social" || s.stream === "Common" || !s.stream),
+    [subjects]
+  );
 
   if (isLoading) {
     return <PageSpinner />;
@@ -711,6 +789,11 @@ export default function GradesPage() {
                                     gradeSections.slice(0, 3).map(sec => (
                                         <Badge key={sec.id} variant="secondary" className="text-[10px] px-1.5 h-5">
                                             {sec.section_name}
+                                            {sec.stream && (
+                                              <span className="ml-1 opacity-80">
+                                                · {sec.stream}
+                                              </span>
+                                            )}
                                         </Badge>
                                     ))
                                 ) : (
@@ -847,6 +930,38 @@ export default function GradesPage() {
                 className="min-h-[100px] focus-visible:ring-primary"
               />
             </div>
+            <div className="grid gap-2">
+              <Label>
+                Streams
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                Does this grade use streams such as Natural / Social?
+              </p>
+              <div className="flex items-center gap-3">
+                <Button
+                  type="button"
+                  variant={currentGrade.hasStream ? "default" : "outline"}
+                  size="sm"
+                  onClick={() =>
+                    setCurrentGrade((prev) => ({ ...prev, hasStream: true }))
+                  }
+                  disabled={isSaving}
+                >
+                  Has streams
+                </Button>
+                <Button
+                  type="button"
+                  variant={!currentGrade.hasStream ? "default" : "outline"}
+                  size="sm"
+                  onClick={() =>
+                    setCurrentGrade((prev) => ({ ...prev, hasStream: false }))
+                  }
+                  disabled={isSaving}
+                >
+                  No streams
+                </Button>
+              </div>
+            </div>
           </div>
           <DialogFooter className="sm:justify-end border-t pt-4">
             <DialogClose asChild>
@@ -895,82 +1010,258 @@ export default function GradesPage() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Assign Subjects Dialog - Modern Shadcn Design */}
+      {/* Assign Subjects Dialog - stream-aware subject assignment with stream tabs */}
       <Dialog open={isSubjectModalOpen} onOpenChange={setIsSubjectModalOpen}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="w-[95vw] sm:max-w-2xl max-h-[90vh] flex flex-col">
           <DialogHeader>
-            <DialogTitle>
-              Assign subjects to {selectedGradeForSubjects?.name}
-            </DialogTitle>
+            <DialogTitle>Assign subjects to {selectedGradeForSubjects?.name}</DialogTitle>
             <DialogDescription>
-              Select the subjects you want to assign to this grade. Click save when you're done.
+              Assign subjects for this grade. If the grade uses streams, use the Natural and Social tabs to configure each stream separately.
             </DialogDescription>
           </DialogHeader>
 
-          <div className="py-4">
-            <ScrollArea className="h-[300px] pr-4">
-              <div className="space-y-4">
-                {allSubjects.length === 0 ? (
-                  <p className="text-sm text-muted-foreground text-center py-8">
-                    No subjects available.
-                  </p>
-                ) : (
-                  allSubjects.map((subject) => {
-                    const getStreamColor = () => {
-                      if (subject.stream === "Natural")
-                        return "bg-emerald-100 text-emerald-700 border-emerald-200";
-                      if (subject.stream === "Social")
-                        return "bg-blue-100 text-blue-700 border-blue-200";
-                      return "bg-gray-100 text-gray-700 border-gray-200";
-                    };
+          {selectedGradeForSubjects && isStreamedGrade(selectedGradeForSubjects) ? (
+            <Tabs defaultValue="Natural" className="flex-1 flex flex-col">
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="Natural">Natural</TabsTrigger>
+                <TabsTrigger value="Social">Social</TabsTrigger>
+              </TabsList>
 
-                    return (
-                      <div
-                        key={subject.id}
-                        className="flex items-center space-x-3 p-2 rounded-lg hover:bg-muted/50 transition-colors"
-                      >
-                        <Checkbox
-                          id={`subject-${subject.id}`}
-                          checked={selectedSubjectIds.includes(subject.id)}
-                          onCheckedChange={() => toggleSubject(subject.id)}
-                        />
-                        <Label
-                          htmlFor={`subject-${subject.id}`}
-                          className="flex-1 flex items-center justify-between cursor-pointer"
-                        >
-                          <span className="text-sm font-medium">
-                            {subject.subject_name}
-                          </span>
-                          <Badge
-                            variant="outline"
-                            className={`text-xs ${getStreamColor()}`}
+              {/* Natural tab content */}
+              <TabsContent value="Natural" className="mt-4 flex-1">
+                <ScrollArea className="h-[60vh] pr-4">
+                  <div className="space-y-3 py-2">
+                    <h4 className="text-sm font-semibold flex items-center gap-2 text-emerald-700">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                      Natural stream subjects
+                    </h4>
+                    <div className="space-y-1.5 pl-4">
+                      {subjectsForNatural.length === 0 ? (
+                        <p className="text-xs text-muted-foreground">
+                          No subjects available for Natural stream.
+                        </p>
+                      ) : (
+                        subjectsForNatural.map((subject) => (
+                          <div
+                            key={`nat-${subject.id}`}
+                            className="flex items-center space-x-3 p-2 rounded-lg hover:bg-muted/50"
                           >
-                            {subject.stream || "Common"}
-                          </Badge>
-                        </Label>
-                      </div>
-                    );
-                  })
-                )}
+                            <Checkbox
+                              id={`sub-nat-${subject.id}`}
+                              checked={isSubjectSelectedInStream(subject.id, "Natural")}
+                              onCheckedChange={() =>
+                                toggleSubjectInStream(subject.id, "Natural")
+                              }
+                            />
+                            <Label
+                              htmlFor={`sub-nat-${subject.id}`}
+                              className="flex-1 cursor-pointer text-sm"
+                            >
+                              {subject.subject_name}
+                              {subject.stream && (
+                                <Badge
+                                  variant="outline"
+                                  className="ml-2 text-[10px] bg-emerald-50 text-emerald-700 border-emerald-200"
+                                >
+                                  {subject.stream}
+                                </Badge>
+                              )}
+                            </Label>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                </ScrollArea>
+
+                <Separator className="mt-4" />
+                <div className="flex items-center justify-between pt-4">
+                  <p className="text-sm text-muted-foreground">
+                    {selectedByStream.Common.length +
+                      selectedByStream.Natural.length +
+                      selectedByStream.Social.length}{" "}
+                    assignment(s)
+                  </p>
+                  <div className="flex gap-2">
+                    <DialogClose asChild>
+                      <Button variant="outline">Cancel</Button>
+                    </DialogClose>
+                    <Button onClick={handleSaveSubjects}>Save changes</Button>
+                  </div>
+                </div>
+              </TabsContent>
+
+              {/* Social tab content */}
+              <TabsContent value="Social" className="mt-4 flex-1">
+                <ScrollArea className="h-[60vh] pr-4">
+                  <div className="space-y-3 py-2">
+                    <h4 className="text-sm font-semibold flex items-center gap-2 text-blue-700">
+                      <span className="w-2 h-2 rounded-full bg-blue-500" />
+                      Social stream subjects
+                    </h4>
+                    <div className="space-y-1.5 pl-4">
+                      {subjectsForSocial.length === 0 ? (
+                        <p className="text-xs text-muted-foreground">
+                          No subjects available for Social stream.
+                        </p>
+                      ) : (
+                        subjectsForSocial.map((subject) => (
+                          <div
+                            key={`soc-${subject.id}`}
+                            className="flex items-center space-x-3 p-2 rounded-lg hover:bg-muted/50"
+                          >
+                            <Checkbox
+                              id={`sub-soc-${subject.id}`}
+                              checked={isSubjectSelectedInStream(subject.id, "Social")}
+                              onCheckedChange={() =>
+                                toggleSubjectInStream(subject.id, "Social")
+                              }
+                            />
+                            <Label
+                              htmlFor={`sub-soc-${subject.id}`}
+                              className="flex-1 cursor-pointer text-sm"
+                            >
+                              {subject.subject_name}
+                              {subject.stream && (
+                                <Badge
+                                  variant="outline"
+                                  className="ml-2 text-[10px] bg-blue-50 text-blue-700 border-blue-200"
+                                >
+                                  {subject.stream}
+                                </Badge>
+                              )}
+                            </Label>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                </ScrollArea>
+
+                <Separator className="mt-4" />
+                <div className="flex items-center justify-between pt-4">
+                  <p className="text-sm text-muted-foreground">
+                    {selectedByStream.Common.length +
+                      selectedByStream.Natural.length +
+                      selectedByStream.Social.length}{" "}
+                    assignment(s)
+                  </p>
+                  <div className="flex gap-2">
+                    <DialogClose asChild>
+                      <Button variant="outline">Cancel</Button>
+                    </DialogClose>
+                    <Button onClick={handleSaveSubjects}>Save changes</Button>
+                  </div>
+                </div>
+              </TabsContent>
+            </Tabs>
+          ) : (
+            // Non-stream grades: single scrolling list with common + all subjects
+            <div className="flex-1 flex flex-col mt-4">
+              <ScrollArea className="h-[60vh] pr-4">
+                <div className="space-y-6 py-2">
+                  {/* Common subjects – always available */}
+                  <div className="space-y-2">
+                    <h4 className="text-sm font-semibold flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-gray-500" />
+                      Common subjects
+                    </h4>
+                    <div className="space-y-1.5 pl-4">
+                      {subjectsForCommon.length === 0 ? (
+                        <p className="text-xs text-muted-foreground">
+                          No common subjects defined.
+                        </p>
+                      ) : (
+                        subjectsForCommon.map((subject) => (
+                          <div
+                            key={`common-${subject.id}`}
+                            className="flex items-center space-x-3 p-2 rounded-lg hover:bg-muted/50"
+                          >
+                            <Checkbox
+                              id={`sub-common-${subject.id}`}
+                              checked={isSubjectSelectedInStream(subject.id, "Common")}
+                              onCheckedChange={() =>
+                                toggleSubjectInStream(subject.id, "Common")
+                              }
+                            />
+                            <Label
+                              htmlFor={`sub-common-${subject.id}`}
+                              className="flex-1 cursor-pointer text-sm"
+                            >
+                              {subject.subject_name}
+                            </Label>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+
+                  {/* All available subjects list */}
+                  <div className="space-y-2">
+                    <h4 className="text-sm font-semibold text-muted-foreground">
+                      All subjects
+                    </h4>
+                    <div className="space-y-1.5 pl-4">
+                      {allSubjects.length === 0 ? (
+                        <p className="text-xs text-muted-foreground">
+                          No subjects found in the system.
+                        </p>
+                      ) : (
+                        allSubjects.map((subject) => (
+                          <div
+                            key={`all-${subject.id}`}
+                            className="flex items-center space-x-3 p-2 rounded-lg hover:bg-muted/50"
+                          >
+                            <Checkbox
+                              id={`sub-all-${subject.id}`}
+                              checked={
+                                isSubjectSelectedInStream(subject.id, "Common") ||
+                                isSubjectSelectedInStream(subject.id, "Natural") ||
+                                isSubjectSelectedInStream(subject.id, "Social")
+                              }
+                              onCheckedChange={() =>
+                                toggleSubjectInStream(subject.id, "Common")
+                              }
+                            />
+                            <Label
+                              htmlFor={`sub-all-${subject.id}`}
+                              className="flex-1 cursor-pointer text-sm"
+                            >
+                              {subject.subject_name}
+                              {subject.stream && (
+                                <Badge
+                                  variant="outline"
+                                  className="ml-2 text-[10px]"
+                                >
+                                  {subject.stream}
+                                </Badge>
+                              )}
+                            </Label>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </ScrollArea>
+
+              <Separator className="mt-4" />
+              <div className="flex items-center justify-between pt-4">
+                <p className="text-sm text-muted-foreground">
+                  {selectedByStream.Common.length +
+                    selectedByStream.Natural.length +
+                    selectedByStream.Social.length}{" "}
+                  assignment(s)
+                </p>
+                <div className="flex gap-2">
+                  <DialogClose asChild>
+                    <Button variant="outline">Cancel</Button>
+                  </DialogClose>
+                  <Button onClick={handleSaveSubjects}>Save changes</Button>
+                </div>
               </div>
-            </ScrollArea>
-          </div>
-
-          <Separator />
-
-          <div className="flex items-center justify-between pt-4">
-            <p className="text-sm text-muted-foreground">
-              {selectedSubjectIds.length} subject(s) selected
-            </p>
-            <div className="flex gap-2">
-              <DialogClose asChild>
-                <Button variant="outline">Cancel</Button>
-              </DialogClose>
-              <Button onClick={handleSaveSubjects}>
-                Save changes
-              </Button>
             </div>
-          </div>
+          )}
         </DialogContent>
       </Dialog>
 
@@ -1085,35 +1376,41 @@ export default function GradesPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Manage Sections Dialog - Modern Shadcn Design */}
+      {/* Manage Sections Dialog - with stream for Grade 11/12 */}
       <Dialog open={isSectionModalOpen} onOpenChange={setIsSectionModalOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="w-[95vw] sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>
-              Manage sections for {selectedGradeForSections?.name}
-            </DialogTitle>
+            <DialogTitle>Manage sections for {selectedGradeForSections?.name}</DialogTitle>
             <DialogDescription>
-              Add or remove sections for this grade. Sections help organize students
-              within the same grade.
+              {selectedGradeForSections && isStreamedGrade(selectedGradeForSections)
+                ? "Add sections per stream (Natural/Social). Sections are unique per grade and stream."
+                : "Add or remove sections for this grade."}
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 py-4">
-            {/* Add Section Form */}
             <div className="space-y-2">
               <Label htmlFor="section">Add new section</Label>
-              <div className="flex gap-2">
+              <div className="flex flex-col sm:flex-row gap-2">
+                {selectedGradeForSections && isStreamedGrade(selectedGradeForSections) && (
+                  <Select value={sectionStream} onValueChange={setSectionStream}>
+                    <SelectTrigger className="w-full sm:w-32">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Natural">Natural</SelectItem>
+                      <SelectItem value="Social">Social</SelectItem>
+                    </SelectContent>
+                  </Select>
+                )}
                 <Input
                   id="section"
                   value={sectionInput}
                   onChange={(e) => setSectionInput(e.target.value)}
-                  placeholder="Enter section name (e.g., A, B, C)"
+                  placeholder="e.g. A, B, C"
                   className="flex-1"
                 />
-                <Button
-                  onClick={handleAddSection}
-                  disabled={!sectionInput.trim()}
-                >
+                <Button onClick={handleAddSection} disabled={!sectionInput.trim()}>
                   Add
                 </Button>
               </div>
@@ -1121,52 +1418,111 @@ export default function GradesPage() {
 
             <Separator />
 
-            {/* Existing Sections List */}
             <div className="space-y-2">
               <Label>Existing sections</Label>
-              <ScrollArea className="h-48 rounded-md border">
-                {assignedSections[selectedGradeForSections?.id!]?.length === 0 ? (
-                  <p className="text-sm text-muted-foreground text-center py-8">
-                    No sections added yet.
-                  </p>
-                ) : (
-                  <div className="divide-y">
-                    {assignedSections[selectedGradeForSections?.id!]?.map(
-                      (section) => (
+              <ScrollArea className="max-h-[40vh] rounded-md border bg-muted/40">
+                {(() => {
+                  const list = assignedSections[selectedGradeForSections?.id!] || [];
+                  if (list.length === 0) {
+                    return (
+                      <p className="text-sm text-muted-foreground text-center py-8">
+                        No sections added yet.
+                      </p>
+                    );
+                  }
+                  if (selectedGradeForSections && isStreamedGrade(selectedGradeForSections)) {
+                    const natural = list.filter((s) => s.stream === "Natural");
+                    const social = list.filter((s) => s.stream === "Social");
+                    return (
+                      <div className="divide-y">
+                        {natural.length > 0 && (
+                          <div className="p-2">
+                            <p className="text-xs font-semibold text-emerald-700 mb-1 flex items-center gap-2">
+                              <span className="inline-block w-2 h-2 rounded-full bg-emerald-500" />
+                              Natural stream
+                            </p>
+                            {natural.map((section) => (
+                              <div
+                                key={section.id}
+                                className="flex items-center justify-between p-2 rounded hover:bg-muted/50"
+                              >
+                                <span className="font-medium">
+                                  Section {section.section_name}
+                                </span>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleDeleteSection(section.id)}
+                                  className="text-destructive hover:bg-destructive/10"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {social.length > 0 && (
+                          <div className="p-2">
+                            <p className="text-xs font-semibold text-blue-700 mb-1 flex items-center gap-2">
+                              <span className="inline-block w-2 h-2 rounded-full bg-blue-500" />
+                              Social stream
+                            </p>
+                            {social.map((section) => (
+                              <div
+                                key={section.id}
+                                className="flex items-center justify-between p-2 rounded hover:bg-muted/50"
+                              >
+                                <span className="font-medium">Section {section.section_name}</span>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleDeleteSection(section.id)}
+                                  className="text-destructive hover:bg-destructive/10"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  }
+                  return (
+                    <div className="divide-y">
+                      {list.map((section) => (
                         <div
                           key={section.id}
-                          className="flex items-center justify-between p-3 hover:bg-muted/50 transition-colors"
+                          className="flex items-center justify-between p-3 hover:bg-muted/50"
                         >
-                          <div className="flex items-center gap-3">
-                            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10">
-                              <Users className="h-4 w-4 text-primary" />
-                            </div>
-                            <span className="font-medium">
-                              Section {section.section_name}
-                            </span>
-                          </div>
+                          <span className="font-medium">
+                            Section {section.section_name}
+                            {section.stream && (
+                              <Badge variant="outline" className="ml-2 text-[10px]">
+                                {section.stream}
+                              </Badge>
+                            )}
+                          </span>
                           <Button
                             variant="ghost"
                             size="sm"
                             onClick={() => handleDeleteSection(section.id)}
-                            className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                            className="text-destructive hover:bg-destructive/10"
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>
                         </div>
-                      )
-                    )}
-                  </div>
-                )}
+                      ))}
+                    </div>
+                  );
+                })()}
               </ScrollArea>
             </div>
           </div>
 
           <DialogFooter className="border-t pt-4">
             <DialogClose asChild>
-              <Button variant="outline" className="w-full sm:w-auto">
-                Close
-              </Button>
+              <Button variant="outline" className="w-full sm:w-auto">Close</Button>
             </DialogClose>
           </DialogFooter>
         </DialogContent>

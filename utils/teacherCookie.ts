@@ -10,9 +10,14 @@ export interface TeacherCookieData {
   gradeName: string
   subjectName: string
   sections: string[]
+  // Optional stream for streamed grades (e.g. Grade 11/12)
+  stream?: string | null
+  // Optional management overrides (used in some dashboards)
   manageGradeId?: number
   manageSection?: string
   manageGradeName?: string
+  // Optional department for legacy code paths
+  department?: string | null
 }
 
 export async function getTeacherDataFromCookie(): Promise<TeacherCookieData | null> {

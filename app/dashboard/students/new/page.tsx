@@ -17,19 +17,12 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog"
-import {
-  AlertCircle,
-  ArrowLeft,
-  UserPlus,
-  Users,
-  Settings,
-  Plus,
-  Trash2,
-  Upload,
-  RefreshCw,
-  AlertTriangle,
-  Download,
-} from "lucide-react"
+import { Calendar as CalendarIcon, ArrowLeft, UserPlus, Users, Settings, Plus, Trash2, Upload, RefreshCw, AlertTriangle, Download } from "lucide-react"
+import { Calendar } from "@/components/ui/calendar"
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover"
+import { cn } from "@/lib/utils"
+import { format } from "date-fns"
+import * as XLSX from "xlsx"
 import { toast } from "sonner"
 import { createBrowserClient } from "@supabase/ssr"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -46,6 +39,7 @@ interface Section {
   id: number
   section_name: string
   grade_id: number
+  stream: string | null
 }
 
 interface Subject {
@@ -60,6 +54,11 @@ interface BulkStudent {
   father_name: string
   grandfather_name: string
   gender: string
+  date_of_birth: string
+  phone: string
+  address: string
+  parent_name: string
+  parent_phone: string
   grade_id: string
   section: string
   stream: string
@@ -149,6 +148,11 @@ export default function NewStudentPage() {
     father_name: "",
     grandfather_name: "",
     gender: "",
+    date_of_birth: "",
+    phone: "",
+    address: "",
+    parent_name: "",
+    parent_phone: "",
     grade_id: "",
     section: "",
     stream: "",
@@ -180,7 +184,7 @@ export default function NewStudentPage() {
   const [grades, setGrades] = useState<Grade[]>([])
   const [sections, setSections] = useState<Section[]>([])
   const [subjects, setSubjects] = useState<Subject[]>([])
-  const [gradeSubjects, setGradeSubjects] = useState<Record<number, number[]>>({}) // grade_id -> subject_ids
+  const [gradeSubjects, setGradeSubjects] = useState<Record<number, Record<string, number[]>>>({}) // grade_id -> stream -> subject_ids
   const [gradesLoading, setGradesLoading] = useState(true)
 
   const streamOptions = ["Natural", "Social"]
@@ -192,6 +196,11 @@ export default function NewStudentPage() {
       father_name: "",
       grandfather_name: "",
       gender: "male",
+      date_of_birth: "",
+      phone: "",
+      address: "",
+      parent_name: "",
+      parent_phone: "",
       grade_id: "",
       section: "",
       stream: "",
@@ -240,11 +249,11 @@ export default function NewStudentPage() {
     try {
       const { data, error } = await supabase
         .from("grade_sections")
-        .select("id, grade_id, section_name")
+        .select("id, grade_id, section_name, stream")
         .order("section_name", { ascending: true })
 
       if (error) throw error
-      setSections(data || [])
+      setSections((data || []).map((s: any) => ({ ...s, stream: s.stream ?? null })))
     } catch (error) {
       console.error("Error fetching sections:", error)
     }
@@ -268,19 +277,23 @@ export default function NewStudentPage() {
     try {
       const { data, error } = await supabase
         .from("grade_subjects")
-        .select("grade_id, subject_id")
+        .select("grade_id, subject_id, stream")
 
       if (error) {
         console.warn("grade_subjects table may not exist yet")
         return
       }
 
-      const gradeSubjectsMap: Record<number, number[]> = {}
-      data?.forEach((item) => {
+      const gradeSubjectsMap: Record<number, Record<string, number[]>> = {}
+      data?.forEach((item: any) => {
+        const stream = item.stream ?? "Common"
         if (!gradeSubjectsMap[item.grade_id]) {
-          gradeSubjectsMap[item.grade_id] = []
+          gradeSubjectsMap[item.grade_id] = { Common: [], Natural: [], Social: [] }
         }
-        gradeSubjectsMap[item.grade_id].push(item.subject_id)
+        if (!gradeSubjectsMap[item.grade_id][stream]) {
+          gradeSubjectsMap[item.grade_id][stream] = []
+        }
+        gradeSubjectsMap[item.grade_id][stream].push(item.subject_id)
       })
 
       setGradeSubjects(gradeSubjectsMap)
@@ -289,31 +302,28 @@ export default function NewStudentPage() {
     }
   }
 
-  const getSectionsForGrade = (gradeId: string) => {
+  const getSectionsForGrade = (gradeId: string, stream?: string | null) => {
     if (!gradeId) return []
-    return sections.filter((s) => s.grade_id === Number.parseInt(gradeId))
+    const gid = Number.parseInt(gradeId)
+    const grade = grades.find((g) => g.id === gid)
+    const isStreamed = grade && (grade.grade_name.includes("11") || grade.grade_name.includes("12"))
+    if (isStreamed && stream) {
+      return sections.filter((s) => s.grade_id === gid && s.stream === stream)
+    }
+    return sections.filter((s) => s.grade_id === gid && s.stream == null)
   }
 
   const getSubjectsForGradeAndStream = (gradeId: string, stream: string) => {
     if (!gradeId) return []
-    
     const gradeIdNum = Number.parseInt(gradeId)
-    const assignedSubjectIds = gradeSubjects[gradeIdNum] || []
-    
-    if (assignedSubjectIds.length === 0) {
-      // If no assigned subjects, show all subjects for the stream
-      return subjects.filter((s) => 
-        s.stream === stream || 
-        s.stream === "Common" || 
-        !s.stream
-      )
+    const byStream = gradeSubjects[gradeIdNum] || { Common: [], Natural: [], Social: [] }
+    const streamIds = byStream[stream] || []
+    const commonIds = byStream.Common || []
+    const allowedIds = new Set([...streamIds, ...commonIds])
+    if (allowedIds.size === 0) {
+      return subjects.filter((s) => s.stream === stream || s.stream === "Common" || !s.stream)
     }
-    
-    // Filter subjects by grade assignment and stream
-    return subjects.filter((s) => 
-      assignedSubjectIds.includes(s.id) && 
-      (s.stream === stream || s.stream === "Common" || !s.stream)
-    )
+    return subjects.filter((s) => allowedIds.has(s.id))
   }
 
   const handleSaveIdConfig = () => {
@@ -561,6 +571,11 @@ export default function NewStudentPage() {
         father_name: formData.father_name.trim(),
         grandfather_name: formData.grandfather_name.trim(),
         gender: formData.gender.toLowerCase(),
+        date_of_birth: formData.date_of_birth || null,
+        phone: formData.phone.trim() || null,
+        address: formData.address.trim() || null,
+        parent_name: formData.parent_name.trim() || null,
+        parent_phone: formData.parent_phone.trim() || null,
         student_id: finalStudentId,
         grade_id: Number.parseInt(formData.grade_id),
         section: formData.section,
@@ -600,6 +615,11 @@ export default function NewStudentPage() {
           father_name: "",
           grandfather_name: "",
           gender: "",
+          date_of_birth: "",
+          phone: "",
+          address: "",
+          parent_name: "",
+          parent_phone: "",
           grade_id: "",
           section: "",
           stream: "",
@@ -707,21 +727,44 @@ export default function NewStudentPage() {
     setImportProgress(0)
 
     try {
-      const text = await file.text()
-      const lines = text.split("\n").filter((line) => line.trim())
+      const ext = file.name.split(".").pop()?.toLowerCase()
+      const rows: string[][] = []
 
-      if (lines.length < 2) {
+      if (ext === "xlsx" || ext === "xls") {
+        const buffer = await file.arrayBuffer()
+        const workbook = XLSX.read(buffer, { type: "array" })
+        const sheetName = workbook.SheetNames[0]
+        const sheet = workbook.Sheets[sheetName]
+        const sheetRows = XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1 }) as any[][]
+        sheetRows
+          .filter((r) => r && r.some((cell) => String(cell ?? "").trim().length > 0))
+          .forEach((r) => rows.push(r.map((cell) => String(cell ?? "").trim())))
+      } else {
+        const text = await file.text()
+        const lines = text.split(/\r?\n/).filter((line) => line.trim())
+        lines.forEach((line) => {
+          const cols = line.split(",").map((c) => c.trim())
+          rows.push(cols)
+        })
+      }
+
+      if (rows.length < 2) {
         toast.error("File must have at least a header row and one data row")
         return
       }
 
-      // Parse header
-      const header = lines[0].split(",").map((h) => h.trim().toLowerCase())
+      // Parse header – accept extended structure
+      const header = rows[0].map((h) => h.trim().toLowerCase())
       const nameIndex = header.findIndex((h) => h.includes("name") && !h.includes("father") && !h.includes("grand"))
       const fatherIndex = header.findIndex((h) => h.includes("father"))
       const grandfatherIndex = header.findIndex((h) => h.includes("grand"))
       const genderIndex = header.findIndex((h) => h.includes("gender") || h.includes("sex"))
       const emailIndex = header.findIndex((h) => h.includes("email"))
+      const phoneIndex = header.findIndex((h) => h.includes("phone") && !h.includes("parent"))
+      const parentNameIndex = header.findIndex((h) => h.includes("parent_name") || h.includes("guardian_name") || h.includes("parent"))
+      const parentPhoneIndex = header.findIndex((h) => h.includes("parent_phone") || h.includes("guardian_phone"))
+      const dobIndex = header.findIndex((h) => h.includes("date_of_birth") || h.includes("dob") || h.includes("birth"))
+      const addressIndex = header.findIndex((h) => h.includes("address"))
 
       if (nameIndex === -1) {
         toast.error("CSV must have a 'name' column")
@@ -730,10 +773,10 @@ export default function NewStudentPage() {
 
       const importedStudents: BulkStudent[] = []
 
-      for (let i = 1; i < lines.length; i++) {
-        setImportProgress(Math.round((i / (lines.length - 1)) * 100))
+      for (let i = 1; i < rows.length; i++) {
+        setImportProgress(Math.round((i / (rows.length - 1)) * 100))
 
-        const cols = lines[i].split(",").map((c) => c.trim())
+        const cols = rows[i]
 
         if (!cols[nameIndex]) continue
 
@@ -744,6 +787,11 @@ export default function NewStudentPage() {
         student.grandfather_name = grandfatherIndex >= 0 ? cols[grandfatherIndex] || "" : ""
         student.gender = genderIndex >= 0 ? cols[genderIndex]?.toLowerCase() || "male" : "male"
         student.email = emailIndex >= 0 ? cols[emailIndex] || "" : ""
+        student.phone = phoneIndex >= 0 ? cols[phoneIndex] || "" : ""
+        student.parent_name = parentNameIndex >= 0 ? cols[parentNameIndex] || "" : ""
+        student.parent_phone = parentPhoneIndex >= 0 ? cols[parentPhoneIndex] || "" : ""
+        student.date_of_birth = dobIndex >= 0 ? cols[dobIndex] || "" : ""
+        student.address = addressIndex >= 0 ? cols[addressIndex] || "" : ""
 
         importedStudents.push(student)
       }
@@ -769,7 +817,9 @@ export default function NewStudentPage() {
 
   const downloadTemplate = () => {
     const template =
-      "name,father_name,grandfather_name,gender,email\nJohn,Michael,David,male,john@example.com\nJane,Robert,James,female,jane@example.com"
+      "name,father_name,grandfather_name,gender,email,phone,parent_name,parent_phone,date_of_birth,address\n" +
+      "John,Michael,David,male,john@example.com,0912345678,Michael Sr,0911222333,2005-01-15,Addis Ababa\n" +
+      "Jane,Robert,James,female,jane@example.com,0912345679,Mary,0911333444,2006-02-20,Adama"
     const blob = new Blob([template], { type: "text/csv" })
     const url = URL.createObjectURL(blob)
     const a = document.createElement("a")
@@ -791,7 +841,18 @@ export default function NewStudentPage() {
         return cols.map((c) => c.trim())
       })
 
-      const fieldOrder: (keyof BulkStudent)[] = ["name", "father_name", "grandfather_name", "gender", "email"]
+      const fieldOrder: (keyof BulkStudent)[] = [
+        "name",
+        "father_name",
+        "grandfather_name",
+        "gender",
+        "email",
+        "phone",
+        "parent_name",
+        "parent_phone",
+        "date_of_birth",
+        "address",
+      ]
 
       setBulkStudents((prev) => {
         const newStudents = [...prev]
@@ -956,6 +1017,11 @@ export default function NewStudentPage() {
             father_name: s.father_name.trim(),
             grandfather_name: s.grandfather_name.trim(),
             gender: s.gender.toLowerCase(),
+            date_of_birth: s.date_of_birth || null,
+            phone: s.phone.trim() || null,
+            address: s.address.trim() || null,
+            parent_name: s.parent_name.trim() || null,
+            parent_phone: s.parent_phone.trim() || null,
             student_id: finalStudentId,
             grade_id: Number.parseInt(bulkGradeId),
             section: bulkSection,
@@ -1101,209 +1167,319 @@ export default function NewStudentPage() {
                   <p className="text-green-800 text-sm">{successMessage}</p>
                 </div>
               )}
-              <form onSubmit={handleSubmit} className="space-y-6">
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {/* Student ID */}
-                  <div className="sm:col-span-2 lg:col-span-3">
-                    <Label>Student ID</Label>
-                    <div className="flex gap-2 mt-1.5">
-                      <Input value={studentId} readOnly className="bg-muted cursor-not-allowed font-mono" />
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="icon"
-                        onClick={async () => {
-                          const newId = await generateUniqueStudentId()
-                          setStudentId(newId)
-                          toast.success("Generated new unique Student ID")
-                        }}
-                      >
-                        <RefreshCw className="h-4 w-4" />
-                      </Button>
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-1">Format: Sxxxxxx (auto-generated)</p>
-                  </div>
-
-                  {/* Name Fields */}
-                  <div>
-                    <Label htmlFor="name">Student Name *</Label>
-                    <Input
-                      id="name"
-                      name="name"
-                      value={formData.name}
-                      onChange={handleInputChange}
-                      className={`mt-1.5 ${isFieldError("name") ? "border-destructive ring-1 ring-destructive" : ""}`}
-                      placeholder="Enter name"
-                    />
-                    {errors.name && (
-                      <p className="text-destructive text-xs mt-1 flex items-center gap-1">
-                        <AlertCircle className="h-3 w-3" /> {errors.name}
-                      </p>
-                    )}
-                  </div>
-
-                  <div>
-                    <Label htmlFor="father_name">Father's Name *</Label>
-                    <Input
-                      id="father_name"
-                      name="father_name"
-                      value={formData.father_name}
-                      onChange={handleInputChange}
-                      className={`mt-1.5 ${isFieldError("father_name") ? "border-destructive ring-1 ring-destructive" : ""}`}
-                      placeholder="Enter father's name"
-                    />
-                    {errors.father_name && (
-                      <p className="text-destructive text-xs mt-1 flex items-center gap-1">
-                        <AlertCircle className="h-3 w-3" /> {errors.father_name}
-                      </p>
-                    )}
-                  </div>
-
-                  <div>
-                    <Label htmlFor="grandfather_name">Grandfather's Name *</Label>
-                    <Input
-                      id="grandfather_name"
-                      name="grandfather_name"
-                      value={formData.grandfather_name}
-                      onChange={handleInputChange}
-                      className={`mt-1.5 ${isFieldError("grandfather_name") ? "border-destructive ring-1 ring-destructive" : ""}`}
-                      placeholder="Enter grandfather's name"
-                    />
-                    {errors.grandfather_name && (
-                      <p className="text-destructive text-xs mt-1 flex items-center gap-1">
-                        <AlertCircle className="h-3 w-3" /> {errors.grandfather_name}
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Gender */}
-                  <div>
-                    <Label>Gender *</Label>
-                    <Select value={formData.gender} onValueChange={handleGenderChange}>
-                      <SelectTrigger
-                        className={`mt-1.5 ${isFieldError("gender") ? "border-destructive ring-1 ring-destructive" : ""}`}
-                      >
-                        <SelectValue placeholder="Select gender" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="male">Male</SelectItem>
-                        <SelectItem value="female">Female</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    {errors.gender && (
-                      <p className="text-destructive text-xs mt-1 flex items-center gap-1">
-                        <AlertCircle className="h-3 w-3" /> {errors.gender}
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Grade */}
-                  <div>
-                    <Label>Grade *</Label>
-                    <Select value={formData.grade_id} onValueChange={handleGradeChange} disabled={gradesLoading}>
-                      <SelectTrigger
-                        className={`mt-1.5 ${isFieldError("grade_id") ? "border-destructive ring-1 ring-destructive" : ""}`}
-                      >
-                        <SelectValue placeholder={gradesLoading ? "Loading..." : "Select grade"} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {grades.map((grade) => (
-                          <SelectItem key={grade.id} value={grade.id.toString()}>
-                            {grade.grade_name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    {errors.grade_id && (
-                      <p className="text-destructive text-xs mt-1 flex items-center gap-1">
-                        <AlertCircle className="h-3 w-3" /> {errors.grade_id}
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Section - Only show assigned sections for the selected grade */}
-                  <div>
-                    <Label>Section *</Label>
-                    <Select value={formData.section} onValueChange={handleSectionChange} disabled={!formData.grade_id}>
-                      <SelectTrigger
-                        className={`mt-1.5 ${isFieldError("section") ? "border-destructive ring-1 ring-destructive" : ""}`}
-                      >
-                        <SelectValue placeholder={getSectionsForGrade(formData.grade_id).length > 0 ? "Select section" : "No sections assigned to this grade"} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {getSectionsForGrade(formData.grade_id).length > 0 ? (
-                          getSectionsForGrade(formData.grade_id).map((section) => (
-                            <SelectItem key={section.id} value={section.section_name}>
-                              Section {section.section_name}
-                            </SelectItem>
-                          ))
-                        ) : (
-                          <div className="text-center py-2 text-sm text-muted-foreground">
-                            No sections assigned to this grade
-                          </div>
-                        )}
-                      </SelectContent>
-                    </Select>
-                    {errors.section && (
-                      <p className="text-destructive text-xs mt-1 flex items-center gap-1">
-                        <AlertCircle className="h-3 w-3" /> {errors.section}
-                      </p>
-                    )}
-                    {formData.grade_id && getSectionsForGrade(formData.grade_id).length === 0 && (
-                      <p className="text-xs text-amber-600 mt-1">
-                        Please assign sections to this grade in Grade Management
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Stream (only for Grade 11/12) */}
-                  {isGrade11or12 && (
-                    <div>
-                      <Label>Stream *</Label>
-                      <Select value={formData.stream} onValueChange={handleStreamChange}>
-                        <SelectTrigger
-                          className={`mt-1.5 ${isFieldError("stream") ? "border-destructive ring-1 ring-destructive" : ""}`}
+              <form onSubmit={handleSubmit} className="space-y-8">
+                {/* Personal Information */}
+                <div className="space-y-4">
+                  <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+                    Personal Information
+                  </h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {/* Student ID */}
+                    <div className="sm:col-span-2 lg:col-span-3">
+                      <Label>Student ID</Label>
+                      <div className="flex gap-2 mt-1.5">
+                        <Input value={studentId} readOnly className="bg-muted cursor-not-allowed font-mono" />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          onClick={async () => {
+                            const newId = await generateUniqueStudentId()
+                            setStudentId(newId)
+                            toast.success("Generated new unique Student ID")
+                          }}
                         >
-                          <SelectValue placeholder="Select stream" />
+                          <RefreshCw className="h-4 w-4" />
+                        </Button>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">Format: Sxxxxxx (auto-generated)</p>
+                    </div>
+
+                    {/* Name Fields */}
+                    <div>
+                      <Label htmlFor="name">Student Name *</Label>
+                      <Input
+                        id="name"
+                        name="name"
+                        value={formData.name}
+                        onChange={handleInputChange}
+                        className={`mt-1.5 ${isFieldError("name") ? "border-destructive ring-1 ring-destructive" : ""}`}
+                        placeholder="Enter name"
+                      />
+                      {errors.name && (
+                        <p className="text-destructive text-xs mt-1 flex items-center gap-1">
+                          <AlertCircle className="h-3 w-3" /> {errors.name}
+                        </p>
+                      )}
+                    </div>
+
+                    <div>
+                      <Label htmlFor="father_name">Father's Name *</Label>
+                      <Input
+                        id="father_name"
+                        name="father_name"
+                        value={formData.father_name}
+                        onChange={handleInputChange}
+                        className={`mt-1.5 ${isFieldError("father_name") ? "border-destructive ring-1 ring-destructive" : ""}`}
+                        placeholder="Enter father's name"
+                      />
+                      {errors.father_name && (
+                        <p className="text-destructive text-xs mt-1 flex items-center gap-1">
+                          <AlertCircle className="h-3 w-3" /> {errors.father_name}
+                        </p>
+                      )}
+                    </div>
+
+                    <div>
+                      <Label htmlFor="grandfather_name">Grandfather's Name *</Label>
+                      <Input
+                        id="grandfather_name"
+                        name="grandfather_name"
+                        value={formData.grandfather_name}
+                        onChange={handleInputChange}
+                        className={`mt-1.5 ${isFieldError("grandfather_name") ? "border-destructive ring-1 ring-destructive" : ""}`}
+                        placeholder="Enter grandfather's name"
+                      />
+                      {errors.grandfather_name && (
+                        <p className="text-destructive text-xs mt-1 flex items-center gap-1">
+                          <AlertCircle className="h-3 w-3" /> {errors.grandfather_name}
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Gender */}
+                    <div>
+                      <Label>Gender *</Label>
+                      <Select value={formData.gender} onValueChange={handleGenderChange}>
+                        <SelectTrigger
+                          className={`mt-1.5 ${isFieldError("gender") ? "border-destructive ring-1 ring-destructive" : ""}`}
+                        >
+                          <SelectValue placeholder="Select gender" />
                         </SelectTrigger>
                         <SelectContent>
-                          {streamOptions.map((stream) => (
-                            <SelectItem key={stream} value={stream}>
-                              {stream}
+                          <SelectItem value="male">Male</SelectItem>
+                          <SelectItem value="female">Female</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      {errors.gender && (
+                        <p className="text-destructive text-xs mt-1 flex items-center gap-1">
+                          <AlertCircle className="h-3 w-3" /> {errors.gender}
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Date of Birth */}
+                    <div>
+                      <Label htmlFor="date_of_birth">Date of Birth</Label>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            className={cn(
+                              "mt-1.5 w-full justify-start text-left font-normal",
+                              !formData.date_of_birth && "text-muted-foreground"
+                            )}
+                          >
+                            <CalendarIcon className="mr-2 h-4 w-4" />
+                            {formData.date_of_birth
+                              ? format(new Date(formData.date_of_birth), "PPP")
+                              : <span>Select date</span>}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <Calendar
+                            mode="single"
+                            selected={formData.date_of_birth ? new Date(formData.date_of_birth) : undefined}
+                            onSelect={(date) =>
+                              setFormData((prev) => ({
+                                ...prev,
+                                date_of_birth: date ? format(date, "yyyy-MM-dd") : "",
+                              }))
+                            }
+                            captionLayout="dropdown-buttons"
+                            fromYear={1990}
+                            toYear={new Date().getFullYear()}
+                            disabled={(date) => date > new Date()}
+                          />
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+
+                    {/* Phone */}
+                    <div>
+                      <Label htmlFor="phone">Student Phone</Label>
+                      <Input
+                        id="phone"
+                        name="phone"
+                        value={formData.phone}
+                        onChange={handleInputChange}
+                        className="mt-1.5"
+                        placeholder="09xxxxxxxx"
+                      />
+                    </div>
+
+                    {/* Email */}
+                    <div>
+                      <Label htmlFor="email">Email (Optional)</Label>
+                      <Input
+                        id="email"
+                        name="email"
+                        type="email"
+                        value={formData.email}
+                        onChange={handleInputChange}
+                        className={`mt-1.5 ${isFieldError("email") ? "border-destructive ring-1 ring-destructive" : ""}`}
+                        placeholder="Enter email"
+                      />
+                      {errors.email && (
+                        <p className="text-destructive text-xs mt-1 flex items-center gap-1">
+                          <AlertCircle className="h-3 w-3" /> {errors.email}
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Address */}
+                    <div className="sm:col-span-2 lg:col-span-3">
+                      <Label htmlFor="address">Address</Label>
+                      <Input
+                        id="address"
+                        name="address"
+                        value={formData.address}
+                        onChange={handleInputChange}
+                        className="mt-1.5"
+                        placeholder="City, kebele, house no..."
+                      />
+                    </div>
+
+                    {/* Parent / Guardian */}
+                    <div>
+                      <Label htmlFor="parent_name">Parent / Guardian Name</Label>
+                      <Input
+                        id="parent_name"
+                        name="parent_name"
+                        value={formData.parent_name}
+                        onChange={handleInputChange}
+                        className="mt-1.5"
+                        placeholder="Parent full name"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="parent_phone">Parent Phone</Label>
+                      <Input
+                        id="parent_phone"
+                        name="parent_phone"
+                        value={formData.parent_phone}
+                        onChange={handleInputChange}
+                        className="mt-1.5"
+                        placeholder="09xxxxxxxx"
+                      />
+                    </div>
+
+                  </div>
+                </div>
+
+                {/* Academic Information */}
+                <div className="space-y-4">
+                  <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+                    Academic Information
+                  </h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {/* Grade */}
+                    <div>
+                      <Label>Grade *</Label>
+                      <Select value={formData.grade_id} onValueChange={handleGradeChange} disabled={gradesLoading}>
+                        <SelectTrigger
+                          className={`mt-1.5 ${isFieldError("grade_id") ? "border-destructive ring-1 ring-destructive" : ""}`}
+                        >
+                          <SelectValue placeholder={gradesLoading ? "Loading..." : "Select grade"} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {grades.map((grade) => (
+                            <SelectItem key={grade.id} value={grade.id.toString()}>
+                              {grade.grade_name}
                             </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
-                      {errors.stream && (
+                      {errors.grade_id && (
                         <p className="text-destructive text-xs mt-1 flex items-center gap-1">
-                          <AlertCircle className="h-3 w-3" /> {errors.stream}
+                          <AlertCircle className="h-3 w-3" /> {errors.grade_id}
                         </p>
                       )}
                     </div>
-                  )}
 
-                  {/* Email */}
-                  <div>
-                    <Label htmlFor="email">Email (Optional)</Label>
-                    <Input
-                      id="email"
-                      name="email"
-                      type="email"
-                      value={formData.email}
-                      onChange={handleInputChange}
-                      className={`mt-1.5 ${isFieldError("email") ? "border-destructive ring-1 ring-destructive" : ""}`}
-                      placeholder="Enter email"
-                    />
-                    {errors.email && (
-                      <p className="text-destructive text-xs mt-1 flex items-center gap-1">
-                        <AlertCircle className="h-3 w-3" /> {errors.email}
-                      </p>
+                    {/* Section */}
+                    <div>
+                      <Label>Section *</Label>
+                      <Select value={formData.section} onValueChange={handleSectionChange} disabled={!formData.grade_id || (isGrade11or12 && !formData.stream)}>
+                        <SelectTrigger
+                          className={`mt-1.5 ${isFieldError("section") ? "border-destructive ring-1 ring-destructive" : ""}`}
+                        >
+                          <SelectValue
+                            placeholder={
+                              getSectionsForGrade(formData.grade_id, isGrade11or12 ? formData.stream || undefined : undefined).length > 0
+                                ? "Select section"
+                                : isGrade11or12 && !formData.stream
+                                ? "Select stream first"
+                                : "No sections assigned to this grade"
+                            }
+                          />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {getSectionsForGrade(formData.grade_id, isGrade11or12 ? formData.stream || undefined : undefined).length > 0 ? (
+                            getSectionsForGrade(formData.grade_id, isGrade11or12 ? formData.stream || undefined : undefined).map((section) => (
+                              <SelectItem key={section.id} value={section.section_name}>
+                                Section {section.section_name}
+                              </SelectItem>
+                            ))
+                          ) : (
+                            <div className="text-center py-2 text-sm text-muted-foreground">
+                              No sections assigned to this grade
+                            </div>
+                          )}
+                        </SelectContent>
+                      </Select>
+                      {errors.section && (
+                        <p className="text-destructive text-xs mt-1 flex items-center gap-1">
+                          <AlertCircle className="h-3 w-3" /> {errors.section}
+                        </p>
+                      )}
+                      {formData.grade_id && getSectionsForGrade(formData.grade_id, isGrade11or12 ? formData.stream || undefined : undefined).length === 0 && (
+                        <p className="text-xs text-amber-600 mt-1">
+                          {isGrade11or12 && !formData.stream ? "Select stream to see sections." : "Please assign sections to this grade in Grade Management."}
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Stream (only for Grade 11/12) */}
+                    {isGrade11or12 && (
+                      <div>
+                        <Label>Stream *</Label>
+                        <Select value={formData.stream} onValueChange={handleStreamChange}>
+                          <SelectTrigger
+                            className={`mt-1.5 ${isFieldError("stream") ? "border-destructive ring-1 ring-destructive" : ""}`}
+                          >
+                            <SelectValue placeholder="Select stream" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {streamOptions.map((stream) => (
+                              <SelectItem key={stream} value={stream}>
+                                {stream}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        {errors.stream && (
+                          <p className="text-destructive text-xs mt-1 flex items-center gap-1">
+                            <AlertCircle className="h-3 w-3" /> {errors.stream}
+                          </p>
+                        )}
+                      </div>
                     )}
                   </div>
                 </div>
 
                 <div className="flex justify-end">
-                  <Button type="submit" disabled={loading || !formData.grade_id || getSectionsForGrade(formData.grade_id).length === 0} className="gap-2">
+                  <Button type="submit" disabled={loading || !formData.grade_id || (isGrade11or12 && !formData.stream) || getSectionsForGrade(formData.grade_id, isGrade11or12 ? formData.stream || undefined : undefined).length === 0} className="gap-2">
                     {loading ? (
                       <>
                         <RefreshCw className="h-4 w-4 animate-spin" />
@@ -1349,7 +1525,7 @@ export default function NewStudentPage() {
                   <input
                     ref={fileInputRef}
                     type="file"
-                    accept=".csv,.txt"
+                    accept=".csv,.txt,.xlsx,.xls"
                     onChange={handleFileImport}
                     className="hidden"
                   />
@@ -1394,13 +1570,13 @@ export default function NewStudentPage() {
                 </div>
                 <div>
                   <Label>Section *</Label>
-                  <Select value={bulkSection} onValueChange={setBulkSection} disabled={!bulkGradeId}>
+                  <Select value={bulkSection} onValueChange={setBulkSection} disabled={!bulkGradeId || (isBulkGrade11or12 && !bulkStream)}>
                     <SelectTrigger className="mt-1.5">
-                      <SelectValue placeholder={getSectionsForGrade(bulkGradeId).length > 0 ? "Select section" : "No sections assigned"} />
+                      <SelectValue placeholder={getSectionsForGrade(bulkGradeId, isBulkGrade11or12 ? bulkStream || undefined : undefined).length > 0 ? "Select section" : isBulkGrade11or12 && !bulkStream ? "Select stream first" : "No sections assigned"} />
                     </SelectTrigger>
                     <SelectContent>
-                      {getSectionsForGrade(bulkGradeId).length > 0 ? (
-                        getSectionsForGrade(bulkGradeId).map((section) => (
+                      {getSectionsForGrade(bulkGradeId, isBulkGrade11or12 ? bulkStream || undefined : undefined).length > 0 ? (
+                        getSectionsForGrade(bulkGradeId, isBulkGrade11or12 ? bulkStream || undefined : undefined).map((section) => (
                           <SelectItem key={section.id} value={section.section_name}>
                             Section {section.section_name}
                           </SelectItem>
@@ -1412,9 +1588,9 @@ export default function NewStudentPage() {
                       )}
                     </SelectContent>
                   </Select>
-                  {bulkGradeId && getSectionsForGrade(bulkGradeId).length === 0 && (
+                  {bulkGradeId && getSectionsForGrade(bulkGradeId, isBulkGrade11or12 ? bulkStream || undefined : undefined).length === 0 && (
                     <p className="text-xs text-amber-600 mt-1">
-                      Please assign sections to this grade in Grade Management
+                      {isBulkGrade11or12 && !bulkStream ? "Select stream to see sections." : "Please assign sections to this grade in Grade Management."}
                     </p>
                   )}
                 </div>
@@ -1489,7 +1665,7 @@ export default function NewStudentPage() {
                         </div>
                       )}
 
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                         <div>
                           <Label className="text-xs">Name *</Label>
                           <Input
@@ -1544,6 +1720,78 @@ export default function NewStudentPage() {
                             placeholder="Email (optional)"
                           />
                         </div>
+                        <div>
+                          <Label className="text-xs">Phone</Label>
+                          <Input
+                            value={student.phone}
+                            onChange={(e) => handleBulkInputChange(student.id, "phone", e.target.value)}
+                            className="mt-1"
+                            placeholder="09xxxxxxxx"
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-xs">Parent Name</Label>
+                          <Input
+                            value={student.parent_name}
+                            onChange={(e) => handleBulkInputChange(student.id, "parent_name", e.target.value)}
+                            className="mt-1"
+                            placeholder="Parent full name"
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-xs">Parent Phone</Label>
+                          <Input
+                            value={student.parent_phone}
+                            onChange={(e) => handleBulkInputChange(student.id, "parent_phone", e.target.value)}
+                            className="mt-1"
+                            placeholder="09xxxxxxxx"
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-xs">Date of Birth</Label>
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <Button
+                                variant="outline"
+                                className={cn(
+                                  "mt-1 w-full justify-start text-left font-normal",
+                                  !student.date_of_birth && "text-muted-foreground"
+                                )}
+                              >
+                                <CalendarIcon className="mr-2 h-4 w-4" />
+                                {student.date_of_birth
+                                  ? format(new Date(student.date_of_birth), "PPP")
+                                  : <span>Select date</span>}
+                              </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-auto p-0" align="start">
+                              <Calendar
+                                mode="single"
+                                selected={student.date_of_birth ? new Date(student.date_of_birth) : undefined}
+                                onSelect={(date) =>
+                                  handleBulkInputChange(
+                                    student.id,
+                                    "date_of_birth",
+                                    date ? format(date, "yyyy-MM-dd") : ""
+                                  )
+                                }
+                                captionLayout="dropdown-buttons"
+                                fromYear={1990}
+                                toYear={new Date().getFullYear()}
+                                disabled={(date) => date > new Date()}
+                              />
+                            </PopoverContent>
+                          </Popover>
+                        </div>
+                        <div className="sm:col-span-2">
+                          <Label className="text-xs">Address</Label>
+                          <Input
+                            value={student.address}
+                            onChange={(e) => handleBulkInputChange(student.id, "address", e.target.value)}
+                            className="mt-1"
+                            placeholder="Address"
+                          />
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -1553,7 +1801,7 @@ export default function NewStudentPage() {
               {/* Submit */}
               <div className="flex items-center justify-between">
                 <p className="text-sm text-muted-foreground">{bulkStudents.length} student(s) ready to register</p>
-                <Button onClick={handleBulkSubmit} disabled={bulkLoading || !bulkGradeId || getSectionsForGrade(bulkGradeId).length === 0} className="gap-2">
+                <Button onClick={handleBulkSubmit} disabled={bulkLoading || !bulkGradeId || (isBulkGrade11or12 && !bulkStream) || getSectionsForGrade(bulkGradeId, isBulkGrade11or12 ? bulkStream || undefined : undefined).length === 0} className="gap-2">
                   {bulkLoading ? (
                     <>
                       <RefreshCw className="h-4 w-4 animate-spin" />

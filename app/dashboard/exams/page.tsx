@@ -92,6 +92,9 @@ export default function AdminExamsPage() {
   const [exams, setExams] = useState<ExamRow[]>([]);
   const [loading, setLoading] = useState(true);
   const { students: liveStudents } = useLiveMonitor(null);
+  const [currentPage, setCurrentPage] = useState(1);
+
+  const EXAMS_PER_PAGE = 10;
 
   useEffect(() => {
     const fetchExams = async () => {
@@ -151,6 +154,12 @@ export default function AdminExamsPage() {
     return <DashboardSpinner />;
   }
 
+  const totalPages = Math.ceil(exams.length / EXAMS_PER_PAGE) || 1;
+  const paginatedExams = exams.slice(
+    (currentPage - 1) * EXAMS_PER_PAGE,
+    currentPage * EXAMS_PER_PAGE
+  );
+
   return (
     <div className="p-4 md:p-6 space-y-6">
       <div>
@@ -163,71 +172,134 @@ export default function AdminExamsPage() {
         </CardDescription>
       </div>
 
-      <Card className="shadow-sm">
+      <Card className="shadow-sm border border-muted/60">
         <CardHeader>
           <CardTitle>All Exams</CardTitle>
           <CardDescription>Exams created by teachers; live monitoring summary for in-progress sessions.</CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
           {loading ? (
             <Skeleton className="h-64 w-full" />
           ) : exams.length === 0 ? (
             <p className="text-muted-foreground py-8 text-center">No exams found.</p>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Exam</TableHead>
-                  <TableHead>Code</TableHead>
-                  <TableHead>Teacher</TableHead>
-                  <TableHead>Grade / Section</TableHead>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Duration</TableHead>
-                  <TableHead>Live sessions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {exams.map((exam) => {
-                  const summary = getLiveSummary(exam.id);
-                  return (
-                    <TableRow key={exam.id}>
-                      <TableCell>
-                        <div className="font-medium">{exam.title}</div>
-                        {!exam.exam_active && (
-                          <Badge variant="secondary" className="mt-1">Inactive</Badge>
-                        )}
-                      </TableCell>
-                      <TableCell>{exam.exam_code}</TableCell>
-                      <TableCell>{exam.teacher_name}</TableCell>
-                      <TableCell>{exam.grade_name} / {exam.section}</TableCell>
-                      <TableCell>{new Date(exam.exam_date).toLocaleDateString()}</TableCell>
-                      <TableCell>{exam.duration} min</TableCell>
-                      <TableCell>
-                        {summary.total === 0 ? (
-                          <span className="text-muted-foreground">—</span>
-                        ) : (
-                          <span className="flex items-center gap-2 flex-wrap">
-                            <Badge variant="outline" className="bg-green-50 text-green-800">
-                              {summary.active} active
-                            </Badge>
-                            {summary.disconnected > 0 && (
-                              <Badge variant="outline" className="bg-amber-50 text-amber-800">
-                                {summary.disconnected} disconnected
-                              </Badge>
-                            )}
-                            {summary.flagged > 0 && (
-                              <Badge variant="outline" className="bg-red-50 text-red-800">
-                                {summary.flagged} flagged
-                              </Badge>
-                            )}
-                          </span>
-                        )}
-                      </TableCell>
+            <>
+              <div className="rounded-lg border border-muted/50 overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-muted/40">
+                      <TableHead className="w-[24%]">Exam</TableHead>
+                      <TableHead className="w-[10%]">Code</TableHead>
+                      <TableHead className="w-[18%]">Teacher</TableHead>
+                      <TableHead className="w-[18%]">Grade / Section</TableHead>
+                      <TableHead className="w-[12%]">Date</TableHead>
+                      <TableHead className="w-[10%]">Duration</TableHead>
+                      <TableHead className="w-[18%]">Live sessions</TableHead>
                     </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {paginatedExams.map((exam, index) => {
+                      const summary = getLiveSummary(exam.id);
+                      const isStriped = index % 2 === 0;
+                      return (
+                        <TableRow
+                          key={exam.id}
+                          className={isStriped ? "bg-muted/20" : ""}
+                        >
+                          <TableCell>
+                            <div className="font-medium line-clamp-2">{exam.title}</div>
+                            <div className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                              <Clock className="h-3 w-3" />
+                              {new Date(exam.exam_date).toLocaleString()}
+                            </div>
+                            {!exam.exam_active && (
+                              <Badge variant="secondary" className="mt-1">Inactive</Badge>
+                            )}
+                          </TableCell>
+                          <TableCell className="font-mono text-sm">
+                            {exam.exam_code}
+                          </TableCell>
+                          <TableCell>
+                            <div className="text-sm font-medium">{exam.teacher_name}</div>
+                            {exam.created_by && (
+                              <div className="text-xs text-muted-foreground">
+                                ID: {exam.created_by}
+                              </div>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex flex-col text-sm">
+                              <span className="font-medium">{exam.grade_name}</span>
+                              <span className="text-xs text-muted-foreground">
+                                Section {exam.section}
+                              </span>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            {new Date(exam.exam_date).toLocaleDateString()}
+                          </TableCell>
+                          <TableCell>{exam.duration} min</TableCell>
+                          <TableCell>
+                            {summary.total === 0 ? (
+                              <span className="text-muted-foreground text-sm">No live sessions</span>
+                            ) : (
+                              <span className="flex items-center gap-2 flex-wrap text-xs">
+                                <Badge variant="outline" className="bg-green-50 text-green-800">
+                                  {summary.active} active
+                                </Badge>
+                                {summary.disconnected > 0 && (
+                                  <Badge variant="outline" className="bg-amber-50 text-amber-800">
+                                    {summary.disconnected} disconnected
+                                  </Badge>
+                                )}
+                                {summary.flagged > 0 && (
+                                  <Badge variant="outline" className="bg-red-50 text-red-800">
+                                    {summary.flagged} flagged
+                                  </Badge>
+                                )}
+                              </span>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+
+              {totalPages > 1 && (
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-2">
+                  <p className="text-sm text-muted-foreground">
+                    Showing {(currentPage - 1) * EXAMS_PER_PAGE + 1} to{" "}
+                    {Math.min(currentPage * EXAMS_PER_PAGE, exams.length)} of{" "}
+                    {exams.length} exams
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      className="inline-flex items-center rounded-md border px-3 py-1 text-sm bg-background hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed"
+                      onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
+                      disabled={currentPage === 1}
+                    >
+                      Prev
+                    </button>
+                    <span className="text-xs text-muted-foreground">
+                      Page {currentPage} of {totalPages}
+                    </span>
+                    <button
+                      type="button"
+                      className="inline-flex items-center rounded-md border px-3 py-1 text-sm bg-background hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed"
+                      onClick={() =>
+                        setCurrentPage((p) => Math.min(p + 1, totalPages))
+                      }
+                      disabled={currentPage === totalPages}
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </CardContent>
       </Card>

@@ -129,6 +129,8 @@ export default function StudentsPage() {
     father_name: "",
     grandfather_name: "",
     gender: "",
+    phone: "",
+    email: "",
     grade_id: "",
     section: "",
     stream: "",
@@ -350,6 +352,8 @@ export default function StudentsPage() {
       father_name: student.father_name,
       grandfather_name: student.grandfather_name,
       gender: student.gender,
+      phone: student.phone || "",
+      email: student.email || "",
       grade_id: student.grade_id.toString(),
       section: student.section,
       stream: student.stream || "",
@@ -437,6 +441,8 @@ export default function StudentsPage() {
             father_name: editFormData.father_name.trim(),
             grandfather_name: editFormData.grandfather_name.trim(),
             gender: editFormData.gender,
+            phone: editFormData.phone.trim() || null,
+            email: editFormData.email.trim() || null,
             grade_id: parseInt(editFormData.grade_id),
             section: editFormData.section,
             stream: editFormData.stream || null,
@@ -470,39 +476,103 @@ export default function StudentsPage() {
   const isEditFieldError = (field: string) => editErrors[field] && editSubmitAttempted;
 
   const exportToPDF = () => {
-    const doc = new jsPDF();
-    doc.setFontSize(16);
-    doc.text('Students List', 14, 20);
-    doc.setFontSize(12);
-    doc.text(`Generated: ${format(new Date(), 'PPP')}`, 14, 30);
-    doc.text(`Total Records: ${filteredStudents.length}`, 14, 38);
+    const doc = new jsPDF("p", "mm", "a4");
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const marginLeft = 14;
+    const marginRight = 14;
+    const marginTop = 18;
+    const marginBottom = 18;
 
-    let y = 50;
-    const header = ['#', 'Student ID', 'Name', 'Grade', 'Section', 'Gender'];
-    doc.setFillColor(79, 70, 229);
-    doc.rect(14, y, 190, 8, 'F');
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(10);
-    header.forEach((h, i) => doc.text(h, 14 + (i * 32), y + 5));
-    y += 8;
+    const drawHeader = () => {
+      doc.setFontSize(16);
+      doc.setTextColor(17, 24, 39);
+      doc.text("Students List", marginLeft, marginTop);
+      doc.setFontSize(10);
+      doc.setTextColor(100, 116, 139);
+      doc.text(`Generated: ${format(new Date(), "PPP")}`, marginLeft, marginTop + 6);
+      doc.text(`Total Records: ${filteredStudents.length}`, marginLeft, marginTop + 11);
+
+      // Table header
+      const headerY = marginTop + 22;
+      const colLabels = ["#", "Student ID", "Name", "Grade", "Section", "Gender"];
+      const colWidths = [8, 28, 56, 52, 22, 20]; // sum <= pageWidth - margins
+
+      let x = marginLeft;
+      doc.setFillColor(15, 23, 42);
+      doc.rect(marginLeft, headerY - 6, pageWidth - marginLeft - marginRight, 8, "F");
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(9);
+      colLabels.forEach((label, idx) => {
+        const colCenter = x + colWidths[idx] / 2;
+        doc.text(label, colCenter, headerY, { align: "center" as any });
+        x += colWidths[idx];
+      });
+
+      return { startY: headerY + 3, colWidths };
+    };
+
+    const { startY, colWidths } = drawHeader();
+    let y = startY;
+    const rowHeight = 6;
+
+    const drawRow = (row: string[], rowIndex: number) => {
+      let x = marginLeft;
+      const isStriped = rowIndex % 2 === 0;
+      if (isStriped) {
+        doc.setFillColor(248, 250, 252);
+        doc.rect(marginLeft, y - 4, pageWidth - marginLeft - marginRight, rowHeight, "F");
+      }
+      doc.setTextColor(15, 23, 42);
+      doc.setFontSize(8.5);
+      row.forEach((cell, idx) => {
+        const colWidth = colWidths[idx];
+        const maxChars = Math.floor(colWidth / 2.2);
+        const text =
+          cell.length > maxChars ? cell.slice(0, maxChars - 1).trimEnd() + "…" : cell;
+        const colX = x + 1.5;
+        doc.text(text, colX, y);
+        x += colWidth;
+      });
+    };
 
     filteredStudents.forEach((s, i) => {
-      const gradeName = getGradeName(s.grade_id);
-      const row = [(i + 1).toString(), s.student_id, s.name, gradeName + (s.stream ? ` ${s.stream}` : ''), s.section, s.gender];
-      if (i % 2 === 0) doc.setFillColor(248, 250, 252);
-      else doc.setFillColor(255, 255, 255);
-      doc.rect(14, y, 190, 6, 'F');
-      doc.setTextColor(0, 0, 0);
-      row.forEach((cell, j) => doc.text(cell, 14 + (j * 32), y + 4));
-      y += 6;
-      if (y > 280) {
+      if (y + rowHeight + marginBottom > pageHeight) {
         doc.addPage();
-        y = 20;
+        const header = drawHeader();
+        y = header.startY;
       }
+
+      const gradeName = getGradeName(s.grade_id);
+      const gradeLabel = gradeName + (s.stream ? ` ${s.stream}` : "");
+      const row = [
+        (i + 1).toString(),
+        s.student_id,
+        s.name,
+        gradeLabel,
+        s.section,
+        s.gender,
+      ];
+      drawRow(row, i);
+      y += rowHeight;
     });
 
-    doc.save('students_list.pdf');
-    toast.success('Exported to PDF with modern table');
+    // Footer with page number
+    const pageCount = doc.getNumberOfPages();
+    for (let i = 1; i <= pageCount; i++) {
+      doc.setPage(i);
+      doc.setFontSize(8);
+      doc.setTextColor(148, 163, 184);
+      doc.text(
+        `Page ${i} of ${pageCount}`,
+        pageWidth - marginRight,
+        pageHeight - 8,
+        { align: "right" as any }
+      );
+    }
+
+    doc.save("students_list.pdf");
+    toast.success("Exported to PDF with professional layout");
   };
 
   const exportToExcel = () => {
@@ -593,44 +663,7 @@ export default function StudentsPage() {
         ))}
       </div>
 
-      {/* Grade Information Card */}
-      {gradeFilter !== "all" && (
-        <Card className="shadow-sm border-l-4 border-l-blue-500">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <GraduationCap className="h-5 w-5 text-blue-600" />
-              Grade Information: {gradeFilter}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              {grades.filter(g => g.grade_name === gradeFilter).map(grade => {
-                const stats = gradeStats[grade.id] || { total: 0, males: 0, females: 0, others: 0 };
-                return (
-                  <React.Fragment key={grade.id}>
-                    <div className="p-4 bg-blue-50/50 dark:bg-blue-900/10 rounded-lg border border-blue-200 dark:border-blue-800">
-                      <div className="text-lg font-bold text-blue-700 dark:text-blue-400">{stats.total}</div>
-                      <div className="text-sm text-blue-600 dark:text-blue-500">Total Students</div>
-                    </div>
-                    <div className="p-4 bg-blue-50/50 dark:bg-blue-900/10 rounded-lg border border-blue-200 dark:border-blue-800">
-                      <div className="text-lg font-bold text-blue-500 dark:text-blue-400">{stats.males}</div>
-                      <div className="text-sm text-blue-600 dark:text-blue-500">Male Students</div>
-                    </div>
-                    <div className="p-4 bg-pink-50/50 dark:bg-pink-900/10 rounded-lg border border-pink-200 dark:border-pink-800">
-                      <div className="text-lg font-bold text-pink-500 dark:text-pink-400">{stats.females}</div>
-                      <div className="text-sm text-pink-600 dark:text-pink-500">Female Students</div>
-                    </div>
-                    <div className="p-4 bg-purple-50/50 dark:bg-purple-900/10 rounded-lg border border-purple-200 dark:border-purple-800">
-                      <div className="text-lg font-bold text-purple-500 dark:text-purple-400">{stats.others}</div>
-                      <div className="text-sm text-purple-600 dark:text-purple-500">Other Gender</div>
-                    </div>
-                  </React.Fragment>
-                );
-              })}
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      {/* Grade-specific secondary stats card removed to avoid duplication when filtering by grade */}
 
       {/* Filters */}
       <div className="space-y-4">
@@ -729,6 +762,7 @@ export default function StudentsPage() {
                 <TableHead>Student ID</TableHead>
                 <TableHead>Name</TableHead>
                 <TableHead>Father's Name</TableHead>
+                <TableHead>Contact</TableHead>
                 <TableHead>Grade</TableHead>
                 <TableHead>Section</TableHead>
                 <TableHead>Gender</TableHead>
@@ -748,6 +782,12 @@ export default function StudentsPage() {
                     <TableCell className="font-medium">{student.student_id}</TableCell>
                     <TableCell className="font-medium">{student.name}</TableCell>
                     <TableCell>{student.father_name}</TableCell>
+                    <TableCell>
+                      <div className="flex flex-col text-xs">
+                        {student.phone && <span>{student.phone}</span>}
+                        {student.email && <span className="text-muted-foreground">{student.email}</span>}
+                      </div>
+                    </TableCell>
                     <TableCell>
                       <Badge variant="outline">
                         {getGradeNumber(student.grade_id)}
@@ -847,135 +887,167 @@ export default function StudentsPage() {
             <DialogTitle>Edit Student Information</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleEditSubmit} className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <Label htmlFor="name">Student Name *</Label>
-                <Input
-                  id="name"
-                  name="name"
-                  value={editFormData.name}
-                  onChange={handleEditInputChange}
-                  required
-                  className={isEditFieldError("name") ? "border-red-500 ring-1 ring-red-500 animate-pulse" : ""}
-                />
-                {editErrors.name && (
-                  <p className="text-red-600 text-sm mt-1 flex items-center transition-opacity duration-300">
-                    <AlertCircle className="h-4 w-4 mr-1" /> {editErrors.name}
-                  </p>
-                )}
-              </div>
-              <div>
-                <Label htmlFor="father_name">Father's Name *</Label>
-                <Input
-                  id="father_name"
-                  name="father_name"
-                  value={editFormData.father_name}
-                  onChange={handleEditInputChange}
-                  required
-                  className={isEditFieldError("father_name") ? "border-red-500 ring-1 ring-red-500 animate-pulse" : ""}
-                />
-                {editErrors.father_name && (
-                  <p className="text-red-600 text-sm mt-1 flex items-center transition-opacity duration-300">
-                    <AlertCircle className="h-4 w-4 mr-1" /> {editErrors.father_name}
-                  </p>
-                )}
-              </div>
-              <div>
-                <Label htmlFor="grandfather_name">Grandfather's Name *</Label>
-                <Input
-                  id="grandfather_name"
-                  name="grandfather_name"
-                  value={editFormData.grandfather_name}
-                  onChange={handleEditInputChange}
-                  required
-                  className={isEditFieldError("grandfather_name") ? "border-red-500 ring-1 ring-red-500 animate-pulse" : ""}
-                />
-                {editErrors.grandfather_name && (
-                  <p className="text-red-600 text-sm mt-1 flex items-center transition-opacity duration-300">
-                    <AlertCircle className="h-4 w-4 mr-1" /> {editErrors.grandfather_name}
-                  </p>
-                )}
-              </div>
-              <div>
-                <Label htmlFor="gender">Gender *</Label>
-                <Select value={editFormData.gender} onValueChange={handleEditGenderChange}>
-                  <SelectTrigger className={isEditFieldError("gender") ? "border-red-500 ring-1 ring-red-500 animate-pulse" : ""}>
-                    <SelectValue placeholder="Select gender" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Male">Male</SelectItem>
-                    <SelectItem value="Female">Female</SelectItem>
-                    <SelectItem value="Other">Other</SelectItem>
-                  </SelectContent>
-                </Select>
-                {editErrors.gender && (
-                  <p className="text-red-600 text-sm mt-1 flex items-center transition-opacity duration-300">
-                    <AlertCircle className="h-4 w-4 mr-1" /> {editErrors.gender}
-                  </p>
-                )}
-              </div>
-              <div>
-                <Label htmlFor="grade_id">Grade *</Label>
-                <Select value={editFormData.grade_id} onValueChange={handleEditGradeChange}>
-                  <SelectTrigger className={isEditFieldError("grade_id") ? "border-red-500 ring-1 ring-red-500 animate-pulse" : ""}>
-                    <SelectValue placeholder="Select grade" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {grades.map((grade) => (
-                      <SelectItem key={grade.id} value={grade.id.toString()}>
-                        {grade.grade_name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {editErrors.grade_id && (
-                  <p className="text-red-600 text-sm mt-1 flex items-center transition-opacity duration-300">
-                    <AlertCircle className="h-4 w-4 mr-1" /> {editErrors.grade_id}
-                  </p>
-                )}
-              </div>
-              <div>
-                <Label htmlFor="section">Section *</Label>
-                <Select value={editFormData.section} onValueChange={handleEditSectionChange}>
-                  <SelectTrigger className={isEditFieldError("section") ? "border-red-500 ring-1 ring-red-500 animate-pulse" : ""}>
-                    <SelectValue placeholder="Select section" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {availableSections.map((section) => (
-                      <SelectItem key={section} value={section}>
-                        {section}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {editErrors.section && (
-                  <p className="text-red-600 text-sm mt-1 flex items-center transition-opacity duration-300">
-                    <AlertCircle className="h-4 w-4 mr-1" /> {editErrors.section}
-                  </p>
-                )}
-              </div>
-              {["Grade 11", "Grade 12"].includes(getGradeName(parseInt(editFormData.grade_id))) && (
+            <div className="space-y-4">
+              <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+                Personal Information
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                  <Label htmlFor="stream">Stream *</Label>
-                  <Select value={editFormData.stream} onValueChange={handleEditStreamChange}>
-                    <SelectTrigger className={isEditFieldError("stream") ? "border-red-500 ring-1 ring-red-500 animate-pulse" : ""}>
-                      <SelectValue placeholder="Select stream" />
+                  <Label htmlFor="name">Student Name *</Label>
+                  <Input
+                    id="name"
+                    name="name"
+                    value={editFormData.name}
+                    onChange={handleEditInputChange}
+                    required
+                    className={isEditFieldError("name") ? "border-red-500 ring-1 ring-red-500 animate-pulse" : ""}
+                  />
+                  {editErrors.name && (
+                    <p className="text-red-600 text-sm mt-1 flex items-center transition-opacity duration-300">
+                      <AlertCircle className="h-4 w-4 mr-1" /> {editErrors.name}
+                    </p>
+                  )}
+                </div>
+                <div>
+                  <Label htmlFor="father_name">Father's Name *</Label>
+                  <Input
+                    id="father_name"
+                    name="father_name"
+                    value={editFormData.father_name}
+                    onChange={handleEditInputChange}
+                    required
+                    className={isEditFieldError("father_name") ? "border-red-500 ring-1 ring-red-500 animate-pulse" : ""}
+                  />
+                  {editErrors.father_name && (
+                    <p className="text-red-600 text-sm mt-1 flex items-center transition-opacity duration-300">
+                      <AlertCircle className="h-4 w-4 mr-1" /> {editErrors.father_name}
+                    </p>
+                  )}
+                </div>
+                <div>
+                  <Label htmlFor="grandfather_name">Grandfather's Name *</Label>
+                  <Input
+                    id="grandfather_name"
+                    name="grandfather_name"
+                    value={editFormData.grandfather_name}
+                    onChange={handleEditInputChange}
+                    required
+                    className={isEditFieldError("grandfather_name") ? "border-red-500 ring-1 ring-red-500 animate-pulse" : ""}
+                  />
+                  {editErrors.grandfather_name && (
+                    <p className="text-red-600 text-sm mt-1 flex items-center transition-opacity duration-300">
+                      <AlertCircle className="h-4 w-4 mr-1" /> {editErrors.grandfather_name}
+                    </p>
+                  )}
+                </div>
+                <div>
+                  <Label htmlFor="gender">Gender *</Label>
+                  <Select value={editFormData.gender} onValueChange={handleEditGenderChange}>
+                    <SelectTrigger className={isEditFieldError("gender") ? "border-red-500 ring-1 ring-red-500 animate-pulse" : ""}>
+                      <SelectValue placeholder="Select gender" />
                     </SelectTrigger>
                     <SelectContent>
-                      {streamOptions.map((stream) => (
-                        <SelectItem key={stream} value={stream}>
-                          {stream}
+                      <SelectItem value="Male">Male</SelectItem>
+                      <SelectItem value="Female">Female</SelectItem>
+                      <SelectItem value="Other">Other</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {editErrors.gender && (
+                    <p className="text-red-600 text-sm mt-1 flex items-center transition-opacity duration-300">
+                      <AlertCircle className="h-4 w-4 mr-1" /> {editErrors.gender}
+                    </p>
+                  )}
+                </div>
+                <div>
+                  <Label htmlFor="phone">Phone</Label>
+                  <Input
+                    id="phone"
+                    name="phone"
+                    value={editFormData.phone}
+                    onChange={handleEditInputChange}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="email">Email</Label>
+                  <Input
+                    id="email"
+                    name="email"
+                    type="email"
+                    value={editFormData.email}
+                    onChange={handleEditInputChange}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+                Academic Information
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <Label htmlFor="grade_id">Grade *</Label>
+                  <Select value={editFormData.grade_id} onValueChange={handleEditGradeChange}>
+                    <SelectTrigger className={isEditFieldError("grade_id") ? "border-red-500 ring-1 ring-red-500 animate-pulse" : ""}>
+                      <SelectValue placeholder="Select grade" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {grades.map((grade) => (
+                        <SelectItem key={grade.id} value={grade.id.toString()}>
+                          {grade.grade_name}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
-                  {editErrors.stream && (
+                  {editErrors.grade_id && (
                     <p className="text-red-600 text-sm mt-1 flex items-center transition-opacity duration-300">
-                      <AlertCircle className="h-4 w-4 mr-1" /> {editErrors.stream}
+                      <AlertCircle className="h-4 w-4 mr-1" /> {editErrors.grade_id}
                     </p>
                   )}
                 </div>
-              )}
+                <div>
+                  <Label htmlFor="section">Section *</Label>
+                  <Select value={editFormData.section} onValueChange={handleEditSectionChange}>
+                    <SelectTrigger className={isEditFieldError("section") ? "border-red-500 ring-1 ring-red-500 animate-pulse" : ""}>
+                      <SelectValue placeholder="Select section" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availableSections.map((section) => (
+                        <SelectItem key={section} value={section}>
+                          {section}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {editErrors.section && (
+                    <p className="text-red-600 text-sm mt-1 flex items-center transition-opacity duration-300">
+                      <AlertCircle className="h-4 w-4 mr-1" /> {editErrors.section}
+                    </p>
+                  )}
+                </div>
+                {["Grade 11", "Grade 12"].includes(getGradeName(parseInt(editFormData.grade_id))) && (
+                  <div>
+                    <Label htmlFor="stream">Stream *</Label>
+                    <Select value={editFormData.stream} onValueChange={handleEditStreamChange}>
+                      <SelectTrigger className={isEditFieldError("stream") ? "border-red-500 ring-1 ring-red-500 animate-pulse" : ""}>
+                        <SelectValue placeholder="Select stream" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {streamOptions.map((stream) => (
+                          <SelectItem key={stream} value={stream}>
+                            {stream}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {editErrors.stream && (
+                      <p className="text-red-600 text-sm mt-1 flex items-center transition-opacity duration-300">
+                        <AlertCircle className="h-4 w-4 mr-1" /> {editErrors.stream}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="flex justify-end gap-2">

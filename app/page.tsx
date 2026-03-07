@@ -73,6 +73,59 @@ const getIPAddress = async (): Promise<string> => {
   }
 };
 
+// Reuse the dashboard-style spinner for loading
+function DashboardSpinner() {
+  return (
+    <div className="flex items-center justify-center min-h-[70vh] w-full bg-transparent">
+      <style>{`
+        .spinner-svg {
+          animation: spinner-rotate 2s linear infinite;
+        }
+        .spinner-circle {
+          stroke-dasharray: 1, 200;
+          stroke-dashoffset: 0;
+          animation: spinner-stretch 1.5s ease-in-out infinite;
+          stroke-linecap: round;
+        }
+        @keyframes spinner-rotate {
+          100% {
+            transform: rotate(360deg);
+          }
+        }
+        @keyframes spinner-stretch {
+          0% {
+            stroke-dasharray: 1, 200;
+            stroke-dashoffset: 0;
+          }
+          50% {
+            stroke-dasharray: 90, 200;
+            stroke-dashoffset: -35px;
+          }
+          100% {
+            stroke-dasharray: 90, 200;
+            stroke-dashoffset: -124px;
+          }
+        }
+      `}</style>
+
+      <svg
+        className="h-10 w-10 text-zinc-800 dark:text-zinc-200 spinner-svg"
+        viewBox="25 25 50 50"
+      >
+        <circle
+          className="spinner-circle"
+          cx="50"
+          cy="50"
+          r="20"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="4"
+        />
+      </svg>
+    </div>
+  );
+}
+
 export default function StudentLogin() {
   const router = useRouter();
   const [studentId, setStudentId] = useState("");
@@ -305,70 +358,94 @@ export default function StudentLogin() {
   const validateExamAccess = async (studentId: string, examCode: string) => {
     const fullStudentId = studentId.trim().toUpperCase();
 
-    const { data: student, error: studentError } = await supabase
-      .from("students")
-      .select("id, student_id, name, grade_id, section")
-      .eq("student_id", fullStudentId)
-      .single();
+    try {
+      const { data: student, error: studentError } = await supabase
+        .from("students")
+        .select("id, student_id, name, grade_id, section")
+        .eq("student_id", fullStudentId)
+        .single();
 
-    if (studentError || !student) {
-      throw new Error("Student not found. Please check your Student ID.");
-    }
-
-    const { data: exam, error: examError } = await supabase
-      .from("exams")
-      .select("id, exam_code, title, grade_id, section, exam_active, duration, total_marks")
-      .eq("exam_code", examCode)
-      .single();
-
-    if (examError || !exam) {
-      throw new Error("Exam not found. Please check your Exam ID.");
-    }
-
-    if (!exam.exam_active) {
-      throw new Error("This exam is not currently active.");
-    }
-
-    if (exam.grade_id !== student.grade_id) {
-      throw new Error("This exam is not available for your grade level.");
-    }
-
-    if (exam.section && exam.section.trim() !== "") {
-      const examSections = exam.section.split(",").map((s) => s.trim().toUpperCase());
-      const studentSection = student.section?.trim().toUpperCase();
-      if (!studentSection || !examSections.includes(studentSection)) {
-        throw new Error("This exam is not available for your section.");
+      if (studentError) {
+        // PGRST116 = no rows; otherwise treat as connectivity / server issue
+        if ((studentError as any).code === "PGRST116") {
+          throw new Error("Student not found. Please check your Student ID.");
+        }
+        console.error("Student lookup failed:", studentError);
+        throw new Error("Unable to verify student at the moment. Please check your internet or try again.");
       }
+      if (!student) {
+        throw new Error("Student not found. Please check your Student ID.");
+      }
+
+      const { data: exam, error: examError } = await supabase
+        .from("exams")
+        .select("id, exam_code, title, grade_id, section, exam_active, duration, total_marks")
+        .eq("exam_code", examCode)
+        .single();
+
+      if (examError) {
+        if ((examError as any).code === "PGRST116") {
+          throw new Error("Exam not found. Please check your Exam ID.");
+        }
+        console.error("Exam lookup failed:", examError);
+        throw new Error("Unable to verify exam at the moment. Please check your internet or try again.");
+      }
+      if (!exam) {
+        throw new Error("Exam not found. Please check your Exam ID.");
+      }
+
+      if (!exam.exam_active) {
+        throw new Error("This exam is not currently active.");
+      }
+
+      if (exam.grade_id !== student.grade_id) {
+        throw new Error("This exam is not available for your grade level.");
+      }
+
+      if (exam.section && exam.section.trim() !== "") {
+        const examSections = exam.section.split(",").map((s) => s.trim().toUpperCase());
+        const studentSection = student.section?.trim().toUpperCase();
+        if (!studentSection || !examSections.includes(studentSection)) {
+          throw new Error("This exam is not available for your section.");
+        }
+      }
+
+      const { data: assignment, error: assignmentError } = await supabase
+        .from("assign_exams")
+        .select("id, teacher_id")
+        .eq("exam_id", exam.id)
+        .eq("student_id", student.id)
+        .single();
+
+      if (assignmentError || !assignment) {
+        throw new Error("This exam is not assigned to you.");
+      }
+
+      const { data: existingResult } = await supabase
+        .from("results")
+        .select("id")
+        .eq("exam_id", exam.id)
+        .eq("student_id", student.id)
+        .single();
+
+      if (existingResult) {
+        throw new Error("You have already taken this exam.");
+      }
+
+      return {
+        student,
+        exam,
+        assignment,
+        duration: exam.duration * 60,
+      };
+    } catch (err: any) {
+      // Re-throw known messages; wrap unexpected ones
+      if (err instanceof Error && err.message) {
+        throw err;
+      }
+      console.error("validateExamAccess unexpected error:", err);
+      throw new Error("Failed to verify exam access. Please try again.");
     }
-
-    const { data: assignment, error: assignmentError } = await supabase
-      .from("assign_exams")
-      .select("id, teacher_id")
-      .eq("exam_id", exam.id)
-      .eq("student_id", student.id)
-      .single();
-
-    if (assignmentError || !assignment) {
-      throw new Error("This exam is not assigned to you.");
-    }
-
-    const { data: existingResult } = await supabase
-      .from("results")
-      .select("id")
-      .eq("exam_id", exam.id)
-      .eq("student_id", student.id)
-      .single();
-
-    if (existingResult) {
-      throw new Error("You have already taken this exam.");
-    }
-
-    return {
-      student,
-      exam,
-      assignment,
-      duration: exam.duration * 60,
-    };
   };
 
   const handleLogin = async (e: React.FormEvent) => {

@@ -72,6 +72,7 @@ interface Subject {
 interface Section {
   id: string
   name: string
+  stream: string | null
 }
 
 interface Teacher {
@@ -148,7 +149,9 @@ export default function TeacherManagementPage() {
   const [allTeachers, setAllTeachers] = useState<Teacher[]>([])
   const [grades, setGrades] = useState<Grade[]>([])
   const [subjects, setSubjects] = useState<Subject[]>([])
-  const [gradeSubjects, setGradeSubjects] = useState<Record<string, string[]>>({}) // grade_id -> subject_ids
+  // grade_id -> stream -> subject_ids (stream: Common | Natural | Social)
+  const [gradeSubjects, setGradeSubjects] = useState<Record<string, Record<string, string[]>>>({})
+  // grade_id -> sections (each section has stream for G11/12)
   const [gradeSections, setGradeSections] = useState<Record<string, Section[]>>({})
   const [searchQuery, setSearchQuery] = useState("")
   const [currentPage, setCurrentPage] = useState(1)
@@ -203,20 +206,18 @@ export default function TeacherManagementPage() {
         .select("id, subject_name, stream")
       if (subjectsError) throw subjectsError
 
-      // グレードに割り当てられた科目を取得
       const { data: gradeSubjectsData, error: gradeSubjectsError } = await supabase
         .from("grade_subjects")
-        .select("grade_id, subject_id")
-      
+        .select("grade_id, subject_id, stream")
       if (gradeSubjectsError) {
         console.warn("grade_subjects table may not exist yet")
       }
 
       const { data: sectionsData, error: sectionsError } = await supabase
         .from("grade_sections")
-        .select("id, grade_id, section_name")
+        .select("id, grade_id, section_name, stream")
       if (sectionsError) {
-        console.warn("grade_sections table may not exist yet, using default sections")
+        console.warn("grade_sections table may not exist yet")
       }
 
       const processedTeachers = (teachersData || []).map((u: any) => ({
@@ -241,20 +242,22 @@ export default function TeacherManagementPage() {
         (subjectsData || []).map((s: any) => ({ id: s.id.toString(), name: s.subject_name, stream: s.stream })),
       )
 
-      // グレードごとに割り当てられた科目をグループ化
-      const subjectsByGrade: Record<string, string[]> = {}
+      const subjectsByGradeAndStream: Record<string, Record<string, string[]>> = {}
       if (gradeSubjectsData) {
         gradeSubjectsData.forEach((gs: any) => {
           const gradeId = gs.grade_id.toString()
-          if (!subjectsByGrade[gradeId]) {
-            subjectsByGrade[gradeId] = []
+          const stream = gs.stream ?? "Common"
+          if (!subjectsByGradeAndStream[gradeId]) {
+            subjectsByGradeAndStream[gradeId] = { Common: [], Natural: [], Social: [] }
           }
-          subjectsByGrade[gradeId].push(gs.subject_id.toString())
+          if (!subjectsByGradeAndStream[gradeId][stream]) {
+            subjectsByGradeAndStream[gradeId][stream] = []
+          }
+          subjectsByGradeAndStream[gradeId][stream].push(gs.subject_id.toString())
         })
       }
-      setGradeSubjects(subjectsByGrade)
+      setGradeSubjects(subjectsByGradeAndStream)
 
-      // グレードごとにセクションをグループ化
       const sectionsByGrade: Record<string, Section[]> = {}
       if (sectionsData) {
         sectionsData.forEach((s: any) => {
@@ -262,13 +265,20 @@ export default function TeacherManagementPage() {
           if (!sectionsByGrade[gradeId]) {
             sectionsByGrade[gradeId] = []
           }
-          sectionsByGrade[gradeId].push({ id: s.section_name, name: s.section_name })
+          sectionsByGrade[gradeId].push({
+            id: `${s.section_name}-${s.stream ?? ""}`,
+            name: s.section_name,
+            stream: s.stream ?? null,
+          })
         })
       }
-      // DBにセクションがない場合はデフォルトのA-Eを使用
       if (Object.keys(sectionsByGrade).length === 0) {
         gradesData?.forEach((g: any) => {
-          sectionsByGrade[g.id.toString()] = ["A", "B", "C", "D", "E"].map((s) => ({ id: s, name: s }))
+          sectionsByGrade[g.id.toString()] = ["A", "B", "C", "D", "E"].map((sec) => ({
+            id: sec,
+            name: sec,
+            stream: null,
+          }))
         })
       }
       setGradeSections(sectionsByGrade)
@@ -302,34 +312,27 @@ export default function TeacherManagementPage() {
     })()
   }, [])
 
-  // 選択されたグレードに割り当てられている科目だけをフィルタリング
+  const isStreamedGradeName = (gradeName: string) =>
+    gradeName.includes("11") || gradeName.includes("12")
+
   const filteredSubjectsByStreamAndGrade = useMemo(() => {
-    if (!assignForm.stream) return []
-    
-    if (!assignForm.assignedGrade) {
-      // グレードが選択されていない場合は、ストリームに基づいてフィルタリング
-      return subjects.filter((s) => 
-        s.stream === assignForm.stream || 
-        s.stream === "Common" || 
-        !s.stream
-      )
-    }
-    
-    // グレードが選択されている場合は、そのグレードに割り当てられている科目だけを表示
-    const gradeSubjectIds = gradeSubjects[assignForm.assignedGrade] || []
-    const gradeSubjectsList = subjects.filter((s) => 
-      gradeSubjectIds.includes(s.id) && 
-      (s.stream === assignForm.stream || s.stream === "Common" || !s.stream)
-    )
-    
-    return gradeSubjectsList
+    if (!assignForm.stream || !assignForm.assignedGrade) return []
+    const byStream = gradeSubjects[assignForm.assignedGrade] || { Common: [], Natural: [], Social: [] }
+    const streamIds = byStream[assignForm.stream] || []
+    const commonIds = byStream.Common || []
+    const allowedIds = new Set([...streamIds, ...commonIds])
+    return subjects.filter((s) => allowedIds.has(s.id))
   }, [subjects, assignForm.stream, assignForm.assignedGrade, gradeSubjects])
 
-  // 選択されたグレードに割り当てられているセクションだけを取得
   const availableSections = useMemo(() => {
     if (!assignForm.assignedGrade) return []
-    return gradeSections[assignForm.assignedGrade] || []
-  }, [assignForm.assignedGrade, gradeSections])
+    const grade = grades.find((g) => g.id === assignForm.assignedGrade)
+    const list = gradeSections[assignForm.assignedGrade] || []
+    if (grade && isStreamedGradeName(grade.name) && assignForm.stream) {
+      return list.filter((s) => s.stream === assignForm.stream)
+    }
+    return list.filter((s) => s.stream == null)
+  }, [assignForm.assignedGrade, assignForm.stream, gradeSections, grades])
 
   // すでに割り当てられている科目とセクションの組み合わせをチェック
   const getAssignedSubjectsForGradeAndSections = useMemo(() => {
@@ -451,12 +454,13 @@ export default function TeacherManagementPage() {
   }
 
   const handleAssignUser = async () => {
-    if (!assignForm.stream) {
-      toast.error("Please select a stream first")
-      return
-    }
     if (!assignForm.assignedGrade) {
       toast.error("Please select a grade")
+      return
+    }
+    const grade = grades.find((g) => g.id === assignForm.assignedGrade)
+    if (grade && isStreamedGradeName(grade.name) && !assignForm.stream) {
+      toast.error("For Grade 11 and 12, please select a stream (Natural or Social)")
       return
     }
     if (assignForm.assignedSections.length === 0) {
@@ -468,11 +472,9 @@ export default function TeacherManagementPage() {
       return
     }
 
-    
     const isAlreadyAssigned = Array.from(getAssignedSubjectsForGradeAndSections).some(
       (subjectId) => subjectId === assignForm.assignedSubject
     )
-
     if (isAlreadyAssigned) {
       toast.error("This subject is already assigned to another teacher for the selected sections")
       return
@@ -482,7 +484,7 @@ export default function TeacherManagementPage() {
       const { error } = await supabase
         .from("teacher")
         .update({
-          stream: assignForm.stream,
+          stream: assignForm.stream || null,
           grade_id: Number.parseInt(assignForm.assignedGrade),
           subject_id: Number.parseInt(assignForm.assignedSubject),
           section: assignForm.assignedSections.join(","),
@@ -598,7 +600,7 @@ export default function TeacherManagementPage() {
   }
 
   if (loading) {
-    return <PageSpinner />;
+    return <PageSpinner />
   }
 
   return (
@@ -884,38 +886,11 @@ export default function TeacherManagementPage() {
           <DialogHeader>
             <DialogTitle>Assign to {selectedUser?.fullName}</DialogTitle>
             <DialogDescription>
-              Select stream first, then grade, then sections, and finally one subject.
-              <br />
-              Only subjects assigned to the selected grade will be shown.
+              Select grade first. For Grade 11 or 12, choose stream (Natural/Social); sections and subjects are then filtered by grade and stream.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
-            {/* Stream Selection - Must be first */}
-            <div className="grid gap-2">
-              <Label>Stream *</Label>
-              <Select
-                value={assignForm.stream}
-                onValueChange={(value) =>
-                  setAssignForm((prev) => ({
-                    ...prev,
-                    stream: value,
-                    assignedGrade: "",
-                    assignedSubject: "",
-                    assignedSections: [],
-                  }))
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select stream" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Natural">Natural Science</SelectItem>
-                  <SelectItem value="Social">Social Science</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Grade Selection */}
+            {/* Grade Selection first */}
             <div className="grid gap-2">
               <Label>Grade *</Label>
               <Select
@@ -924,11 +899,11 @@ export default function TeacherManagementPage() {
                   setAssignForm((prev) => ({
                     ...prev,
                     assignedGrade: value,
+                    stream: "",
                     assignedSections: [],
                     assignedSubject: "",
                   }))
                 }
-                disabled={!assignForm.stream}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select grade" />
@@ -943,7 +918,36 @@ export default function TeacherManagementPage() {
               </Select>
             </div>
 
-            {/* Sections Selection */}
+            {/* Stream - required only for Grade 11 and 12 */}
+            {assignForm.assignedGrade && (() => {
+              const grade = grades.find((g) => g.id === assignForm.assignedGrade)
+              return grade && isStreamedGradeName(grade.name)
+            })() && (
+              <div className="grid gap-2">
+                <Label>Stream * (Natural or Social)</Label>
+                <Select
+                  value={assignForm.stream}
+                  onValueChange={(value) =>
+                    setAssignForm((prev) => ({
+                      ...prev,
+                      stream: value,
+                      assignedSections: [],
+                      assignedSubject: "",
+                    }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select stream" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Natural">Natural Science</SelectItem>
+                    <SelectItem value="Social">Social Science</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            {/* Sections - filtered by grade and stream for G11/12 */}
             <div className="grid gap-2">
               <Label>Sections *</Label>
               <Select
@@ -953,11 +957,17 @@ export default function TeacherManagementPage() {
                     setAssignForm((prev) => ({
                       ...prev,
                       assignedSections: [...prev.assignedSections, value],
-                      assignedSubject: "", // Reset subject when sections change
+                      assignedSubject: "",
                     }))
                   }
                 }}
-                disabled={!assignForm.assignedGrade}
+                disabled={
+                  !assignForm.assignedGrade ||
+                  (() => {
+                    const grade = grades.find((g) => g.id === assignForm.assignedGrade)
+                    return grade && isStreamedGradeName(grade.name) && !assignForm.stream
+                  })()
+                }
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Add sections" />
@@ -966,8 +976,8 @@ export default function TeacherManagementPage() {
                   {availableSections.map((section) => (
                     <SelectItem
                       key={section.id}
-                      value={section.id}
-                      disabled={assignForm.assignedSections.includes(section.id)}
+                      value={section.name}
+                      disabled={assignForm.assignedSections.includes(section.name)}
                     >
                       Section {section.name}
                     </SelectItem>
@@ -975,38 +985,39 @@ export default function TeacherManagementPage() {
                 </SelectContent>
               </Select>
 
-              {/* Display selected sections as badges */}
               {assignForm.assignedSections.length > 0 && (
                 <div className="flex flex-wrap gap-1 mt-2">
-                  {assignForm.assignedSections.map((sectionId) => {
-                    const section = availableSections.find((s) => s.id === sectionId)
-                    return (
-                      <Badge key={sectionId} variant="secondary" className="flex items-center gap-1">
-                        Section {section?.name}
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setAssignForm((prev) => ({
-                              ...prev,
-                              assignedSections: prev.assignedSections.filter((id) => id !== sectionId),
-                              assignedSubject: "", // Reset subject when section is removed
-                            }))
-                          }}
-                          className="ml-1 hover:text-destructive"
-                        >
-                          ×
-                        </button>
-                      </Badge>
-                    )
-                  })}
+                  {assignForm.assignedSections.map((sectionName) => (
+                    <Badge key={sectionName} variant="secondary" className="flex items-center gap-1">
+                      Section {sectionName}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAssignForm((prev) => ({
+                            ...prev,
+                            assignedSections: prev.assignedSections.filter((s) => s !== sectionName),
+                            assignedSubject: "",
+                          }))
+                        }}
+                        className="ml-1 hover:text-destructive"
+                      >
+                        ×
+                      </button>
+                    </Badge>
+                  ))}
                 </div>
               )}
 
               {assignForm.assignedSections.length === 0 && (
                 <p className="text-sm text-muted-foreground">
-                  {assignForm.assignedGrade 
-                    ? `Select sections from this grade (${availableSections.length} available)`
-                    : "Select a grade first to see available sections"}
+                  {!assignForm.assignedGrade
+                    ? "Select a grade first"
+                    : assignForm.assignedGrade && (() => {
+                        const g = grades.find((x) => x.id === assignForm.assignedGrade)
+                        return g && isStreamedGradeName(g.name) && !assignForm.stream
+                      })()
+                    ? "Select stream for Grade 11/12 to see sections"
+                    : `${availableSections.length} section(s) available for this grade${assignForm.stream ? ` (${assignForm.stream})` : ""}`}
                 </p>
               )}
             </div>
@@ -1017,23 +1028,30 @@ export default function TeacherManagementPage() {
               <Select
                 value={assignForm.assignedSubject}
                 onValueChange={(value) => {
-                  setAssignForm((prev) => ({
-                    ...prev,
-                    assignedSubject: value,
-                  }))
+                  setAssignForm((prev) => ({ ...prev, assignedSubject: value }))
                 }}
-                disabled={!assignForm.stream || !assignForm.assignedGrade || assignForm.assignedSections.length === 0}
+                disabled={
+                  !assignForm.assignedGrade ||
+                  assignForm.assignedSections.length === 0 ||
+                  (() => {
+                    const g = grades.find((x) => x.id === assignForm.assignedGrade)
+                    return g && isStreamedGradeName(g.name) && !assignForm.stream
+                  })()
+                }
               >
                 <SelectTrigger>
-                  <SelectValue placeholder={
-                    !assignForm.stream 
-                      ? "Select stream first" 
-                      : !assignForm.assignedGrade 
-                      ? "Select grade first"
-                      : assignForm.assignedSections.length === 0
-                      ? "Select sections first"
-                      : "Select subject"
-                  } />
+                  <SelectValue
+                    placeholder={
+                      !assignForm.assignedGrade
+                        ? "Select grade first"
+                        : (() => {
+                            const g = grades.find((x) => x.id === assignForm.assignedGrade)
+                            if (g && isStreamedGradeName(g.name) && !assignForm.stream) return "Select stream first"
+                            if (assignForm.assignedSections.length === 0) return "Select sections first"
+                            return "Select subject"
+                          })()
+                    }
+                  />
                 </SelectTrigger>
                 <SelectContent>
                   {filteredSubjectsByStreamAndGrade
@@ -1088,9 +1106,17 @@ export default function TeacherManagementPage() {
             <Button type="button" variant="outline" onClick={() => setIsAssignOpen(false)}>
               Cancel
             </Button>
-            <Button 
+            <Button
               onClick={handleAssignUser}
-              disabled={!assignForm.stream || !assignForm.assignedGrade || !assignForm.assignedSubject || assignForm.assignedSections.length === 0}
+              disabled={
+                !assignForm.assignedGrade ||
+                !assignForm.assignedSubject ||
+                assignForm.assignedSections.length === 0 ||
+                (() => {
+                  const g = grades.find((x) => x.id === assignForm.assignedGrade)
+                  return g && isStreamedGradeName(g.name) && !assignForm.stream
+                })()
+              }
             >
               Update Assignment
             </Button>

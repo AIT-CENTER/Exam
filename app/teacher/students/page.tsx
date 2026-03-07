@@ -41,26 +41,6 @@ const getGradeLevel = (gradeName: string | undefined): number => {
   return gradeNum
 }
 
-const isHigherGrade = (gradeName: string | undefined): boolean => {
-  const gradeLevel = getGradeLevel(gradeName)
-  return gradeLevel >= 11
-}
-
-const getDepartmentStream = (department: string | undefined): string => {
-  if (!department) return "Common"
-  
-  if (department.includes('Science') || 
-      department.includes('Engineering') ||
-      department.includes('Technology')) {
-    return 'Natural'
-  } else if (department.includes('Social') || 
-             department.includes('Business') ||
-             department.includes('Arts')) {
-    return 'Social'
-  }
-  return 'Common'
-}
-
 export default function StudentsPage() {
   const router = useRouter()
   const [students, setStudents] = useState<Student[]>([])
@@ -107,36 +87,14 @@ export default function StudentsPage() {
 
         let filteredStudents = studentsData || []
 
-        // Filter students based on grade level and teacher department
+        // For streamed grades (e.g. Grade 11/12) ensure teacher only sees their stream
         const gradeLevel = getGradeLevel(teacher.gradeName)
-        
-        if (gradeLevel >= 11) {
-          // Grades 11-12: Department-based filtering
-          if (teacher.department) {
-            const teacherStream = getDepartmentStream(teacher.department)
-            
-            if (teacherStream === 'Natural') {
-              filteredStudents = filteredStudents.filter((student: Student) => 
-                student.stream === 'Natural' || !student.stream
-              )
-            } else if (teacherStream === 'Social') {
-              filteredStudents = filteredStudents.filter((student: Student) => 
-                student.stream === 'Social' || !student.stream
-              )
-            }
-            // If Common, show all students
-          }
-        } else {
-          // Grades 9-10: Stream-based filtering
-          if (teacher.department) {
-            const teacherStream = getDepartmentStream(teacher.department)
-            
-            if (teacherStream) {
-              filteredStudents = filteredStudents.filter((student: Student) => 
-                student.stream === teacherStream
-              )
-            }
-          }
+        const teacherStream = teacher.stream as string | null | undefined
+
+        if (gradeLevel >= 11 && teacherStream) {
+          filteredStudents = filteredStudents.filter(
+            (student: Student) => student.stream === teacherStream
+          )
         }
 
         setStudents(filteredStudents)
@@ -408,7 +366,7 @@ export default function StudentsPage() {
   }
 
   const gradeLevel = getGradeLevel(teacherData?.gradeName)
-  const teacherStream = getDepartmentStream(teacherData?.department)
+  const teacherStream = teacherData?.stream as string | null | undefined
 
   return (
     <div className="flex-1 space-y-8 bg-transparent p-4 lg:p-8">
@@ -420,12 +378,10 @@ export default function StudentsPage() {
             {teacherData?.gradeName && teacherSections.length > 0 ? (
               <>
                 Students in {teacherData.gradeName} - Your Sections: {teacherSections.join(", ")}
-                {teacherData?.department && (
+                {teacherStream && (
                   <>
                     <Badge variant="outline" className="ml-2">
-                      {gradeLevel >= 11 
-                        ? `${teacherData.department} Department` 
-                        : `${teacherStream} Stream`}
+                      {gradeLevel >= 11 ? `${teacherStream} Stream` : teacherStream}
                     </Badge>
                   </>
                 )}
