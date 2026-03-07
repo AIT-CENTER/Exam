@@ -171,7 +171,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
   if (isLoading) {
     return (
-      <Sidebar collapsible="icon" className="!border-r-0 border-none bg-transparent" {...props}>
+      <Sidebar collapsible="icon" className="border-r-0! border-none bg-transparent" {...props}>
         <SidebarHeader className="p-3">
           <div className="flex items-center space-x-3">
             <div className="h-10 w-10 bg-gray-200 rounded-lg animate-pulse"></div>
@@ -207,7 +207,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   return (
     <Sidebar 
       collapsible="icon" 
-      className="!border-r-0 border-none bg-transparent flex flex-col"
+      className="border-r-0! border-none bg-transparent flex flex-col"
       {...props}
     >
       <SidebarHeader className="p-3">

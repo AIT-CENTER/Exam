@@ -23,10 +23,10 @@ export async function POST(request: NextRequest) {
     const { data: settings } = await admin
       .from("system_settings")
       .select("max_time_extension_minutes")
-      .limit(1)
+      .eq("id", 1)
       .maybeSingle();
 
-    const maxExtensionMinutes = settings?.max_time_extension_minutes ?? 30;
+    const maxExtensionMinutes = Math.max(1, Number(settings?.max_time_extension_minutes ?? 30));
 
     const { data: session, error: sessionError } = await admin
       .from("exam_sessions")
@@ -42,19 +42,21 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Cannot add time to completed exam" }, { status: 400 });
     }
 
-    const currentExtra = session.extra_time_seconds ?? 0;
-    const requestedExtra = minutes * 60;
+    const currentExtra = Number(session.extra_time_seconds ?? 0);
+    const requestedExtra = Math.floor(Number(minutes) * 60);
     const maxExtraAllowed = maxExtensionMinutes * 60;
     const remainingAllowance = Math.max(0, maxExtraAllowed - currentExtra);
-    const actualExtra = Math.min(requestedExtra, remainingAllowance);
+    const actualExtra = Math.min(Math.max(0, requestedExtra), remainingAllowance);
 
     if (actualExtra <= 0) {
       return NextResponse.json({
-        error: `Cannot add more time. Max extension (${maxExtensionMinutes} min) reached.`,
+        error: `Cannot add more time. Max extension (${maxExtensionMinutes} min) reached for this student.`,
       }, { status: 400 });
     }
 
-    const newExtraTimeSeconds = currentExtra + actualExtra;
+    // Defensive: ensure total extra time never exceeds admin limit
+    const newExtraTimeSeconds = Math.min(currentExtra + actualExtra, maxExtraAllowed);
+
     const now = new Date();
     const currentEnd = session.end_time ? new Date(session.end_time) : now;
     const baseTime = currentEnd.getTime() > now.getTime() ? currentEnd : now;

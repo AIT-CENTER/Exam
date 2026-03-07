@@ -64,8 +64,14 @@ export async function GET(request: NextRequest) {
     const DISCONNECT_THRESHOLD_SEC = 25;
 
     let maxRiskBeforeSubmit = 7;
-    const { data: settings } = await admin.from("system_settings").select("max_risk_before_submit").limit(1).maybeSingle();
+    let maxTimeExtensionMinutes = 30;
+    const { data: settings } = await admin
+      .from("system_settings")
+      .select("max_risk_before_submit, max_time_extension_minutes")
+      .eq("id", 1)
+      .maybeSingle();
     if (settings?.max_risk_before_submit != null) maxRiskBeforeSubmit = Number(settings.max_risk_before_submit);
+    if (settings?.max_time_extension_minutes != null) maxTimeExtensionMinutes = Math.max(1, Number(settings.max_time_extension_minutes));
 
     const liveSessions = sessions.map((session: any) => {
       const lastActivity = session.last_activity_at ? new Date(session.last_activity_at).getTime() : 0;
@@ -136,6 +142,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       sessions: displaySessions,
       riskLogs: riskLogs ?? [],
+      maxTimeExtensionMinutes,
     });
   } catch (e) {
     console.error("[fetch-live-monitor]", e);

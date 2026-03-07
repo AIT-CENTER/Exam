@@ -362,7 +362,7 @@ export default function StudentLogin() {
       const { data: student, error: studentError } = await supabase
         .from("students")
         .select("id, student_id, name, grade_id, section")
-        .eq("student_id", fullStudentId)
+        .ilike("student_id", fullStudentId)
         .single();
 
       if (studentError) {
@@ -1093,7 +1093,7 @@ export default function StudentLogin() {
       {/* Main Login Page - Professional Split Screen */}
       <div className="min-h-screen flex bg-transparent">
         {/* Left Side – Enhanced Professional UI */}
-        <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden bg-slate-50 flex-col justify-between p-12 text-slate-700 border-r border-slate-200">
+        <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden bg-[#F7F7F7] flex-col justify-between p-12 text-slate-700 border-r border-slate-200">
           {/* Decorative Background Elements */}
           <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
             <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] rounded-full bg-blue-100/50 blur-3xl" />

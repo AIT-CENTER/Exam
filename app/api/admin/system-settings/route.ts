@@ -11,6 +11,12 @@ import { supabaseAdmin } from "@/lib/supabaseClient";
 const DEFAULTS = {
   max_risk_before_submit: 7,
   max_time_extension_minutes: 30,
+  enable_results_archive: false,
+  enable_student_results_portal: false,
+  enable_student_teacher_chat: false,
+  enable_realtime_features: false,
+  student_current_results_mode: "semester_1" as "semester_1" | "full_year",
+  current_academic_year: null as number | null,
 };
 
 export async function GET() {
@@ -43,7 +49,18 @@ export async function GET() {
     const admin = supabaseAdmin();
     const { data, error } = await admin
       .from("system_settings")
-      .select("max_risk_before_submit, max_time_extension_minutes")
+      .select(
+        [
+          "max_risk_before_submit",
+          "max_time_extension_minutes",
+          "enable_results_archive",
+          "enable_student_results_portal",
+          "enable_student_teacher_chat",
+          "enable_realtime_features",
+          "student_current_results_mode",
+          "current_academic_year",
+        ].join(",")
+      )
       .limit(1)
       .maybeSingle();
 
@@ -53,6 +70,13 @@ export async function GET() {
     return NextResponse.json({
       max_risk_before_submit: data?.max_risk_before_submit ?? DEFAULTS.max_risk_before_submit,
       max_time_extension_minutes: data?.max_time_extension_minutes ?? DEFAULTS.max_time_extension_minutes,
+      enable_results_archive: Boolean(data?.enable_results_archive ?? DEFAULTS.enable_results_archive),
+      enable_student_results_portal: Boolean(data?.enable_student_results_portal ?? DEFAULTS.enable_student_results_portal),
+      enable_student_teacher_chat: Boolean(data?.enable_student_teacher_chat ?? DEFAULTS.enable_student_teacher_chat),
+      enable_realtime_features: Boolean(data?.enable_realtime_features ?? DEFAULTS.enable_realtime_features),
+      student_current_results_mode:
+        (data?.student_current_results_mode as any) === "full_year" ? "full_year" : "semester_1",
+      current_academic_year: data?.current_academic_year ?? DEFAULTS.current_academic_year,
     });
   } catch (e) {
     console.error("[system-settings]", e);
@@ -98,8 +122,23 @@ export async function PUT(request: NextRequest) {
     const body = await request.json();
     const max_risk_before_submit = body.max_risk_before_submit ?? DEFAULTS.max_risk_before_submit;
     const max_time_extension_minutes = body.max_time_extension_minutes ?? DEFAULTS.max_time_extension_minutes;
+    const enable_results_archive = body.enable_results_archive ?? DEFAULTS.enable_results_archive;
+    const enable_student_results_portal = body.enable_student_results_portal ?? DEFAULTS.enable_student_results_portal;
+    const enable_student_teacher_chat = body.enable_student_teacher_chat ?? DEFAULTS.enable_student_teacher_chat;
+    const enable_realtime_features = body.enable_realtime_features ?? DEFAULTS.enable_realtime_features;
+    const student_current_results_mode =
+      body.student_current_results_mode === "full_year" ? "full_year" : "semester_1";
 
     const admin = supabaseAdmin();
+
+    // Do not allow changing current_academic_year from Settings (locked).
+    // It can be derived from the active academic_period(s) instead.
+    const { data: existingYear } = await admin
+      .from("system_settings")
+      .select("current_academic_year")
+      .eq("id", 1)
+      .maybeSingle();
+
     const { error } = await admin
       .from("system_settings")
       .upsert(
@@ -107,6 +146,12 @@ export async function PUT(request: NextRequest) {
           id: 1,
           max_risk_before_submit: Number(max_risk_before_submit),
           max_time_extension_minutes: Number(max_time_extension_minutes),
+          enable_results_archive: Boolean(enable_results_archive),
+          enable_student_results_portal: Boolean(enable_student_results_portal),
+          enable_student_teacher_chat: Boolean(enable_student_teacher_chat),
+          enable_realtime_features: Boolean(enable_realtime_features),
+          student_current_results_mode,
+          current_academic_year: existingYear?.current_academic_year ?? null,
           updated_at: new Date().toISOString(),
         },
         { onConflict: "id" }

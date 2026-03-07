@@ -166,6 +166,8 @@ export default function SettingsPage() {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [currentUserRole, setCurrentUserRole] = useState<"super_admin" | "admin" | null>(null)
   const [adminPageAccess, setAdminPageAccess] = useState<Record<string, boolean>>({})
+  const [adminRolePermissions, setAdminRolePermissions] = useState<Record<string, boolean>>({})
+  const [savingPagePermission, setSavingPagePermission] = useState<string | null>(null)
 
   // Exam Sessions
   const [showDeleteSessionsDialog, setShowDeleteSessionsDialog] = useState(false)
@@ -176,6 +178,14 @@ export default function SettingsPage() {
   const [maxRiskBeforeSubmit, setMaxRiskBeforeSubmit] = useState(7)
   const [maxTimeExtensionMinutes, setMaxTimeExtensionMinutes] = useState(30)
   const [savingSystemSettings, setSavingSystemSettings] = useState(false)
+
+  // Feature flags + academic term boundaries (system_settings)
+  const [enableResultsArchive, setEnableResultsArchive] = useState(false)
+  const [enableStudentResultsPortal, setEnableStudentResultsPortal] = useState(false)
+  const [enableStudentTeacherChat, setEnableStudentTeacherChat] = useState(false)
+  const [enableRealtimeFeatures, setEnableRealtimeFeatures] = useState(false)
+  const [currentAcademicYear, setCurrentAcademicYear] = useState<string>("")
+  const [studentCurrentResultsMode, setStudentCurrentResultsMode] = useState<"semester_1" | "full_year">("semester_1")
 
   // Table Management
   const [tables, setTables] = useState<TableInfo[]>([])
@@ -239,6 +249,22 @@ export default function SettingsPage() {
   const TABLE_CONFLICT_KEYS: Record<string, string> = {
     results: "exam_id,student_id",
     assign_exams: "exam_id,student_id",
+  }
+
+  const ADMIN_PAGE_KEY_LABELS: Record<string, string> = {
+    dashboard_home: "Dashboard home",
+    analytics: "Analytics",
+    settings_system: "System settings",
+    teachers_page: "Teachers page",
+    teachers_create: "Create teachers",
+    students_page: "Students page",
+    students_create: "Create students",
+    students_promotions: "Promote students (grade upgrade)",
+    results_archive: "Results archive & transcripts",
+    grades_page: "Grades page",
+    grades_create: "Create grades",
+    subjects_page: "Subjects page",
+    subjects_create: "Create subjects",
   }
 
   const backupTables = systemTables.map(t => t.name)
@@ -703,8 +729,56 @@ export default function SettingsPage() {
       const data = await res.json()
       setMaxRiskBeforeSubmit(data.max_risk_before_submit ?? 7)
       setMaxTimeExtensionMinutes(data.max_time_extension_minutes ?? 30)
+      setEnableResultsArchive(Boolean(data.enable_results_archive))
+      setEnableStudentResultsPortal(Boolean(data.enable_student_results_portal))
+      setEnableStudentTeacherChat(Boolean(data.enable_student_teacher_chat))
+      setEnableRealtimeFeatures(Boolean(data.enable_realtime_features))
+      setCurrentAcademicYear(data.current_academic_year ? String(data.current_academic_year) : "")
+      setStudentCurrentResultsMode(data.student_current_results_mode === "full_year" ? "full_year" : "semester_1")
     } catch { /* use defaults */ }
   }
+
+  // Keep system_settings-driven controls (current year, flags) in sync in real time
+  // so that changes from other admin screens (e.g. results archive) or from this
+  // page are reflected without a manual refresh.
+  useEffect(() => {
+    let channel: ReturnType<typeof supabase.channel> | null = null
+
+    try {
+      channel = supabase
+        .channel("system-settings-admin")
+        .on(
+          "postgres_changes",
+          {
+            event: "UPDATE",
+            schema: "public",
+            table: "system_settings",
+            filter: "id=eq.1",
+          },
+          (payload: any) => {
+            const row = payload?.new as any
+            if (!row) return
+            setMaxRiskBeforeSubmit(row.max_risk_before_submit ?? 7)
+            setMaxTimeExtensionMinutes(row.max_time_extension_minutes ?? 30)
+            setEnableResultsArchive(Boolean(row.enable_results_archive))
+            setEnableStudentResultsPortal(Boolean(row.enable_student_results_portal))
+            setEnableStudentTeacherChat(Boolean(row.enable_student_teacher_chat))
+            setEnableRealtimeFeatures(Boolean(row.enable_realtime_features))
+            setCurrentAcademicYear(row.current_academic_year ? String(row.current_academic_year) : "")
+            setStudentCurrentResultsMode(
+              row.student_current_results_mode === "full_year" ? "full_year" : "semester_1"
+            )
+          }
+        )
+        .subscribe()
+    } catch {
+      // ignore realtime wiring errors and fall back to initial fetch
+    }
+
+    return () => {
+      if (channel) supabase.removeChannel(channel)
+    }
+  }, [])
 
   useEffect(() => {
     const loadAllData = async () => {
@@ -734,6 +808,7 @@ export default function SettingsPage() {
             const role = (json.role as "super_admin" | "admin" | undefined) ?? "super_admin"
             setCurrentUserRole(role)
             setAdminPageAccess(json.permissions ?? {})
+            if (json.adminRolePermissions) setAdminRolePermissions(json.adminRolePermissions)
             return role
           }
         } catch {
@@ -1184,6 +1259,25 @@ export default function SettingsPage() {
     }
   }
 
+  const handlePagePermissionToggle = async (pageKey: string, allowed: boolean) => {
+    setSavingPagePermission(pageKey)
+    try {
+      const res = await fetch("/api/admin/page-permissions", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pageKey, allowed }),
+      })
+      if (res.ok) {
+        setAdminRolePermissions((prev) => ({ ...prev, [pageKey]: allowed }))
+        toast.success(allowed ? "Access enabled for admins" : "Access disabled for admins")
+      } else toast.error("Failed to update")
+    } catch {
+      toast.error("Failed to update")
+    } finally {
+      setSavingPagePermission(null)
+    }
+  }
+
   // Check if current user has permission to delete
   const canDeleteAdmin = (admin: Admin) => {
     // Cannot delete yourself
@@ -1323,6 +1417,11 @@ export default function SettingsPage() {
                       body: JSON.stringify({
                         max_risk_before_submit: maxRiskBeforeSubmit,
                         max_time_extension_minutes: maxTimeExtensionMinutes,
+                        enable_results_archive: enableResultsArchive,
+                        enable_student_results_portal: enableStudentResultsPortal,
+                        enable_student_teacher_chat: enableStudentTeacherChat,
+                        enable_realtime_features: enableRealtimeFeatures,
+                        student_current_results_mode: studentCurrentResultsMode,
                       }),
                     })
                     if (res.ok) toast.success("Settings saved")
@@ -1337,6 +1436,71 @@ export default function SettingsPage() {
               >
                 Save settings
               </Button>
+            </CardContent>
+          </Card>
+
+          {/* Results + Student Features Card */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <GraduationCap className="h-5 w-5 text-indigo-600" />
+                Results & Student Features
+              </CardTitle>
+              <CardDescription>
+                Enable archived results/transcripts and the student results portal. Control which current results students can see.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="flex items-center justify-between rounded-lg border p-4">
+                  <div>
+                    <p className="font-medium">Results archive</p>
+                    <p className="text-xs text-muted-foreground">Store year/semester snapshots & generate transcripts</p>
+                  </div>
+                  <Switch checked={enableResultsArchive} onCheckedChange={setEnableResultsArchive} />
+                </div>
+                <div className="flex items-center justify-between rounded-lg border p-4">
+                  <div>
+                    <p className="font-medium">Student results portal</p>
+                    <p className="text-xs text-muted-foreground">Students can view end-of-term/year results</p>
+                  </div>
+                  <Switch checked={enableStudentResultsPortal} onCheckedChange={setEnableStudentResultsPortal} />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="flex items-center justify-between rounded-lg border p-4">
+                  <div>
+                    <p className="font-medium">Current academic year</p>
+                    <p className="text-xs text-muted-foreground">Read-only (locked)</p>
+                  </div>
+                  <Input className="w-32" value={currentAcademicYear || "—"} disabled />
+                </div>
+                <div className="flex items-center justify-between rounded-lg border p-4">
+                  <div>
+                    <p className="font-medium">Real-time mode</p>
+                    <p className="text-xs text-muted-foreground">Archive, portal, and chat update live</p>
+                  </div>
+                  <Switch checked={enableRealtimeFeatures} onCheckedChange={setEnableRealtimeFeatures} />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between rounded-lg border p-4">
+                <div>
+                  <p className="font-medium">Show full year results to students</p>
+                  <p className="text-xs text-muted-foreground">
+                    Off: First semester only • On: Full year (includes first semester)
+                  </p>
+                </div>
+                <Switch
+                  checked={studentCurrentResultsMode === "full_year"}
+                  onCheckedChange={(v) => setStudentCurrentResultsMode(v ? "full_year" : "semester_1")}
+                />
+              </div>
+
+              <p className="text-xs text-muted-foreground">
+                After changing these settings, click <span className="font-medium">Save settings</span> in the Risk &amp; Time Control card above.
+              </p>
             </CardContent>
           </Card>
 
@@ -1842,6 +2006,41 @@ export default function SettingsPage() {
                   </div>
                 </div>
               )}
+            </CardContent>
+          </Card>
+
+          {/* Admin role page access: super admin can allow or hide each page for admin role */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Shield className="h-5 w-5 text-indigo-600" />
+                Admin role page access
+              </CardTitle>
+              <CardDescription>
+                Control which pages admins can see in the sidebar. When disabled, the page is hidden for admin users. Promote students is off by default until you enable it here.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {Object.entries(ADMIN_PAGE_KEY_LABELS).map(([pageKey, label]) => (
+                  <div
+                    key={pageKey}
+                    className="flex items-center justify-between rounded-lg border p-3"
+                  >
+                    <Label htmlFor={`perm-${pageKey}`} className="flex-1 cursor-pointer">
+                      {label}
+                    </Label>
+                    <Switch
+                      id={`perm-${pageKey}`}
+                      checked={adminRolePermissions[pageKey] === true}
+                      onCheckedChange={(checked) =>
+                        handlePagePermissionToggle(pageKey, Boolean(checked))
+                      }
+                      disabled={savingPagePermission === pageKey}
+                    />
+                  </div>
+                ))}
+              </div>
             </CardContent>
           </Card>
         </TabsContent>

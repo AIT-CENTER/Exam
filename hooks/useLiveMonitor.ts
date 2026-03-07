@@ -37,6 +37,7 @@ export interface RiskLogEntry {
 export function useLiveMonitor(teacherId?: string | null) {
   const [students, setStudents] = useState<LiveStudent[]>([])
   const [riskLogs, setRiskLogs] = useState<RiskLogEntry[]>([])
+  const [maxTimeExtensionMinutes, setMaxTimeExtensionMinutes] = useState(30)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const { toast } = useToast()
@@ -52,10 +53,11 @@ export function useLiveMonitor(teacherId?: string | null) {
       if (teacherId) params.set("teacherId", teacherId)
       const res = await fetch(`/api/teacher/fetch-live-monitor?${params}`)
       if (!res.ok) throw new Error("Fetch failed")
-      const { sessions, riskLogs: logs } = await res.json()
+      const { sessions, riskLogs: logs, maxTimeExtensionMinutes: maxMin } = await res.json()
 
       setStudents(sessions ?? [])
       setRiskLogs(logs ?? [])
+      setMaxTimeExtensionMinutes(maxMin != null ? Math.max(1, Number(maxMin)) : 30)
       setError(null)
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Unknown error"
@@ -77,20 +79,15 @@ export function useLiveMonitor(teacherId?: string | null) {
 
   const addTimeToStudent = useCallback(
     async (sessionId: string, minutes: number) => {
-      try {
-        const res = await fetch("/api/teacher/add-time", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sessionId, minutes }),
-        })
-        const data = await res.json()
-        if (!res.ok) throw new Error(data.error || "Add time failed")
-        await fetchLiveData()
-        return true
-      } catch (err) {
-        console.error("[useLiveMonitor] Error adding time:", err)
-        throw err
-      }
+      const res = await fetch("/api/teacher/add-time", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId, minutes }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || "Add time failed")
+      await fetchLiveData()
+      return { addedMinutes: data.addedMinutes, totalExtraMinutes: data.totalExtraMinutes }
     },
     [fetchLiveData]
   )
@@ -234,6 +231,7 @@ export function useLiveMonitor(teacherId?: string | null) {
   return {
     students,
     riskLogs,
+    maxTimeExtensionMinutes,
     loading,
     error,
     addTimeToStudent,

@@ -133,6 +133,7 @@ export default function LiveMonitorPage() {
   const {
     students,
     riskLogs,
+    maxTimeExtensionMinutes,
     loading,
     error,
     fetchLiveData,
@@ -158,10 +159,14 @@ export default function LiveMonitorPage() {
 
   const handleAddTime = async (sessionId: string, minutes: number) => {
     try {
-      await addTimeToStudent(sessionId, minutes);
-      toast.success(`Added ${minutes} min`);
-    } catch {
-      toast.error("Failed to add time");
+      const result = await addTimeToStudent(sessionId, minutes);
+      const added = result?.addedMinutes ?? minutes;
+      const msg = added < minutes
+        ? `Added ${added} min (max extension limit reached)`
+        : `Added ${added} min`;
+      toast.success(msg);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to add time");
     }
   };
 
@@ -188,9 +193,9 @@ export default function LiveMonitorPage() {
   const handleAddTimeToAll = async (minutes: number) => {
     try {
       await addTimeToAll(minutes);
-      toast.success(`Added ${minutes} min to all`);
-    } catch {
-      toast.error("Failed to add time to all");
+      toast.success(`Added time to all (respects per-student limit)`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to add time to all");
     }
   };
 
@@ -216,6 +221,10 @@ export default function LiveMonitorPage() {
     return [...filtered].sort((a, b) => (a.isFlagged ? 0 : 1) - (b.isFlagged ? 0 : 1));
   }, [students, searchQuery]);
 
+  const maxExtraSeconds = maxTimeExtensionMinutes * 60;
+  const getRemainingAllowance = (extraTimeSeconds: number) =>
+    Math.max(0, maxExtraSeconds - extraTimeSeconds);
+
   const [addTimeConfirmOpen, setAddTimeConfirmOpen] = useState(false);
   const [addTimeAllOpen, setAddTimeAllOpen] = useState(false);
   const [addTimeAllMinutes, setAddTimeAllMinutes] = useState("5");
@@ -229,11 +238,21 @@ export default function LiveMonitorPage() {
     setAddTimeMinutes("5");
   };
 
-  const handleAddSpecificTime = async () => {
+  const addTimeTargetRow = addTimeSessionId
+    ? filteredAndSortedStudents.find((s) => s.sessionId === addTimeSessionId)
+    : null;
+  const addTimeRemainingSeconds = addTimeTargetRow ? getRemainingAllowance(addTimeTargetRow.extraTimeSeconds ?? 0) : 0;
+  const addTimeRemainingMinutes = Math.floor(addTimeRemainingSeconds / 60);
+
+  const handleAddSpecificTime = () => {
     if (!addTimeSessionId) return;
     const mins = parseInt(addTimeMinutes, 10);
     if (isNaN(mins) || mins < 1) {
       toast.error("Enter valid minutes");
+      return;
+    }
+    if (mins > addTimeRemainingMinutes && addTimeRemainingMinutes > 0) {
+      toast.error(`Max ${addTimeRemainingMinutes} min remaining (admin limit)`);
       return;
     }
     setAddTimeConfirmOpen(true);
@@ -244,12 +263,16 @@ export default function LiveMonitorPage() {
     const mins = parseInt(addTimeMinutes, 10);
     if (isNaN(mins) || mins < 1) return;
     try {
-      await addTimeToStudent(addTimeSessionId, mins);
-      toast.success(`Added ${mins} min`);
+      const result = await addTimeToStudent(addTimeSessionId, mins);
+      const added = result?.addedMinutes ?? mins;
+      const msg = added < mins
+        ? `Added ${added} min (max extension limit reached)`
+        : `Added ${added} min`;
+      toast.success(msg);
       setAddTimeSessionId(null);
       setAddTimeMinutes("5");
-    } catch {
-      toast.error("Failed to add time");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to add time");
     } finally {
       setAddTimeConfirmOpen(false);
     }
@@ -263,11 +286,11 @@ export default function LiveMonitorPage() {
     }
     try {
       await addTimeToAll(mins);
-      toast.success(`Added ${mins} min to all`);
+      toast.success(`Added time to all (respects per-student limit)`);
       setAddTimeAllOpen(false);
       setAddTimeAllMinutes("5");
-    } catch {
-      toast.error("Failed to add time to all");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to add time to all");
     }
   };
 
@@ -342,11 +365,21 @@ export default function LiveMonitorPage() {
                   <Timer className="h-4 w-4 mr-1" />
                   Add time for all
                 </Button>
-                <Button variant="outline" size="sm" onClick={() => handleAddTimeToAll(5)}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleAddTimeToAll(5)}
+                  title="Adds up to 5 min per student (respects admin limit)"
+                >
                   <Plus className="h-4 w-4 mr-1" />
                   +5 min all
                 </Button>
-                <Button variant="outline" size="sm" onClick={() => handleAddTimeToAll(10)}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleAddTimeToAll(10)}
+                  title="Adds up to 10 min per student (respects admin limit)"
+                >
                   +10 min all
                 </Button>
               </>
@@ -418,14 +451,23 @@ export default function LiveMonitorPage() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => handleAddTime(row.sessionId, 5)}>
+                            <DropdownMenuItem
+                              onClick={() => handleAddTime(row.sessionId, 5)}
+                              disabled={getRemainingAllowance(row.extraTimeSeconds ?? 0) < 300}
+                            >
                               <Plus className="h-4 w-4 mr-2" />
-                              Add 5 min
+                              Add 5 min {getRemainingAllowance(row.extraTimeSeconds ?? 0) < 300 && "(limit reached)"}
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleAddTime(row.sessionId, 10)}>
-                              Add 10 min
+                            <DropdownMenuItem
+                              onClick={() => handleAddTime(row.sessionId, 10)}
+                              disabled={getRemainingAllowance(row.extraTimeSeconds ?? 0) < 600}
+                            >
+                              Add 10 min {getRemainingAllowance(row.extraTimeSeconds ?? 0) < 600 && "(limit reached)"}
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleOpenAddSpecificTime(row.sessionId)}>
+                            <DropdownMenuItem
+                              onClick={() => handleOpenAddSpecificTime(row.sessionId)}
+                              disabled={getRemainingAllowance(row.extraTimeSeconds ?? 0) <= 0}
+                            >
                               <Timer className="h-4 w-4 mr-2" />
                               Add specific time
                             </DropdownMenuItem>
@@ -462,20 +504,32 @@ export default function LiveMonitorPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Add specific time</DialogTitle>
-            <DialogDescription>Enter minutes to add. Respects admin max extension limit.</DialogDescription>
+            <DialogDescription>
+              Enter minutes to add. Admin limit: {maxTimeExtensionMinutes} min total per student.{" "}
+              {addTimeRemainingMinutes > 0
+                ? `You can add up to ${addTimeRemainingMinutes} more min.`
+                : "No more time can be added (limit reached)."}
+            </DialogDescription>
           </DialogHeader>
-          <div className="py-4">
+          <div className="py-4 space-y-2">
             <Input
               type="number"
               min={1}
+              max={addTimeRemainingMinutes > 0 ? addTimeRemainingMinutes : undefined}
               value={addTimeMinutes}
               onChange={(e) => setAddTimeMinutes(e.target.value)}
-              placeholder="Minutes"
+              placeholder={`Max ${addTimeRemainingMinutes} min`}
+              disabled={addTimeRemainingMinutes <= 0}
             />
+            {addTimeRemainingMinutes <= 0 && (
+              <p className="text-sm text-muted-foreground">Max extension limit reached for this student.</p>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setAddTimeSessionId(null)}>Cancel</Button>
-            <Button onClick={handleAddSpecificTime}>Add time</Button>
+            <Button onClick={handleAddSpecificTime} disabled={addTimeRemainingMinutes <= 0}>
+              Add time
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -485,7 +539,7 @@ export default function LiveMonitorPage() {
           <DialogHeader>
             <DialogTitle>Add time for all students</DialogTitle>
             <DialogDescription>
-              Enter minutes to add to all active/disconnected sessions. Respects the admin max extension limit.
+              Enter minutes to add to all active/disconnected sessions. Each student is capped at {maxTimeExtensionMinutes} min total (admin limit). Students who already reached the limit will not receive more.
             </DialogDescription>
           </DialogHeader>
           <div className="py-4">
@@ -509,7 +563,7 @@ export default function LiveMonitorPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Confirm add time</AlertDialogTitle>
             <AlertDialogDescription>
-              Add {addTimeMinutes} minute(s) to this student&apos;s exam? This will extend their end time. The total extension cannot exceed the admin-configured maximum.
+              Add {addTimeMinutes} minute(s) to this student&apos;s exam? This will extend their end time. The API will cap at the admin limit ({maxTimeExtensionMinutes} min max) if needed.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

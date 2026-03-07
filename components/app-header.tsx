@@ -7,7 +7,6 @@ import {
   Moon,
   Sun,
   Laptop,
-  Bell,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -33,7 +32,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { SidebarTrigger } from "@/components/ui/sidebar";
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 
@@ -44,10 +43,10 @@ interface ModernHeaderProps {
 
 export function Header({ title }: ModernHeaderProps) {
   const router = useRouter();
-  const [user, setUser] = useState<{ 
-    name: string; 
-    email: string; 
-    role: string; 
+  const [user, setUser] = useState<{
+    name: string;
+    email: string;
+    role: string;
     avatar?: string;
     gradeName?: string;
     subjectName?: string;
@@ -120,7 +119,6 @@ export function Header({ title }: ModernHeaderProps) {
 
         {/* Right Section - User Menu */}
         <div className="ml-auto flex items-center gap-2">
-          
           <Button
             variant="ghost"
             size="icon"
@@ -130,7 +128,7 @@ export function Header({ title }: ModernHeaderProps) {
             <Sun className="absolute h-4 w-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
             <Moon className="absolute h-4 w-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
           </Button>
-            
+
           {/* User Menu Dropdown */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>

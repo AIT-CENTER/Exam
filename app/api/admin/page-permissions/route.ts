@@ -8,6 +8,8 @@ type AdminRole = "super_admin" | "admin";
 type PermissionsResponse = {
   role: AdminRole;
   permissions: Record<string, boolean>;
+  /** For super_admin: stored permissions for admin role (so they can edit in Settings) */
+  adminRolePermissions?: Record<string, boolean>;
 };
 
 const PAGE_KEYS: string[] = [
@@ -18,6 +20,8 @@ const PAGE_KEYS: string[] = [
   "teachers_create",
   "students_page",
   "students_create",
+  "students_promotions",
+  "results_archive",
   "grades_page",
   "grades_create",
   "subjects_page",
@@ -67,7 +71,7 @@ export async function GET() {
 
     const role: AdminRole = (adminRow.role as AdminRole) ?? "super_admin";
 
-    // Super admins always have full access; we don't persist their switches.
+    // Super admins always have full access; also return stored admin role permissions for Settings UI.
     if (role === "super_admin") {
       const full: PermissionsResponse = {
         role,
@@ -76,6 +80,15 @@ export async function GET() {
           return acc;
         }, {} as Record<string, boolean>),
       };
+      const { data: adminPerms } = await supabase
+        .from("admin_page_permissions")
+        .select("page_key, allowed")
+        .eq("role", "admin");
+      const adminMap: Record<string, boolean> = {};
+      for (const row of adminPerms ?? []) {
+        if (row?.page_key) adminMap[row.page_key as string] = Boolean(row.allowed);
+      }
+      full.adminRolePermissions = adminMap;
       return NextResponse.json(full);
     }
 
@@ -99,6 +112,10 @@ export async function GET() {
     for (const row of perms ?? []) {
       if (!row || !row.page_key) continue;
       map[row.page_key as string] = Boolean(row.allowed);
+    }
+    // Promotions: admin may upgrade students only if super admin has permitted it (default false)
+    if (map["students_promotions"] === undefined) {
+      map["students_promotions"] = false;
     }
 
     return NextResponse.json({

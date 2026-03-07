@@ -13,7 +13,8 @@ import {
   Award,
   ClipboardList,
   BarChart3,
-  Lock,
+  ArrowUpRight,
+  FileText,
 } from "lucide-react"
 
 import {
@@ -130,6 +131,20 @@ export function AdminSidebar({ ...props }: React.ComponentProps<typeof Sidebar>)
         pageKey: "students_page",
       },
       {
+        title: "Promote Students",
+        url: "/dashboard/promotions",
+        icon: ArrowUpRight,
+        isActive: pathname.startsWith("/dashboard/promotions"),
+        pageKey: "students_promotions",
+      },
+      {
+        title: "Results Archive",
+        url: "/dashboard/results-archive",
+        icon: FileText,
+        isActive: pathname.startsWith("/dashboard/results-archive"),
+        pageKey: "results_archive",
+      },
+      {
         title: "Teachers",
         url: "/dashboard/teachers",
         icon: GraduationCap,
@@ -175,6 +190,9 @@ export function AdminSidebar({ ...props }: React.ComponentProps<typeof Sidebar>)
     ] as QuickAccessItem[],
   }
 
+  // Only show nav items the admin is allowed to use (hidden when not permitted, not locked)
+  const visibleNavMain = data.navMain.filter((item) => canAccess(item.pageKey))
+
   const renderSidebarItem = (item: {
     title: string
     url: string
@@ -182,43 +200,18 @@ export function AdminSidebar({ ...props }: React.ComponentProps<typeof Sidebar>)
     isActive: boolean
     pageKey?: string
   }) => (
-    (() => {
-      const locked = !canAccess(item.pageKey)
-      const content = (
-        <div className="flex items-center gap-3 w-full">
-          <item.icon className="h-4 w-4 shrink-0" />
-          <span className="truncate flex-1">{item.title}</span>
-          {locked && <Lock className="h-3.5 w-3.5 text-amber-500 shrink-0" />}
-        </div>
-      )
-
-      if (locked) {
-        return (
-          <SidebarMenuButton
-            key={item.title}
-            isActive={false}
-            tooltip={`${item.title} (locked)`}
-            className="h-9 text-sm font-medium opacity-60 cursor-not-allowed select-none"
-          >
-            {content}
-          </SidebarMenuButton>
-        )
-      }
-
-      return (
-        <SidebarMenuButton
-          key={item.title}
-          asChild
-          isActive={item.isActive}
-          tooltip={item.title}
-          className="h-9 text-sm font-medium transition-colors duration-200"
-        >
-          <Link href={item.url} className="flex items-center gap-3">
-            {content}
-          </Link>
-        </SidebarMenuButton>
-      )
-    })()
+    <SidebarMenuButton
+      key={item.title}
+      asChild
+      isActive={item.isActive}
+      tooltip={item.title}
+      className="h-9 text-sm font-medium transition-colors duration-200"
+    >
+      <Link href={item.url} className="flex items-center gap-3">
+        <item.icon className="h-4 w-4 shrink-0" />
+        <span className="truncate flex-1">{item.title}</span>
+      </Link>
+    </SidebarMenuButton>
   )
 
   // Loading State with Adaptive Skeletons (bg-zinc-200 for light, bg-zinc-800 for dark)
@@ -274,7 +267,7 @@ export function AdminSidebar({ ...props }: React.ComponentProps<typeof Sidebar>)
             Overview
           </SidebarGroupLabel>
           <SidebarMenu>
-            {data.navMain.map((item) => (
+            {visibleNavMain.map((item) => (
               <SidebarMenuItem key={item.title}>{renderSidebarItem(item)}</SidebarMenuItem>
             ))}
           </SidebarMenu>
