@@ -4,65 +4,32 @@ import React, { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { ArrowRight, AlertCircle, Loader2, Users, GraduationCap } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+} from "@/components/ui/pagination";
+import { AlertCircle, Loader2, Search, ChevronLeft, ChevronRight, ArrowUp } from "lucide-react";
 import { StudentSelectionPanel } from "@/components/promotions/StudentSelectionPanel";
-import { PromotionConfigPanel } from "@/components/promotions/PromotionConfigPanel";
-import { ConfirmationDialog } from "@/components/promotions/ConfirmationDialog";
+import { PromotionDialogModal } from "@/components/promotions/PromotionDialogModal";
 import { usePromotionState, GradeInfo } from "@/hooks/usePromotionState";
 import { useStudentFetching } from "@/hooks/useStudentFetching";
 
-// Loading spinner component
-function PageSpinner() {
-  return (
-    <div className="flex items-center justify-center min-h-[70vh] w-full bg-transparent">
-      <style>{`
-        .spinner-svg {
-          animation: spinner-rotate 2s linear infinite;
-        }
-        .spinner-circle {
-          stroke-dasharray: 1, 200;
-          stroke-dashoffset: 0;
-          animation: spinner-stretch 1.5s ease-in-out infinite;
-          stroke-linecap: round;
-        }
-        @keyframes spinner-rotate {
-          100% {
-            transform: rotate(360deg);
-          }
-        }
-        @keyframes spinner-stretch {
-          0% {
-            stroke-dasharray: 1, 200;
-            stroke-dashoffset: 0;
-          }
-          50% {
-            stroke-dasharray: 90, 200;
-            stroke-dashoffset: -35px;
-          }
-          100% {
-            stroke-dasharray: 90, 200;
-            stroke-dashoffset: -124px;
-          }
-        }
-      `}</style>
-      
-      <svg
-        className="h-10 w-10 text-zinc-800 dark:text-zinc-200 spinner-svg"
-        viewBox="25 25 50 50"
-      >
-        <circle
-          className="spinner-circle"
-          cx="50"
-          cy="50"
-          r="20"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="4"
-        />
-      </svg>
-    </div>
-  );
+interface SuperAdminSettings {
+  promotionEnabled: boolean;
 }
 
 export default function PromotionsPage() {
@@ -70,11 +37,49 @@ export default function PromotionsPage() {
   const promotion = usePromotionState();
   const students = useStudentFetching();
 
+  // State for feature flags and settings
+  const [superAdminSettings, setSuperAdminSettings] = useState<SuperAdminSettings | null>(null);
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+  const [settingsLoading, setSettingsLoading] = useState(true);
+  const [settingsError, setSettingsError] = useState<string | null>(null);
+
+  // Grades state
   const [grades, setGrades] = useState<GradeInfo[]>([]);
   const [gradesLoading, setGradesLoading] = useState(true);
-  const [gradeError, setGradeError] = useState<string | null>(null);
-  const [showConfirmation, setShowConfirmation] = useState(false);
-  const [isExecuting, setIsExecuting] = useState(false);
+
+  // Filter state
+  const [gradeFilter, setGradeFilter] = useState<string>("");
+  const [sectionFilter, setSectionFilter] = useState<string>("");
+  const [searchQuery, setSearchQuery] = useState<string>("");
+
+  // Dialog state
+  const [showPromotionDialog, setShowPromotionDialog] = useState(false);
+
+  // Check if user is super admin and fetch settings
+  useEffect(() => {
+    const checkSuperAdminStatus = async () => {
+      try {
+        const response = await fetch("/api/admin/super-admin-settings", {
+          cache: "no-store",
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          setIsSuperAdmin(true);
+          setSuperAdminSettings(data);
+        } else {
+          setIsSuperAdmin(false);
+        }
+      } catch (err) {
+        console.error("Failed to check super admin status:", err);
+        setIsSuperAdmin(false);
+      } finally {
+        setSettingsLoading(false);
+      }
+    };
+
+    checkSuperAdminStatus();
+  }, []);
 
   // Fetch grades on mount
   useEffect(() => {
@@ -92,9 +97,8 @@ export default function PromotionsPage() {
         const data = await response.json();
         setGrades(data.data || []);
       } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : "Unknown error";
-        setGradeError(errorMessage);
-        toast.error("Failed to load grades: " + errorMessage);
+        console.error("Failed to load grades:", err);
+        toast.error("Failed to load grades");
       } finally {
         setGradesLoading(false);
       }
@@ -103,242 +107,300 @@ export default function PromotionsPage() {
     fetchGrades();
   }, []);
 
+  // Fetch students with filters
+  useEffect(() => {
+    const params: Record<string, string | number> = {
+      page: students.state.page,
+      limit: 20,
+    };
+
+    if (searchQuery) params.search = searchQuery;
+    if (gradeFilter) params.grade = gradeFilter;
+
+    students.fetchStudents(params);
+  }, [students.state.page, searchQuery, gradeFilter]);
+
+  // Get available sections from current students
+  const availableSections = useMemo(() => {
+    const sections = new Set<string>();
+    students.students.forEach((s) => {
+      if (s.section) sections.add(s.section);
+    });
+    return Array.from(sections).sort();
+  }, [students.students]);
+
+  // Filter students by section
+  const filteredStudents = useMemo(() => {
+    if (!sectionFilter) return students.students;
+    return students.students.filter((s) => s.section === sectionFilter);
+  }, [students.students, sectionFilter]);
+
+  // Calculate pagination for filtered results
+  const itemsPerPage = 20;
+  const totalFilteredItems = filteredStudents.length;
+  const totalFilteredPages = Math.ceil(totalFilteredItems / itemsPerPage);
+
+  const paginatedStudents = useMemo(() => {
+    const startIdx = (students.state.page - 1) * itemsPerPage;
+    const endIdx = startIdx + itemsPerPage;
+    return filteredStudents.slice(startIdx, endIdx);
+  }, [filteredStudents, students.state.page]);
+
   const selectedStudents = useMemo(
     () => students.students.filter((s) => promotion.state.selectedStudentIds.has(s.id)),
     [students.students, promotion.state.selectedStudentIds]
   );
 
-  const targetGrade = useMemo(
-    () => grades.find((g) => g.id === promotion.state.targetGradeId),
-    [grades, promotion.state.targetGradeId]
-  );
-
-  const canProceedToConfirmation = useMemo(() => {
-    return (
-      selectedStudents.length > 0 &&
-      promotion.state.targetGradeId !== null &&
-      promotion.isAllStreamsAssigned(targetGrade?.hasStream ?? false)
-    );
-  }, [selectedStudents, promotion.state.targetGradeId, targetGrade, promotion]);
-
-  const handleConfirmPromotions = async () => {
-    if (!canProceedToConfirmation) {
-      toast.error("Please complete all required fields");
-      return;
-    }
-
-    setIsExecuting(true);
-    try {
-      const promotions = selectedStudents.map((student) => ({
-        studentId: student.id,
-        targetGradeId: promotion.state.targetGradeId!,
-        targetStream: promotion.getStreamForStudent(student.id),
-      }));
-
-      const response = await fetch("/api/admin/promotions/execute", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ promotions }),
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || "Failed to execute promotions");
-      }
-
-      const data = await response.json();
-
-      setShowConfirmation(false);
-      toast.success(`Successfully promoted ${data.updatedStudents.length} student(s)`);
-
-      // Reset form and refetch students
-      promotion.reset();
-      students.refetch();
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "Unknown error";
-      toast.error("Promotion failed: " + errorMessage);
-      console.error("[promotions] error:", err);
-    } finally {
-      setIsExecuting(false);
-    }
+  const handleToggleStudent = (studentId: number) => {
+    promotion.toggleStudentSelection(studentId);
   };
 
-  if (students.loading && gradesLoading) {
-    return <PageSpinner />;
-  }
+  const handleSelectAll = () => {
+    promotion.selectAllStudents(paginatedStudents.map((s) => s.id));
+  };
 
-  if (students.error) {
+  const handleDeselectAll = () => {
+    promotion.deselectAllStudents();
+  };
+
+  const handleResetFilters = () => {
+    setGradeFilter("");
+    setSectionFilter("");
+    setSearchQuery("");
+    students.setState({
+      ...students.state,
+      page: 1,
+    });
+  };
+
+  const handlePromoteClick = () => {
+    if (selectedStudents.length === 0) {
+      toast.error("Please select at least one student");
+      return;
+    }
+    setShowPromotionDialog(true);
+  };
+
+  // Check if promotion is enabled
+  const isPromotionEnabled = isSuperAdmin && superAdminSettings?.promotionEnabled;
+
+  if (settingsLoading || gradesLoading) {
     return (
-      <div className="p-8">
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-2 text-red-600 dark:text-red-400">
-              <AlertCircle className="h-5 w-5" />
-              <span>{students.error}</span>
-            </div>
-          </CardContent>
-        </Card>
+      <div className="flex items-center justify-center min-h-[60vh] w-full">
+        <div className="flex flex-col items-center gap-2">
+          <Loader2 className="h-8 w-8 animate-spin text-zinc-600" />
+          <p className="text-sm text-zinc-600">Loading...</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-6 p-4 md:p-6">
       {/* Header */}
-      <div className="space-y-2">
-        <div className="flex items-center gap-3">
-          <GraduationCap className="h-8 w-8 text-blue-600 dark:text-blue-400" />
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center gap-2">
+          <ArrowUp className="h-6 w-6 text-blue-600" />
           <h1 className="text-3xl font-bold">Student Promotions</h1>
         </div>
         <p className="text-zinc-600 dark:text-zinc-400">
-          Manage bulk student grade level promotions with optional stream assignments
+          Manage student grade advancements and stream assignments
         </p>
       </div>
 
-      {/* Main Content Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[calc(100vh-200px)]">
-        {/* Left: Student Selection */}
-        <StudentSelectionPanel
-          students={students.students}
-          loading={students.loading}
-          selectedStudentIds={promotion.state.selectedStudentIds}
-          page={students.page}
-          totalPages={students.totalPages}
-          onToggleStudent={promotion.toggleStudentSelection}
-          onSelectAll={promotion.selectAllStudents}
-          onDeselectAll={promotion.deselectAllStudents}
-          onSearch={students.setSearch}
-          onPageChange={students.setPage}
-        />
-
-        {/* Middle: Configuration */}
-        <PromotionConfigPanel
-          students={students.students}
-          grades={grades}
-          targetGradeId={promotion.state.targetGradeId}
-          bulkStream={promotion.state.bulkStream}
-          getStreamForStudent={promotion.getStreamForStudent}
-          selectedStudentIds={promotion.state.selectedStudentIds}
-          onTargetGradeChange={promotion.setTargetGrade}
-          onBulkStreamChange={promotion.setBulkStream}
-          onStreamChange={promotion.setStreamForStudent}
-        />
-
-        {/* Right: Summary & Action */}
-        <Card className="flex flex-col justify-between">
-          <div>
-            <CardHeader>
-              <CardTitle>Summary</CardTitle>
-              <CardDescription>Review and proceed with promotions</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {/* Selected Count */}
-              <div className="space-y-2">
-                <p className="text-sm font-semibold text-zinc-600 dark:text-zinc-400">
-                  Selected Students
-                </p>
-                <div className="flex items-center gap-2">
-                  <Users className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                  <span className="text-3xl font-bold">{selectedStudents.length}</span>
-                </div>
-              </div>
-
-              {/* Target Grade */}
-              <div className="space-y-2">
-                <p className="text-sm font-semibold text-zinc-600 dark:text-zinc-400">
-                  Target Grade
-                </p>
-                {targetGrade ? (
-                  <div className="flex items-center gap-2">
-                    <GraduationCap className="h-5 w-5 text-green-600 dark:text-green-400" />
-                    <span className="text-lg font-semibold">{targetGrade.name}</span>
-                  </div>
-                ) : (
-                  <p className="text-zinc-500 dark:text-zinc-400">Not selected</p>
-                )}
-              </div>
-
-              {/* Stream Info */}
-              {targetGrade?.hasStream && (
-                <div className="space-y-2">
-                  <p className="text-sm font-semibold text-zinc-600 dark:text-zinc-400">
-                    Stream Assignment
-                  </p>
-                  {promotion.state.bulkStream ? (
-                    <div className="flex items-center gap-2">
-                      <span className="inline-block px-3 py-1 bg-blue-100 dark:bg-blue-900 text-blue-900 dark:text-blue-100 rounded-full text-sm font-medium">
-                        {promotion.state.bulkStream}
-                      </span>
-                      <span className="text-xs text-zinc-500">
-                        ({promotion.isAllStreamsAssigned(true) ? "Complete" : "Incomplete"})
-                      </span>
-                    </div>
-                  ) : (
-                    <p className="text-zinc-500 dark:text-zinc-400">Individual assignment</p>
-                  )}
-                </div>
-              )}
-
-              {/* Validation Messages */}
-              {selectedStudents.length === 0 && (
-                <div className="flex items-start gap-2 text-sm text-amber-600 dark:text-amber-400">
-                  <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
-                  <span>Select at least one student</span>
-                </div>
-              )}
-
-              {selectedStudents.length > 0 && !targetGrade && (
-                <div className="flex items-start gap-2 text-sm text-amber-600 dark:text-amber-400">
-                  <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
-                  <span>Select a target grade</span>
-                </div>
-              )}
-
-              {selectedStudents.length > 0 &&
-                targetGrade?.hasStream &&
-                !promotion.isAllStreamsAssigned(true) && (
-                  <div className="flex items-start gap-2 text-sm text-amber-600 dark:text-amber-400">
-                    <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
-                    <span>Assign streams to all students</span>
-                  </div>
-                )}
-            </CardContent>
-          </div>
-
-          {/* Action Button */}
-          <CardContent className="pt-0 border-t mt-6">
-            <Button
-              onClick={() => setShowConfirmation(true)}
-              disabled={!canProceedToConfirmation || gradesLoading}
-              className="w-full gap-2"
-              size="lg"
-            >
-              {gradesLoading ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Loading...
-                </>
-              ) : (
-                <>
-                  Review & Confirm
-                  <ArrowRight className="h-4 w-4" />
-                </>
-              )}
-            </Button>
+      {/* Permission Alert */}
+      {!isSuperAdmin && (
+        <Card className="border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950">
+          <CardContent className="flex items-start gap-3 pt-6">
+            <AlertCircle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
+            <div>
+              <h3 className="font-semibold text-amber-900 dark:text-amber-100">Limited Access</h3>
+              <p className="text-sm text-amber-800 dark:text-amber-200">
+                Student promotion features are only accessible to Super Administrators.
+              </p>
+            </div>
           </CardContent>
         </Card>
-      </div>
+      )}
 
-      {/* Confirmation Dialog */}
-      <ConfirmationDialog
-        isOpen={showConfirmation}
-        isLoading={isExecuting}
-        selectedStudents={selectedStudents}
-        targetGradeName={targetGrade?.name ?? null}
-        getStreamForStudent={promotion.getStreamForStudent}
-        onConfirm={handleConfirmPromotions}
-        onCancel={() => setShowConfirmation(false)}
-      />
+      {/* Feature Disabled Alert */}
+      {isSuperAdmin && !isPromotionEnabled && (
+        <Card className="border-blue-200 bg-blue-50 dark:border-blue-900 dark:bg-blue-950">
+          <CardContent className="flex items-start gap-3 pt-6">
+            <AlertCircle className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
+            <div>
+              <h3 className="font-semibold text-blue-900 dark:text-blue-100">Feature Disabled</h3>
+              <p className="text-sm text-blue-800 dark:text-blue-200">
+                The promotion feature is currently disabled. Enable it in system settings to proceed.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Main Content - Only show if Super Admin and promotion is enabled */}
+      {isSuperAdmin && isPromotionEnabled && (
+        <div className="space-y-6">
+          {/* Filters Section */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Filters</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+                {/* Search */}
+                <div className="space-y-2">
+                  <Label htmlFor="search">Search</Label>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-zinc-500" />
+                    <Input
+                      id="search"
+                      placeholder="Name or ID..."
+                      className="pl-10"
+                      value={searchQuery}
+                      onChange={(e) => {
+                        setSearchQuery(e.target.value);
+                        students.setState({ ...students.state, page: 1 });
+                      }}
+                      disabled={students.state.loading}
+                    />
+                  </div>
+                </div>
+
+                {/* Grade Filter */}
+                <div className="space-y-2">
+                  <Label htmlFor="grade">Grade</Label>
+                  <Select value={gradeFilter} onValueChange={(value) => {
+                    setGradeFilter(value);
+                    students.setState({ ...students.state, page: 1 });
+                  }}>
+                    <SelectTrigger id="grade" disabled={students.state.loading}>
+                      <SelectValue placeholder="All grades" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">All grades</SelectItem>
+                      {grades.map((grade) => (
+                        <SelectItem key={grade.id} value={String(grade.id)}>
+                          {grade.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Section Filter */}
+                <div className="space-y-2">
+                  <Label htmlFor="section">Section</Label>
+                  <Select value={sectionFilter} onValueChange={setSectionFilter}>
+                    <SelectTrigger id="section" disabled={students.state.loading || availableSections.length === 0}>
+                      <SelectValue placeholder="All sections" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">All sections</SelectItem>
+                      {availableSections.map((section) => (
+                        <SelectItem key={section} value={section}>
+                          {section}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Reset Button */}
+                <div className="flex items-end">
+                  <Button
+                    variant="outline"
+                    onClick={handleResetFilters}
+                    disabled={students.state.loading}
+                    className="w-full"
+                  >
+                    Reset
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Students Table */}
+          <StudentSelectionPanel
+            students={paginatedStudents}
+            loading={students.state.loading}
+            selectedStudentIds={promotion.state.selectedStudentIds}
+            page={students.state.page}
+            totalPages={totalFilteredPages}
+            onToggleStudent={handleToggleStudent}
+            onSelectAll={handleSelectAll}
+            onDeselectAll={handleDeselectAll}
+            onSearch={() => {}} // Search is handled via state
+            onPageChange={(page) => students.setState({ ...students.state, page })}
+            selectedCount={selectedStudents.length}
+          />
+
+          {/* Action Bar */}
+          {selectedStudents.length > 0 && (
+            <Card className="border-blue-200 bg-blue-50 dark:border-blue-900 dark:bg-blue-950">
+              <CardContent className="flex items-center justify-between pt-6">
+                <div>
+                  <p className="font-semibold text-blue-900 dark:text-blue-100">
+                    {selectedStudents.length} student{selectedStudents.length !== 1 ? "s" : ""} selected
+                  </p>
+                  <p className="text-sm text-blue-800 dark:text-blue-200">
+                    Ready to promote selected students
+                  </p>
+                </div>
+                <Button
+                  onClick={handlePromoteClick}
+                  disabled={selectedStudents.length === 0}
+                  className="bg-blue-600 hover:bg-blue-700"
+                >
+                  Promote Selected
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* No Students Message */}
+          {!students.state.loading && paginatedStudents.length === 0 && (
+            <Card>
+              <CardContent className="flex flex-col items-center justify-center py-12 gap-3">
+                <AlertCircle className="h-10 w-10 text-zinc-400" />
+                <p className="text-zinc-600 dark:text-zinc-400">No students found matching your filters</p>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Error Message */}
+          {students.state.error && (
+            <Card className="border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950">
+              <CardContent className="flex items-start gap-3 pt-6">
+                <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
+                <div>
+                  <h3 className="font-semibold text-red-900 dark:text-red-100">Error</h3>
+                  <p className="text-sm text-red-800 dark:text-red-200">{students.state.error}</p>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      )}
+
+      {/* Promotion Dialog Modal */}
+      {isSuperAdmin && isPromotionEnabled && (
+        <PromotionDialogModal
+          open={showPromotionDialog}
+          onOpenChange={setShowPromotionDialog}
+          selectedStudents={selectedStudents}
+          grades={grades}
+          onPromotionComplete={() => {
+            setShowPromotionDialog(false);
+            promotion.deselectAllStudents();
+            students.fetchStudents({
+              page: students.state.page,
+              limit: 20,
+            });
+          }}
+        />
+      )}
     </div>
   );
 }

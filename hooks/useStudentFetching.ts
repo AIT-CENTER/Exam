@@ -111,10 +111,15 @@ export function useStudentFetching() {
   }, [fetchStudents]);
 
   return {
-    ...state,
+    state,
+    students: state.students,
+    loading: state.loading,
+    error: state.error,
+    setState,
     setPage,
     setSearch,
     setGradeFilter,
     refetch,
+    fetchStudents,
   };
 }

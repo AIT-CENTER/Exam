@@ -1,8 +1,7 @@
 "use client";
 
 import React, { useMemo } from "react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -11,10 +10,8 @@ import {
   Pagination,
   PaginationContent,
   PaginationItem,
-  PaginationNext,
-  PaginationPrevious,
 } from "@/components/ui/pagination";
-import { Search, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import { Student } from "@/hooks/usePromotionState";
 
 interface StudentSelectionPanelProps {
@@ -24,10 +21,11 @@ interface StudentSelectionPanelProps {
   page: number;
   totalPages: number;
   onToggleStudent: (studentId: number) => void;
-  onSelectAll: (studentIds: number[]) => void;
+  onSelectAll: () => void;
   onDeselectAll: () => void;
-  onSearch: (query: string) => void;
+  onSearch?: (query: string) => void;
   onPageChange: (page: number) => void;
+  selectedCount: number;
 }
 
 export function StudentSelectionPanel({
@@ -39,8 +37,8 @@ export function StudentSelectionPanel({
   onToggleStudent,
   onSelectAll,
   onDeselectAll,
-  onSearch,
   onPageChange,
+  selectedCount,
 }: StudentSelectionPanelProps) {
   const isAllSelected = useMemo(
     () => students.length > 0 && students.every((s) => selectedStudentIds.has(s.id)),
@@ -51,34 +49,21 @@ export function StudentSelectionPanel({
     if (isAllSelected) {
       onDeselectAll();
     } else {
-      onSelectAll(students.map((s) => s.id));
+      onSelectAll();
     }
   };
 
   return (
-    <Card className="flex flex-col h-full">
+    <Card>
       <CardHeader>
-        <CardTitle>Student Selection</CardTitle>
-        <CardDescription>
-          Select students for promotion ({selectedStudentIds.size} selected)
-        </CardDescription>
+        <CardTitle>Student List</CardTitle>
       </CardHeader>
-      <CardContent className="flex flex-col gap-4 flex-1">
-        {/* Search Bar */}
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-zinc-500" />
-          <Input
-            placeholder="Search by name or student ID..."
-            className="pl-10"
-            onChange={(e) => onSearch(e.target.value)}
-            disabled={loading}
-          />
-        </div>
+      <CardContent className="flex flex-col gap-4">
 
         {/* Students Table */}
-        <div className="flex-1 overflow-auto border rounded-lg">
+        <div className="overflow-x-auto">
           <Table>
-            <TableHeader className="sticky top-0 bg-zinc-50 dark:bg-zinc-950">
+            <TableHeader className="bg-zinc-50 dark:bg-zinc-950">
               <TableRow>
                 <TableHead className="w-12">
                   <Checkbox
@@ -90,9 +75,9 @@ export function StudentSelectionPanel({
                 </TableHead>
                 <TableHead>Student ID</TableHead>
                 <TableHead>Name</TableHead>
-                <TableHead>Current Grade</TableHead>
+                <TableHead>Grade</TableHead>
                 <TableHead>Section</TableHead>
-                <TableHead>Stream</TableHead>
+                <TableHead className="hidden sm:table-cell">Stream</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -115,24 +100,29 @@ export function StudentSelectionPanel({
                 students.map((student) => (
                   <TableRow
                     key={student.id}
-                    className={selectedStudentIds.has(student.id) ? "bg-blue-50 dark:bg-blue-950" : ""}
+                    className={`cursor-pointer transition-colors ${
+                      selectedStudentIds.has(student.id)
+                        ? "bg-blue-50 dark:bg-blue-950"
+                        : "hover:bg-zinc-50 dark:hover:bg-zinc-900"
+                    }`}
                   >
-                    <TableCell>
+                    <TableCell onClick={() => onToggleStudent(student.id)}>
                       <Checkbox
                         checked={selectedStudentIds.has(student.id)}
                         onCheckedChange={() => onToggleStudent(student.id)}
                         aria-label={`Select ${student.name}`}
+                        onClick={(e) => e.stopPropagation()}
                       />
                     </TableCell>
                     <TableCell className="font-medium text-sm">{student.student_id}</TableCell>
                     <TableCell className="font-medium">{student.name}</TableCell>
                     <TableCell>
-                      <Badge variant="outline">{student.grade_name}</Badge>
+                      <Badge variant="outline" className="text-xs">{student.grade_name}</Badge>
                     </TableCell>
                     <TableCell className="text-sm">{student.section}</TableCell>
-                    <TableCell className="text-sm">
+                    <TableCell className="text-sm hidden sm:table-cell">
                       {student.stream ? (
-                        <Badge variant="secondary">{student.stream}</Badge>
+                        <Badge variant="secondary" className="text-xs">{student.stream}</Badge>
                       ) : (
                         <span className="text-zinc-400">—</span>
                       )}
@@ -146,38 +136,33 @@ export function StudentSelectionPanel({
 
         {/* Pagination */}
         {!loading && students.length > 0 && (
-          <div className="flex items-center justify-between gap-4">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4">
             <div className="text-sm text-zinc-600 dark:text-zinc-400">
-              Page {page} of {totalPages}
+              Page <span className="font-semibold">{page}</span> of{" "}
+              <span className="font-semibold">{totalPages}</span>
             </div>
-            <Pagination className="w-auto">
-              <PaginationContent>
-                <PaginationItem>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => onPageChange(page - 1)}
-                    disabled={page === 1}
-                    className="gap-1"
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                    Previous
-                  </Button>
-                </PaginationItem>
-                <PaginationItem>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => onPageChange(page + 1)}
-                    disabled={page >= totalPages}
-                    className="gap-1"
-                  >
-                    Next
-                    <ChevronRight className="h-4 w-4" />
-                  </Button>
-                </PaginationItem>
-              </PaginationContent>
-            </Pagination>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => onPageChange(page - 1)}
+                disabled={page === 1 || loading}
+                className="gap-1"
+              >
+                <ChevronLeft className="h-4 w-4" />
+                <span className="hidden sm:inline">Previous</span>
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => onPageChange(page + 1)}
+                disabled={page >= totalPages || loading}
+                className="gap-1"
+              >
+                <span className="hidden sm:inline">Next</span>
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
         )}
       </CardContent>
