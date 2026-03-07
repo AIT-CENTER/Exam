@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSupabaseServer } from "@/utils/supabase/server";
+import { getSupabaseServer } from "@/lib/supabase/server";
+
+// In-memory cache for settings (single source of truth for feature flags)
+let featureFlags = {
+  promotionEnabled: false,
+  lastUpdated: new Date().toISOString(),
+};
 
 interface SuperAdminSettings {
   promotionEnabled: boolean;
@@ -41,32 +47,11 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Fetch or create super admin settings
-    const { data: settings, error: settingsError } = await supabase
-      .from("super_admin_settings")
-      .select("*")
-      .maybeSingle();
-
-    console.log("[v0] Settings fetch:", { hasSettings: !!settings, hasError: !!settingsError });
-
-    if (settingsError && settingsError.code !== "PGRST116") {
-      // PGRST116 means no rows returned
-      console.error("[v0] Settings fetch error:", settingsError);
-      throw new Error("Failed to fetch settings");
-    }
-
-    // Return default settings if none exist
-    const defaultSettings: SuperAdminSettings = {
-      promotionEnabled: false,
-    };
-
-    if (!settings) {
-      console.log("[v0] No settings found, returning defaults");
-      return NextResponse.json(defaultSettings);
-    }
+    console.log("[v0] Returning settings:", featureFlags);
 
     return NextResponse.json({
-      promotionEnabled: settings.promotion_enabled ?? false,
+      promotionEnabled: featureFlags.promotionEnabled,
+      lastUpdated: featureFlags.lastUpdated,
     });
   } catch (e) {
     console.error("[v0] Super admin settings GET error:", e);
@@ -114,31 +99,27 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { promotionEnabled } = body;
 
-    console.log("[v0] Updating settings:", { promotionEnabled });
-
-    // Upsert settings
-    const { data: settings, error: upsertError } = await supabase
-      .from("super_admin_settings")
-      .upsert(
-        {
-          id: 1, // Single settings record
-          promotion_enabled: promotionEnabled,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: "id" }
-      )
-      .select()
-      .single();
-
-    if (upsertError) {
-      console.error("[v0] Settings upsert error:", upsertError);
-      throw new Error("Failed to update settings");
+    if (typeof promotionEnabled !== "boolean") {
+      return NextResponse.json(
+        { error: "promotionEnabled must be a boolean" },
+        { status: 400 }
+      );
     }
 
-    console.log("[v0] Settings updated successfully");
+    console.log("[v0] Updating settings:", { promotionEnabled });
+
+    // Update in-memory cache
+    featureFlags = {
+      promotionEnabled,
+      lastUpdated: new Date().toISOString(),
+    };
+
+    console.log("[v0] Settings updated successfully:", featureFlags);
 
     return NextResponse.json({
-      promotionEnabled: settings.promotion_enabled ?? false,
+      promotionEnabled: featureFlags.promotionEnabled,
+      lastUpdated: featureFlags.lastUpdated,
+      message: "Promotion feature " + (promotionEnabled ? "enabled" : "disabled"),
     });
   } catch (e) {
     console.error("[v0] Super admin settings POST error:", e);
