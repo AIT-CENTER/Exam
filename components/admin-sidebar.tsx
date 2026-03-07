@@ -14,6 +14,7 @@ import {
   ClipboardList,
   BarChart3,
   Lock,
+  ArrowUp,
 } from "lucide-react"
 
 import {
@@ -149,6 +150,13 @@ export function AdminSidebar({ ...props }: React.ComponentProps<typeof Sidebar>)
         icon: Award,
         isActive: pathname.startsWith("/dashboard/grades"),
         pageKey: "grades_page",
+      },
+      {
+        title: "Promotions",
+        url: "/dashboard/promotions",
+        icon: ArrowUp,
+        isActive: pathname.startsWith("/dashboard/promotions"),
+        pageKey: "promotions_page",
       },
       {
         title: "Exam Oversight",
