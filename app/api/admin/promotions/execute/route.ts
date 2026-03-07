@@ -33,10 +33,14 @@ async function getSupabaseServer() {
 
 export async function POST(request: NextRequest) {
   try {
+    console.log("[v0] promotions/execute POST - Starting request");
+    
     const supabase = await getSupabaseServer();
     const {
       data: { user },
     } = await supabase.auth.getUser();
+
+    console.log("[v0] User check:", user ? `User ${user.id}` : "No user");
 
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -49,12 +53,16 @@ export async function POST(request: NextRequest) {
       .eq("id", user.id)
       .maybeSingle();
 
+    console.log("[v0] Admin check:", adminRow ? `Role: ${adminRow.role}` : "No admin record");
+
     if (!adminRow || !["super_admin", "admin"].includes(adminRow.role)) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     // Parse request body
     const body: PromotionRequest = await request.json();
+
+    console.log("[v0] Request body promotions count:", body.promotions?.length);
 
     if (!body.promotions || !Array.isArray(body.promotions) || body.promotions.length === 0) {
       return NextResponse.json(
@@ -70,7 +78,7 @@ export async function POST(request: NextRequest) {
     // Fetch all students to validate and get their current grades
     const { data: students, error: studentError } = await supabase
       .from("students")
-      .select("id, name, grade_id, stream, grades(id, name)")
+      .select("id, name, grade_id, stream, grades(id, grade_name)")
       .in("id", studentIds);
 
     if (studentError || !students) {
@@ -84,7 +92,7 @@ export async function POST(request: NextRequest) {
     // Fetch target grades to validate
     const { data: targetGrades, error: gradesError } = await supabase
       .from("grades")
-      .select("id, name, has_stream")
+      .select("id, grade_name, has_stream")
       .in("id", targetGradeIds);
 
     if (gradesError || !targetGrades) {
@@ -198,6 +206,11 @@ export async function POST(request: NextRequest) {
     }
 
     // Return results
+    console.log("[v0] Promotion complete:", { 
+      successCount: updatedStudents.length, 
+      errorCount: errors.length 
+    });
+
     if (errors.length > 0 && updatedStudents.length === 0) {
       // All promotions failed
       return NextResponse.json(
@@ -216,7 +229,8 @@ export async function POST(request: NextRequest) {
       errors: errors.length > 0 ? errors : undefined,
     });
   } catch (e) {
-    console.error("[promotions/execute] POST error:", e);
-    return NextResponse.json({ error: "Server error: " + String(e) }, { status: 500 });
+    console.error("[v0] Promotions/execute POST error:", e);
+    const errorMessage = e instanceof Error ? e.message : "Unknown server error";
+    return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
 }

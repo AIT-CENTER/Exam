@@ -43,10 +43,14 @@ async function getSupabaseServer() {
 
 export async function GET(request: NextRequest) {
   try {
+    console.log("[v0] promotions/students GET - Starting request");
+    
     const supabase = await getSupabaseServer();
     const {
       data: { user },
     } = await supabase.auth.getUser();
+
+    console.log("[v0] User check:", user ? `User ${user.id}` : "No user");
 
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -58,6 +62,8 @@ export async function GET(request: NextRequest) {
       .select("id, role")
       .eq("id", user.id)
       .maybeSingle();
+
+    console.log("[v0] Admin check:", adminRow ? `Role: ${adminRow.role}` : "No admin record");
 
     if (!adminRow || !["super_admin", "admin"].includes(adminRow.role)) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -72,6 +78,8 @@ export async function GET(request: NextRequest) {
 
     const offset = (page - 1) * limit;
 
+    console.log("[v0] Query params:", { page, search, gradeFilter, limit, offset });
+
     // Base query for students with their grades
     let query = supabase
       .from("students")
@@ -83,7 +91,7 @@ export async function GET(request: NextRequest) {
         grade_id,
         section,
         stream,
-        grades(id, name)
+        grades(id, grade_name)
       `,
         { count: "exact" }
       );
@@ -104,8 +112,14 @@ export async function GET(request: NextRequest) {
       .order("name", { ascending: true })
       .range(offset, offset + limit - 1);
 
+    console.log("[v0] Students query result:", { 
+      count, 
+      studentCount: students?.length,
+      hasError: !!error 
+    });
+
     if (error) {
-      console.error("[promotions/students] error:", error);
+      console.error("[v0] Supabase error:", error);
       return NextResponse.json({ error: "Failed to fetch students" }, { status: 500 });
     }
 
@@ -166,7 +180,7 @@ export async function GET(request: NextRequest) {
           name: student.name,
           student_id: student.student_id,
           grade_id: student.grade_id,
-          grade_name: student.grades?.name || "Unknown",
+          grade_name: student.grades?.grade_name || "Unknown",
           section: student.section,
           stream: student.stream,
           results_summary: resultsSummary,
@@ -174,6 +188,8 @@ export async function GET(request: NextRequest) {
       })
     );
 
+    console.log("[v0] Returning response with", studentsWithResults.length, "students");
+    
     return NextResponse.json({
       data: studentsWithResults,
       pagination: {
@@ -184,7 +200,8 @@ export async function GET(request: NextRequest) {
       },
     });
   } catch (e) {
-    console.error("[promotions/students] GET error:", e);
-    return NextResponse.json({ error: "Server error" }, { status: 500 });
+    console.error("[v0] Promotions/students GET error:", e);
+    const errorMessage = e instanceof Error ? e.message : "Unknown server error";
+    return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
 }

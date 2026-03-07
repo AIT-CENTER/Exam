@@ -49,17 +49,23 @@ export function useStudentFetching() {
       if (search) queryParams.append("search", search);
       if (grade) queryParams.append("grade", grade);
 
+      console.log("[v0] Fetching students with params:", { page, search, grade, limit });
+
       const response = await fetch(
         `/api/admin/promotions/students?${queryParams.toString()}`,
         { cache: "no-store" }
       );
 
+      console.log("[v0] Response status:", response.status);
+
       if (!response.ok) {
         const error = await response.json();
+        console.log("[v0] Error response:", error);
         throw new Error(error.error || "Failed to fetch students");
       }
 
       const data = await response.json();
+      console.log("[v0] Data fetched successfully, students count:", data.data?.length);
 
       setState((prev) => ({
         ...prev,
@@ -73,6 +79,7 @@ export function useStudentFetching() {
       setFilters({ search, grade });
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Unknown error";
+      console.log("[v0] Fetch error:", errorMessage);
       setState((prev) => ({
         ...prev,
         error: errorMessage,
