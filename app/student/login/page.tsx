@@ -18,19 +18,34 @@ export default function StudentLoginPage() {
   async function login() {
     try {
       setLoginBusy(true);
-      const res = await fetch("/api/student/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ student_id: loginId, password: loginPassword }),
-      });
+      let res: Response;
+      try {
+        res = await fetch("/api/student/auth/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ student_id: loginId, password: loginPassword }),
+        });
+      } catch (networkErr) {
+        toast.error("Connection failed. Please check your internet and try again.");
+        return;
+      }
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {
-        throw new Error(json?.message || json?.error || "Login failed");
+        const msg =
+          json?.message ||
+          json?.error ||
+          (res.status >= 500
+            ? "Server error. Please try again later."
+            : res.status === 404
+              ? "Student not found. Please check your Student ID."
+              : "Login failed.");
+        throw new Error(msg);
       }
       toast.success("Signed in");
       router.push("/student");
-    } catch (e: any) {
-      toast.error(e?.message || "Login failed");
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : "Login failed.";
+      toast.error(message);
     } finally {
       setLoginBusy(false);
     }

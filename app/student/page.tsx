@@ -26,11 +26,22 @@ export default function StudentHomePage() {
         const res = await fetch("/api/student/me", { cache: "no-store" });
         const json = (await res.json().catch(() => ({}))) as MeResponse;
         setMe(json);
+        if (!json?.authenticated) {
+          router.replace("/student/login");
+        }
       } finally {
         setLoading(false);
       }
     })();
-  }, []);
+  }, [router]);
+
+  if (!me?.authenticated) {
+    return (
+      <div className="flex w-full min-h-[50vh] items-center justify-center">
+        <DashboardSpinner />
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-5xl mx-auto p-4 lg:p-8 space-y-6">
@@ -41,7 +52,7 @@ export default function StudentHomePage() {
 
       {loading ? (
         <DashboardSpinner />
-      ) : me?.authenticated ? (
+      ) : (
         <Card className="shadow-sm">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -57,10 +68,6 @@ export default function StudentHomePage() {
             <p className="text-sm text-muted-foreground">Use the sidebar menu to navigate your dashboard.</p>
           </CardContent>
         </Card>
-      ) : (
-        <div className="flex items-center justify-center py-14 text-muted-foreground text-sm">
-          Redirecting to login…
-        </div>
       )}
     </div>
   );

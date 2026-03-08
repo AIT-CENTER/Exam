@@ -207,7 +207,7 @@ export default function SettingsPage() {
   const [backupLoading, setBackupLoading] = useState(false)
   const [showBackupDialog, setShowBackupDialog] = useState(false)
 
-  const [exportFormat, setExportFormat] = useState<"json" | "csv">("json")
+  const [exportFormat, setExportFormat] = useState<"json" | "csv">("csv")
   const [estimatedSize, setEstimatedSize] = useState<string>("")
   const [exportProgress, setExportProgress] = useState(0)
   const [importProgress, setImportProgress] = useState(0)
@@ -217,6 +217,12 @@ export default function SettingsPage() {
   const [importPreview, setImportPreview] = useState<{ tables: string[]; recordCount: number } | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [isDragOver, setIsDragOver] = useState(false)
+
+  // Individual table export (multiple tables allowed, CSV default)
+  const [exportTableSelection, setExportTableSelection] = useState<string[]>([])
+  const [showExportTablesDialog, setShowExportTablesDialog] = useState(false)
+  const [exportTablesLoading, setExportTablesLoading] = useState(false)
+  const [exportTablesFormat, setExportTablesFormat] = useState<"json" | "csv">("csv")
 
   const systemTables: TableInfo[] = [
     { name: "admin", icon: Shield, description: "Admin accounts", color: "bg-slate-100 text-slate-700 dark:bg-slate-900/30 dark:text-slate-400" },
@@ -583,6 +589,67 @@ export default function SettingsPage() {
       toast.error("Failed to create backup")
     } finally {
       setBackupLoading(false)
+    }
+  }
+
+  const handleExportSelectedTables = async () => {
+    if (exportTableSelection.length === 0) {
+      toast.error("Select at least one table to export")
+      return
+    }
+    setExportTablesLoading(true)
+    setExportProgress(0)
+    try {
+      const backupData: Record<string, any> = {
+        metadata: {
+          created_at: new Date().toISOString(),
+          tables: exportTableSelection,
+          version: "1.0",
+          format: exportTablesFormat,
+        },
+      }
+      const totalTables = exportTableSelection.length
+      let completedTables = 0
+      for (const tableId of exportTableSelection) {
+        const { data, error } = await supabase.from(tableId).select("*")
+        if (error) {
+          console.error(`Error exporting ${tableId}:`, error)
+          toast.error(`Failed to export table: ${tableId}`)
+          setExportTablesLoading(false)
+          return
+        }
+        backupData[tableId] = data ?? []
+        completedTables++
+        setExportProgress(Math.round((completedTables / totalTables) * 100))
+        await new Promise((r) => setTimeout(r, 50))
+      }
+      let blob: Blob
+      let filename: string
+      if (exportTablesFormat === "csv") {
+        const csvContent = convertToCSV(backupData)
+        blob = new Blob([csvContent], { type: "text/csv;charset=utf-8" })
+        filename = `tables_export_${format(new Date(), "yyyy-MM-dd_HH-mm")}.csv`
+      } else {
+        blob = new Blob([JSON.stringify(backupData, null, 2)], { type: "application/json" })
+        filename = `tables_export_${format(new Date(), "yyyy-MM-dd_HH-mm")}.json`
+      }
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = filename
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+      toast.success(`Exported ${exportTableSelection.length} table(s) as ${exportTablesFormat.toUpperCase()}`)
+      setShowExportTablesDialog(false)
+      setExportTableSelection([])
+      setExportProgress(0)
+    } catch (err) {
+      console.error("Error exporting tables:", err)
+      toast.error("Failed to export tables")
+    } finally {
+      setExportTablesLoading(false)
     }
   }
 
@@ -1757,6 +1824,23 @@ export default function SettingsPage() {
                 </div>
               </div>
 
+              <div className="p-6 bg-slate-50 dark:bg-slate-900/10 rounded-lg border border-slate-200 dark:border-slate-800">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div>
+                    <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-300">Export Tables</h3>
+                    <p className="text-sm text-slate-700 dark:text-slate-400 mt-1">Export one or more database tables as CSV (default) or JSON</p>
+                  </div>
+                  <Button
+                    onClick={() => setShowExportTablesDialog(true)}
+                    variant="outline"
+                    className="gap-2 border-slate-300 text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                  >
+                    <TableIcon className="h-4 w-4" />
+                    Export selected tables
+                  </Button>
+                </div>
+              </div>
+
               <div className="p-6 bg-emerald-50 dark:bg-emerald-900/10 rounded-lg border border-emerald-200 dark:border-emerald-800">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                   <div>
@@ -2609,6 +2693,119 @@ export default function SettingsPage() {
                 <>
                   <Download className="h-4 w-4" />
                   Download {exportFormat.toUpperCase()}
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Export selected tables Dialog */}
+      <Dialog open={showExportTablesDialog} onOpenChange={setShowExportTablesDialog}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <TableIcon className="h-5 w-5 text-indigo-600" />
+              Export tables
+            </DialogTitle>
+            <DialogDescription>
+              Select one or more tables to export. Default format is CSV.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2 overflow-y-auto flex-1 min-h-0">
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Format</Label>
+              <RadioGroup
+                value={exportTablesFormat}
+                onValueChange={(v) => setExportTablesFormat(v as "json" | "csv")}
+                className="flex gap-4"
+              >
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="csv" id="export-tables-csv" />
+                  <Label htmlFor="export-tables-csv" className="flex items-center gap-2 cursor-pointer">
+                    <FileSpreadsheet className="h-4 w-4 text-green-600" />
+                    CSV (default)
+                  </Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="json" id="export-tables-json" />
+                  <Label htmlFor="export-tables-json" className="flex items-center gap-2 cursor-pointer">
+                    <FileJson className="h-4 w-4 text-blue-600" />
+                    JSON
+                  </Label>
+                </div>
+              </RadioGroup>
+            </div>
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Tables to export</Label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto rounded-md border p-3 bg-muted/30">
+                {tables.map((table) => (
+                  <div
+                    key={table.name}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => {
+                      setExportTableSelection((prev) =>
+                        prev.includes(table.name)
+                          ? prev.filter((t) => t !== table.name)
+                          : [...prev, table.name]
+                      )
+                    }}
+                    onKeyDown={(e) => e.key === "Enter" && (e.currentTarget as HTMLElement).click()}
+                    className={`
+                      flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition-colors
+                      ${exportTableSelection.includes(table.name)
+                        ? "border-indigo-500 bg-indigo-50 dark:bg-indigo-950/30"
+                        : "border-border hover:bg-muted/50"
+                      }
+                    `}
+                  >
+                    <div className={`shrink-0 p-1.5 rounded ${table.color}`}>
+                      <table.icon className="h-4 w-4" aria-hidden />
+                    </div>
+                    <span className="text-sm font-medium truncate">{table.name}</span>
+                    <Badge variant="secondary" className="text-[10px] ml-auto tabular-nums">
+                      {table.count}
+                    </Badge>
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {exportTableSelection.length} table(s) selected
+              </p>
+            </div>
+            {exportTablesLoading && (
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Exporting...</span>
+                  <span className="font-medium">{exportProgress}%</span>
+                </div>
+                <Progress value={exportProgress} className="h-2" />
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowExportTablesDialog(false)}
+              disabled={exportTablesLoading}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleExportSelectedTables}
+              disabled={exportTablesLoading || exportTableSelection.length === 0}
+              className="gap-2 bg-indigo-600 hover:bg-indigo-700"
+            >
+              {exportTablesLoading ? (
+                <>
+                  <RotateCw className="h-4 w-4 animate-spin" />
+                  Exporting...
+                </>
+              ) : (
+                <>
+                  <Download className="h-4 w-4" />
+                  Export {exportTableSelection.length} table(s) as {exportTablesFormat.toUpperCase()}
                 </>
               )}
             </Button>

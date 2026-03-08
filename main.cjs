@@ -11,6 +11,8 @@ const path = require("path");
 let mainWindow;
 let modal; // Optional modal for exam warning
 
+const isDev = !app.isPackaged;
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1200,
@@ -24,7 +26,7 @@ function createWindow() {
       contextIsolation: true,
       sandbox: true,
       webSecurity: true,
-      devTools: false,
+      devTools: isDev,
       allowRunningInsecureContent: false,
     },
   });
@@ -38,6 +40,21 @@ function createWindow() {
 
   mainWindow.loadURL(allowedDomain).catch((err) => {
     console.error("Failed to load URL:", err);
+  });
+
+  if (isDev) {
+    mainWindow.webContents.openDevTools({ mode: "detach" });
+  }
+
+  // Log network issues reaching Supabase from within Electron
+  mainWindow.webContents.session.webRequest.onErrorOccurred((details) => {
+    if (details.url && details.url.includes("supabase.co")) {
+      console.error("[Electron] Supabase request error", {
+        url: details.url,
+        error: details.error,
+        fromCache: details.fromCache,
+      });
+    }
   });
 
   // Conditional behavior based on URL

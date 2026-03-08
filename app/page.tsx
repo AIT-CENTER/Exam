@@ -359,6 +359,12 @@ export default function StudentLogin() {
     const fullStudentId = studentId.trim().toUpperCase();
 
     try {
+      console.log("[StudentLogin] validateExamAccess start", {
+        studentIdInput: studentId,
+        normalizedStudentId: fullStudentId,
+        examCode,
+      });
+
       const { data: student, error: studentError } = await supabase
         .from("students")
         .select("id, student_id, name, grade_id, section")
@@ -368,12 +374,23 @@ export default function StudentLogin() {
       if (studentError) {
         // PGRST116 = no rows; otherwise treat as connectivity / server issue
         if ((studentError as any).code === "PGRST116") {
+          console.warn("[StudentLogin] Student not found (PGRST116)", {
+            normalizedStudentId: fullStudentId,
+          });
           throw new Error("Student not found. Please check your Student ID.");
         }
-        console.error("Student lookup failed:", studentError);
+        console.error("[StudentLogin] Student lookup failed", {
+          code: (studentError as any).code,
+          message: studentError.message,
+          details: (studentError as any).details,
+          hint: (studentError as any).hint,
+        });
         throw new Error("Unable to verify student at the moment. Please check your internet or try again.");
       }
       if (!student) {
+        console.warn("[StudentLogin] Student not found (no row)", {
+          normalizedStudentId: fullStudentId,
+        });
         throw new Error("Student not found. Please check your Student ID.");
       }
 
@@ -385,12 +402,23 @@ export default function StudentLogin() {
 
       if (examError) {
         if ((examError as any).code === "PGRST116") {
+          console.warn("[StudentLogin] Exam not found (PGRST116)", {
+            examCode,
+          });
           throw new Error("Exam not found. Please check your Exam ID.");
         }
-        console.error("Exam lookup failed:", examError);
+        console.error("[StudentLogin] Exam lookup failed", {
+          code: (examError as any).code,
+          message: examError.message,
+          details: (examError as any).details,
+          hint: (examError as any).hint,
+        });
         throw new Error("Unable to verify exam at the moment. Please check your internet or try again.");
       }
       if (!exam) {
+        console.warn("[StudentLogin] Exam not found (no row)", {
+          examCode,
+        });
         throw new Error("Exam not found. Please check your Exam ID.");
       }
 
@@ -443,7 +471,7 @@ export default function StudentLogin() {
       if (err instanceof Error && err.message) {
         throw err;
       }
-      console.error("validateExamAccess unexpected error:", err);
+      console.error("[StudentLogin] validateExamAccess unexpected error", err);
       throw new Error("Failed to verify exam access. Please try again.");
     }
   };
