@@ -662,7 +662,7 @@ export default function ResultsArchiveClient() {
                   <DatePicker
                     value={newStart}
                     onChange={(d) => setNewStart(d ? format(d, "yyyy-MM-dd") : "")}
-                    placeholder="Select start date"
+                    placeholder="start date"
                     fromYear={1990}
                     toYear={2100}
                   />
@@ -674,7 +674,7 @@ export default function ResultsArchiveClient() {
                   <DatePicker
                     value={newEnd}
                     onChange={(d) => setNewEnd(d ? format(d, "yyyy-MM-dd") : "")}
-                    placeholder="Select end date"
+                    placeholder="end date"
                     fromYear={1990}
                     toYear={2100}
                   />

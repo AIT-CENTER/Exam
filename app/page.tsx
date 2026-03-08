@@ -1155,13 +1155,6 @@ export default function StudentLogin() {
                 your exam calmly — every question is an opportunity to show what
                 you know.”
               </p>
-              
-              <div className="pt-6 mt-6 border-t border-slate-200/60">
-                <div className="flex items-center gap-3 text-sm text-slate-600">
-                  <Shield className="w-5 h-5 text-blue-600" />
-                  <p>Secure, monitored, and automated grading system.</p>
-                </div>
-              </div>
             </div>
           </div>
 

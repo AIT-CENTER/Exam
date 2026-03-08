@@ -2,7 +2,6 @@
 
 import type React from "react"
 import { useState, useEffect, useRef } from "react"
-import { useRouter } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -17,7 +16,7 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog"
-import { Calendar as CalendarIcon, ArrowLeft, UserPlus, Users, Settings, Plus, Trash2, Upload, RefreshCw, AlertTriangle, Download } from "lucide-react"
+import { Calendar as CalendarIcon, UserPlus, Users, Settings, Plus, Trash2, Upload, RefreshCw, AlertTriangle, AlertCircle, Download } from "lucide-react"
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover"
 import { cn } from "@/lib/utils"
@@ -131,8 +130,6 @@ function PageSpinner() {
 }
 
 export default function NewStudentPage() {
-  const router = useRouter()
-
   // ID Configuration State
   const [idConfig, setIdConfig] = useState<IdConfig>({
     prefix: "S",
@@ -195,7 +192,7 @@ export default function NewStudentPage() {
       name: "",
       father_name: "",
       grandfather_name: "",
-      gender: "male",
+      gender: "",
       date_of_birth: "",
       phone: "",
       address: "",
@@ -207,6 +204,31 @@ export default function NewStudentPage() {
       email: "",
       student_id: "",
     }
+  }
+
+  function getFullName(student: BulkStudent): string {
+    return [student.name, student.father_name, student.grandfather_name].filter(Boolean).join(" ")
+  }
+
+  function parseFullName(fullName: string): { name: string; father_name: string; grandfather_name: string } {
+    const parts = fullName.trim().split(/\s+/)
+    return {
+      name: parts[0] ?? "",
+      father_name: parts[1] ?? "",
+      grandfather_name: parts[2] ?? "",
+    }
+  }
+
+  function validateFullName(fullName: string): string {
+    const trimmed = fullName.trim()
+    if (!trimmed) return "Full name is required"
+    const parts = trimmed.split(/\s+/)
+    if (parts.length !== 3) return "Must have 3 parts: name father grandfather (2 spaces)"
+    for (const part of parts) {
+      if (part.length < 2) return "Each part must be at least 2 characters"
+      if (!/^[a-zA-Z]+$/.test(part)) return "Each part must contain only letters"
+    }
+    return ""
   }
 
   function generateStudentIdWithConfig(config: IdConfig): string {
@@ -411,16 +433,24 @@ export default function NewStudentPage() {
     return `${generateStudentIdWithConfig(idConfig)}-${Date.now().toString().slice(-4)}`
   }
 
-  const handleInputChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target
     setFormData((prev) => ({ ...prev, [name]: value }))
     if (errors[name]) {
       setErrors((prev) => ({ ...prev, [name]: "" }))
     }
-
     if (name === "name" || name === "father_name" || name === "grandfather_name") {
       setDuplicateError(null)
     }
+  }
+
+  const handleSingleFullNameChange = (fullName: string) => {
+    const { name, father_name, grandfather_name } = parseFullName(fullName)
+    setFormData((prev) => ({ ...prev, name, father_name, grandfather_name }))
+    if (errors.name || errors.father_name || errors.grandfather_name) {
+      setErrors((prev) => ({ ...prev, name: "", father_name: "", grandfather_name: "" }))
+    }
+    setDuplicateError(null)
   }
 
   const handleGenderChange = (value: string) => {
@@ -485,18 +515,11 @@ export default function NewStudentPage() {
     const newErrors: Record<string, string> = {}
     setDuplicateError(null)
 
-    const nameFields = [
-      { value: formData.name, field: "Student Name", key: "name" },
-      { value: formData.father_name, field: "Father's Name", key: "father_name" },
-      { value: formData.grandfather_name, field: "Grandfather's Name", key: "grandfather_name" },
-    ]
-
-    nameFields.forEach(({ value, field, key }) => {
-      const error = validateName(value, field)
-      if (error) {
-        newErrors[key] = error
-      }
-    })
+    const fullName = [formData.name, formData.father_name, formData.grandfather_name].filter(Boolean).join(" ")
+    const fullNameError = validateFullName(fullName)
+    if (fullNameError) {
+      newErrors.name = fullNameError
+    }
 
     if (!formData.gender) {
       newErrors.gender = "Gender is required"
@@ -641,6 +664,24 @@ export default function NewStudentPage() {
   }
 
   // Bulk Import Handlers
+  const handleBulkFullNameChange = (studentId: string, fullName: string) => {
+    const { name, father_name, grandfather_name } = parseFullName(fullName)
+    setBulkStudents((prev) => prev.map((s) => (s.id === studentId ? { ...s, name, father_name, grandfather_name } : s)))
+    if (bulkErrors[studentId]?.name || bulkErrors[studentId]?.father_name || bulkErrors[studentId]?.grandfather_name) {
+      setBulkErrors((prev) => ({
+        ...prev,
+        [studentId]: { ...prev[studentId], name: "", father_name: "", grandfather_name: "" },
+      }))
+    }
+    if (bulkDuplicateErrors[studentId]) {
+      setBulkDuplicateErrors((prev) => {
+        const next = { ...prev }
+        delete next[studentId]
+        return next
+      })
+    }
+  }
+
   const handleBulkInputChange = (studentId: string, field: keyof BulkStudent, value: string) => {
     setBulkStudents((prev) => prev.map((s) => (s.id === studentId ? { ...s, [field]: value } : s)))
     if (bulkErrors[studentId]?.[field]) {
@@ -753,21 +794,21 @@ export default function NewStudentPage() {
         return
       }
 
-      // Parse header – accept extended structure
+      // Parse header – accept full_name or separate name/father/grandfather
       const header = rows[0].map((h) => h.trim().toLowerCase())
-      const nameIndex = header.findIndex((h) => h.includes("name") && !h.includes("father") && !h.includes("grand"))
+      const fullNameIndex = header.findIndex((h) => h === "full_name" || h === "fullname")
+      const nameIndex = fullNameIndex === -1 ? header.findIndex((h) => h.includes("name") && !h.includes("father") && !h.includes("grand")) : -1
       const fatherIndex = header.findIndex((h) => h.includes("father"))
       const grandfatherIndex = header.findIndex((h) => h.includes("grand"))
       const genderIndex = header.findIndex((h) => h.includes("gender") || h.includes("sex"))
       const emailIndex = header.findIndex((h) => h.includes("email"))
       const phoneIndex = header.findIndex((h) => h.includes("phone") && !h.includes("parent"))
       const parentNameIndex = header.findIndex((h) => h.includes("parent_name") || h.includes("guardian_name") || h.includes("parent"))
-      const parentPhoneIndex = header.findIndex((h) => h.includes("parent_phone") || h.includes("guardian_phone"))
       const dobIndex = header.findIndex((h) => h.includes("date_of_birth") || h.includes("dob") || h.includes("birth"))
       const addressIndex = header.findIndex((h) => h.includes("address"))
 
-      if (nameIndex === -1) {
-        toast.error("CSV must have a 'name' column")
+      if (fullNameIndex === -1 && nameIndex === -1) {
+        toast.error("CSV must have 'full_name' or 'name' column")
         return
       }
 
@@ -778,18 +819,27 @@ export default function NewStudentPage() {
 
         const cols = rows[i]
 
-        if (!cols[nameIndex]) continue
+        const nameVal = fullNameIndex >= 0 ? cols[fullNameIndex] || "" : cols[nameIndex] || ""
+        if (!nameVal && fullNameIndex >= 0) continue
+        if (!nameVal && nameIndex >= 0) continue
 
         const student = createEmptyBulkStudent()
         student.student_id = generateStudentIdWithConfig(idConfig)
-        student.name = cols[nameIndex] || ""
-        student.father_name = fatherIndex >= 0 ? cols[fatherIndex] || "" : ""
-        student.grandfather_name = grandfatherIndex >= 0 ? cols[grandfatherIndex] || "" : ""
-        student.gender = genderIndex >= 0 ? cols[genderIndex]?.toLowerCase() || "male" : "male"
+        if (fullNameIndex >= 0) {
+          const parsed = parseFullName(nameVal)
+          student.name = parsed.name
+          student.father_name = parsed.father_name
+          student.grandfather_name = parsed.grandfather_name
+        } else {
+          student.name = nameVal
+          student.father_name = fatherIndex >= 0 ? cols[fatherIndex] || "" : ""
+          student.grandfather_name = grandfatherIndex >= 0 ? cols[grandfatherIndex] || "" : ""
+        }
+        student.gender = genderIndex >= 0 ? (cols[genderIndex]?.trim() ? cols[genderIndex].toLowerCase() : "") : ""
         student.email = emailIndex >= 0 ? cols[emailIndex] || "" : ""
         student.phone = phoneIndex >= 0 ? cols[phoneIndex] || "" : ""
         student.parent_name = parentNameIndex >= 0 ? cols[parentNameIndex] || "" : ""
-        student.parent_phone = parentPhoneIndex >= 0 ? cols[parentPhoneIndex] || "" : ""
+        // parent_phone removed from UI - do not import
         student.date_of_birth = dobIndex >= 0 ? cols[dobIndex] || "" : ""
         student.address = addressIndex >= 0 ? cols[addressIndex] || "" : ""
 
@@ -817,9 +867,9 @@ export default function NewStudentPage() {
 
   const downloadTemplate = () => {
     const template =
-      "name,father_name,grandfather_name,gender,email,phone,parent_name,parent_phone,date_of_birth,address\n" +
-      "John,Michael,David,male,john@example.com,0912345678,Michael Sr,0911222333,2005-01-15,Addis Ababa\n" +
-      "Jane,Robert,James,female,jane@example.com,0912345679,Mary,0911333444,2006-02-20,Adama"
+      "full_name,gender,email,phone,parent_name,date_of_birth,address\n" +
+      "John Michael David,male,john@example.com,0912345678,Michael Sr,2005-01-15,City\n" +
+      "Jane Robert James,female,jane@example.com,0912345679,Mary,2006-02-20,City"
     const blob = new Blob([template], { type: "text/csv" })
     const url = URL.createObjectURL(blob)
     const a = document.createElement("a")
@@ -841,15 +891,12 @@ export default function NewStudentPage() {
         return cols.map((c) => c.trim())
       })
 
-      const fieldOrder: (keyof BulkStudent)[] = [
-        "name",
-        "father_name",
-        "grandfather_name",
+      const pasteFields: Array<keyof BulkStudent | "full_name"> = [
+        "full_name",
         "gender",
         "email",
         "phone",
         "parent_name",
-        "parent_phone",
         "date_of_birth",
         "address",
       ]
@@ -860,19 +907,25 @@ export default function NewStudentPage() {
           const targetIndex = rowIndex + i
           if (targetIndex < newStudents.length) {
             cols.forEach((value, colIndex) => {
-              if (colIndex < fieldOrder.length) {
-                newStudents[targetIndex] = {
-                  ...newStudents[targetIndex],
-                  [fieldOrder[colIndex]]: value,
-                }
+              const field = pasteFields[colIndex]
+              if (!field) return
+              if (field === "full_name") {
+                const parsed = parseFullName(value)
+                newStudents[targetIndex] = { ...newStudents[targetIndex], ...parsed }
+              } else {
+                newStudents[targetIndex] = { ...newStudents[targetIndex], [field]: value }
               }
             })
           } else {
             const newStudent = createEmptyBulkStudent()
             newStudent.student_id = generateStudentIdWithConfig(idConfig)
             cols.forEach((value, colIndex) => {
-              if (colIndex < fieldOrder.length) {
-                ;(newStudent as any)[fieldOrder[colIndex]] = value
+              const field = pasteFields[colIndex]
+              if (!field) return
+              if (field === "full_name") {
+                Object.assign(newStudent, parseFullName(value))
+              } else {
+                ;(newStudent as unknown as Record<string, string>)[field] = value
               }
             })
             newStudents.push(newStudent)
@@ -959,17 +1012,11 @@ export default function NewStudentPage() {
 
     bulkStudents.forEach((student) => {
       const studentErrors: Record<string, string> = {}
+      const fullName = getFullName(student)
+      const fullNameError = validateFullName(fullName)
+      if (fullNameError) studentErrors.name = fullNameError
 
-      const nameError = validateName(student.name, "Name")
-      if (nameError) studentErrors.name = nameError
-
-      const fatherError = validateName(student.father_name, "Father's Name")
-      if (fatherError) studentErrors.father_name = fatherError
-
-      const grandfatherError = validateName(student.grandfather_name, "Grandfather's Name")
-      if (grandfatherError) studentErrors.grandfather_name = grandfatherError
-
-      if (!student.gender) studentErrors.gender = "Required"
+      if (!student.gender?.trim()) studentErrors.gender = "Required"
 
       const emailError = validateEmail(student.email)
       if (emailError) studentErrors.email = emailError
@@ -1021,7 +1068,7 @@ export default function NewStudentPage() {
             phone: s.phone.trim() || null,
             address: s.address.trim() || null,
             parent_name: s.parent_name.trim() || null,
-            parent_phone: s.parent_phone.trim() || null,
+            parent_phone: null,
             student_id: finalStudentId,
             grade_id: Number.parseInt(bulkGradeId),
             section: bulkSection,
@@ -1085,740 +1132,471 @@ export default function NewStudentPage() {
   }
 
   return (
-    <div className="flex-1 space-y-6 p-4 md:p-8 bg-transparent min-h-screen">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="space-y-1">
-          <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Register Students</h1>
-          <p className="text-muted-foreground text-sm md:text-base">
+    <div className="flex-1 space-y-3 p-3 sm:p-4 md:p-5 lg:p-6 bg-transparent min-h-screen max-w-full overflow-x-hidden">
+      {/* Compact Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3">
+        <div className="space-y-0.5">
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Register Students</h1>
+          <p className="text-muted-foreground text-xs sm:text-sm">
             Add students individually or import multiple at once
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => setShowIdSettings(true)} className="gap-2">
-            <Settings className="h-4 w-4" />
+        <div className="flex items-center gap-2 shrink-0">
+          <Button variant="outline" size="sm" onClick={() => setShowIdSettings(true)} className="gap-1.5 h-8 text-xs">
+            <Settings className="h-3.5 w-3.5" />
             <span className="hidden sm:inline">ID Format</span>
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => router.back()} className="gap-2">
-            <ArrowLeft className="h-4 w-4" />
-            <span className="hidden sm:inline">Back</span>
           </Button>
         </div>
       </div>
 
-      {/* ID Format Preview */}
-      <Card className="bg-primary/5 border-primary/20">
-        <CardContent className="p-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">Current ID Format:</span>
-              <code className="px-2 py-1 bg-background rounded text-sm font-mono">
-                {idConfig.prefix}
-                {idConfig.separator === "none" ? "" : idConfig.separator}
-                {"0".repeat(idConfig.digits)}
-              </code>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">Example:</span>
-              <code className="px-2 py-1 bg-background rounded text-sm font-mono text-primary">{studentId}</code>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
       {/* Duplicate Warning Banner */}
       {duplicateError && duplicateError.exists && (
-        <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+        <div className="p-2 sm:p-2.5 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-md">
           <div className="flex items-start gap-2">
-            <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5 flex-shrink-0" />
-            <div>
-              <p className="text-amber-800 font-medium">Duplicate Student Found</p>
-              <p className="text-amber-700 text-sm">{duplicateError.message}</p>
-              <p className="text-amber-600 text-xs mt-1">
-                Cannot register duplicate student in same grade and section.
-              </p>
+            <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
+            <div className="min-w-0">
+              <p className="text-amber-800 dark:text-amber-200 font-medium text-sm">Duplicate Student Found</p>
+              <p className="text-amber-700 dark:text-amber-300 text-xs">{duplicateError.message}</p>
+              <p className="text-amber-600 dark:text-amber-400 text-xs mt-0.5">Cannot register duplicate student in same grade and section.</p>
             </div>
           </div>
         </div>
       )}
 
-      <Tabs defaultValue="single" className="space-y-6">
-        <TabsList className="grid w-full max-w-md grid-cols-2">
-          <TabsTrigger value="single" className="gap-2">
-            <UserPlus className="h-4 w-4" />
+      <div className="flex flex-wrap items-center gap-3">
+        
+        <Tabs defaultValue="single" className="flex-1 min-w-0 space-y-3">
+        <div className="flex space-between items-center gap-2">
+        <TabsList className="grid w-full max-w-sm sm:max-w-md grid-cols-2 h-9">
+          <TabsTrigger value="single" className="gap-1.5 text-xs sm:text-sm">
+            <UserPlus className="h-3.5 w-3.5" />
             Single Student
           </TabsTrigger>
-          <TabsTrigger value="bulk" className="gap-2">
-            <Users className="h-4 w-4" />
+          <TabsTrigger value="bulk" className="gap-1.5 text-xs sm:text-sm">
+            <Users className="h-3.5 w-3.5" />
             Bulk Import
           </TabsTrigger>
         </TabsList>
 
-        {/* Single Student Tab */}
+        {/* Compact ID format in front of tabs */}
+        <div className="flex items-center gap-2 text-xs text-muted-foreground shrink-0">
+          <span>ID:</span>
+          <code className="px-1.5 py-0.5 bg-muted rounded font-mono text-[11px]">{idConfig.prefix}{idConfig.separator === "none" ? "" : idConfig.separator}{"0".repeat(idConfig.digits)}</code>
+          <code className="text-primary font-mono text-[11px]">{studentId}</code>
+        </div>
+        </div>
+
+        {/* Single Student Tab - Compact table-like layout */}
         <TabsContent value="single">
-          <Card>
-            <CardHeader>
-              <CardTitle>Register Single Student</CardTitle>
-              <CardDescription>Fill in all required fields to register a new student</CardDescription>
+          <Card className="overflow-hidden">
+            <CardHeader className="py-3 px-4 sm:px-5">
+              <CardTitle className="text-base sm:text-lg">Register Single Student</CardTitle>
+              <CardDescription className="text-xs">Fill in all required fields to register a new student</CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="px-4 sm:px-5 pb-4 pt-0">
               {successMessage && (
-                <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-md">
-                  <p className="text-green-800 text-sm">{successMessage}</p>
+                <div className="mb-3 p-2 bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 rounded text-green-800 dark:text-green-200 text-xs">
+                  {successMessage}
                 </div>
               )}
-              <form onSubmit={handleSubmit} className="space-y-8">
-                {/* Personal Information */}
-                <div className="space-y-4">
-                  <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-                    Personal Information
-                  </h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {/* Student ID */}
-                    <div className="sm:col-span-2 lg:col-span-3">
-                      <Label>Student ID</Label>
-                      <div className="flex gap-2 mt-1.5">
-                        <Input value={studentId} readOnly className="bg-muted cursor-not-allowed font-mono" />
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="icon"
-                          onClick={async () => {
-                            const newId = await generateUniqueStudentId()
-                            setStudentId(newId)
-                            toast.success("Generated new unique Student ID")
-                          }}
-                        >
-                          <RefreshCw className="h-4 w-4" />
-                        </Button>
-                      </div>
-                      <p className="text-xs text-muted-foreground mt-1">Format: Sxxxxxx (auto-generated)</p>
-                    </div>
+              <form onSubmit={handleSubmit} className="space-y-6">
+  {/* Header Section: Student ID */}
+  <div className="flex items-center gap-3 bg-muted/30 p-4 rounded-lg border">
+    <div className="space-y-1">
+      <Label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Student ID</Label>
+      <div className="flex gap-2">
+        <Input 
+          value={studentId} 
+          readOnly 
+          className="h-9 text-xs bg-background cursor-not-allowed font-mono w-[180px] border-dashed" 
+        />
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          className="h-9 w-9 shrink-0"
+          onClick={async () => {
+            const newId = await generateUniqueStudentId()
+            setStudentId(newId)
+            toast.success("New unique ID generated")
+          }}
+        >
+          <RefreshCw className="h-4 w-4" />
+        </Button>
+      </div>
+    </div>
+  </div>
 
-                    {/* Name Fields */}
-                    <div>
-                      <Label htmlFor="name">Student Name *</Label>
-                      <Input
-                        id="name"
-                        name="name"
-                        value={formData.name}
-                        onChange={handleInputChange}
-                        className={`mt-1.5 ${isFieldError("name") ? "border-destructive ring-1 ring-destructive" : ""}`}
-                        placeholder="Enter name"
-                      />
-                      {errors.name && (
-                        <p className="text-destructive text-xs mt-1 flex items-center gap-1">
-                          <AlertCircle className="h-3 w-3" /> {errors.name}
-                        </p>
-                      )}
-                    </div>
+  {/* Row 1: Primary Personal Info */}
+  <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+    {/* Full Name - Larger Span */}
+    <div className="md:col-span-5 space-y-1.5">
+      <Label htmlFor="fullName" className="text-xs font-medium">Full Name *</Label>
+      <Input 
+        id="fullName"
+        value={[formData.name, formData.father_name, formData.grandfather_name].filter(Boolean).join(" ")}
+        onChange={(e) => handleSingleFullNameChange(e.target.value)}
+        className={`h-9 text-xs w-full ${isFieldError("name") ? "border-destructive ring-1 ring-destructive" : ""}`}
+        placeholder="First Father Grandfather" 
+      />
+      {errors.name && <p className="text-destructive text-[10px] mt-1">{errors.name}</p>}
+    </div>
 
-                    <div>
-                      <Label htmlFor="father_name">Father's Name *</Label>
-                      <Input
-                        id="father_name"
-                        name="father_name"
-                        value={formData.father_name}
-                        onChange={handleInputChange}
-                        className={`mt-1.5 ${isFieldError("father_name") ? "border-destructive ring-1 ring-destructive" : ""}`}
-                        placeholder="Enter father's name"
-                      />
-                      {errors.father_name && (
-                        <p className="text-destructive text-xs mt-1 flex items-center gap-1">
-                          <AlertCircle className="h-3 w-3" /> {errors.father_name}
-                        </p>
-                      )}
-                    </div>
+    {/* Gender */}
+    <div className="md:col-span-2 space-y-1.5">
+      <Label className="text-xs font-medium">Gender *</Label>
+      <Select value={formData.gender} onValueChange={handleGenderChange}>
+        <SelectTrigger className="h-9 text-xs w-full">
+          <SelectValue placeholder="Select" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="male">Male</SelectItem>
+          <SelectItem value="female">Female</SelectItem>
+        </SelectContent>
+      </Select>
+    </div>
 
-                    <div>
-                      <Label htmlFor="grandfather_name">Grandfather's Name *</Label>
-                      <Input
-                        id="grandfather_name"
-                        name="grandfather_name"
-                        value={formData.grandfather_name}
-                        onChange={handleInputChange}
-                        className={`mt-1.5 ${isFieldError("grandfather_name") ? "border-destructive ring-1 ring-destructive" : ""}`}
-                        placeholder="Enter grandfather's name"
-                      />
-                      {errors.grandfather_name && (
-                        <p className="text-destructive text-xs mt-1 flex items-center gap-1">
-                          <AlertCircle className="h-3 w-3" /> {errors.grandfather_name}
-                        </p>
-                      )}
-                    </div>
+    {/* Date of Birth with Year/Month Picker */}
+    <div className="md:col-span-3 space-y-1.5">
+      <Label className="text-xs font-medium">Date of Birth</Label>
+      <Popover>
+        <PopoverTrigger asChild>
+          <Button variant="outline" className={cn("h-9 text-xs w-full justify-start font-normal", !formData.date_of_birth && "text-muted-foreground")}>
+            <CalendarIcon className="mr-2 h-4 w-4" />
+            {formData.date_of_birth ? format(new Date(formData.date_of_birth), "MMM d, yyyy") : "Select Date"}
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-auto p-0" align="start">
+          <Calendar 
+            mode="single" 
+            selected={formData.date_of_birth ? new Date(formData.date_of_birth) : undefined}
+            onSelect={(date) => setFormData((prev) => ({ ...prev, date_of_birth: date ? format(date, "yyyy-MM-dd") : "" }))}
+            captionLayout="dropdown"
+            startMonth={new Date(1990, 0)}
+            endMonth={new Date()}
+            hideNavigation
+            disabled={(date) => date > new Date()}
+            className="rounded-md border"
+          />
+        </PopoverContent>
+      </Popover>
+    </div>
 
-                    {/* Gender */}
-                    <div>
-                      <Label>Gender *</Label>
-                      <Select value={formData.gender} onValueChange={handleGenderChange}>
-                        <SelectTrigger
-                          className={`mt-1.5 ${isFieldError("gender") ? "border-destructive ring-1 ring-destructive" : ""}`}
-                        >
-                          <SelectValue placeholder="Select gender" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="male">Male</SelectItem>
-                          <SelectItem value="female">Female</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      {errors.gender && (
-                        <p className="text-destructive text-xs mt-1 flex items-center gap-1">
-                          <AlertCircle className="h-3 w-3" /> {errors.gender}
-                        </p>
-                      )}
-                    </div>
+    {/* Phone */}
+    <div className="md:col-span-2 space-y-1.5">
+      <Label htmlFor="phone" className="text-xs font-medium">Phone</Label>
+      <Input id="phone" name="phone" value={formData.phone} onChange={handleInputChange} className="h-9 text-xs w-full" placeholder="09..." />
+    </div>
+  </div>
 
-                    {/* Date of Birth */}
-                    <div>
-                      <Label htmlFor="date_of_birth">Date of Birth</Label>
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <Button
-                            variant="outline"
-                            className={cn(
-                              "mt-1.5 w-full justify-start text-left font-normal",
-                              !formData.date_of_birth && "text-muted-foreground"
-                            )}
-                          >
-                            <CalendarIcon className="mr-2 h-4 w-4" />
-                            {formData.date_of_birth
-                              ? format(new Date(formData.date_of_birth), "PPP")
-                              : <span>Select date</span>}
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0" align="start">
-                          <Calendar
-                            mode="single"
-                            selected={formData.date_of_birth ? new Date(formData.date_of_birth) : undefined}
-                            onSelect={(date) =>
-                              setFormData((prev) => ({
-                                ...prev,
-                                date_of_birth: date ? format(date, "yyyy-MM-dd") : "",
-                              }))
-                            }
-                            captionLayout="dropdown-buttons"
-                            fromYear={1990}
-                            toYear={new Date().getFullYear()}
-                            disabled={(date) => date > new Date()}
-                          />
-                        </PopoverContent>
-                      </Popover>
-                    </div>
+  {/* Row 2: Academic & Contact Info */}
+  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+    <div className="space-y-1.5">
+      <Label className="text-xs font-medium">Grade *</Label>
+      <Select value={formData.grade_id} onValueChange={handleGradeChange}>
+        <SelectTrigger className="h-9 text-xs w-full">
+          <SelectValue placeholder="Select" />
+        </SelectTrigger>
+        <SelectContent>
+          {grades.map((grade) => <SelectItem key={grade.id} value={grade.id.toString()}>{grade.grade_name}</SelectItem>)}
+        </SelectContent>
+      </Select>
+    </div>
 
-                    {/* Phone */}
-                    <div>
-                      <Label htmlFor="phone">Student Phone</Label>
-                      <Input
-                        id="phone"
-                        name="phone"
-                        value={formData.phone}
-                        onChange={handleInputChange}
-                        className="mt-1.5"
-                        placeholder="09xxxxxxxx"
-                      />
-                    </div>
+    {isGrade11or12 && (
+      <div className="space-y-1.5">
+        <Label className="text-xs font-medium">Stream *</Label>
+        <Select value={formData.stream} onValueChange={handleStreamChange}>
+          <SelectTrigger className="h-9 text-xs w-full">
+            <SelectValue placeholder="Stream" />
+          </SelectTrigger>
+          <SelectContent>
+            {streamOptions.map((stream) => <SelectItem key={stream} value={stream}>{stream}</SelectItem>)}
+          </SelectContent>
+        </Select>
+      </div>
+    )}
 
-                    {/* Email */}
-                    <div>
-                      <Label htmlFor="email">Email (Optional)</Label>
-                      <Input
-                        id="email"
-                        name="email"
-                        type="email"
-                        value={formData.email}
-                        onChange={handleInputChange}
-                        className={`mt-1.5 ${isFieldError("email") ? "border-destructive ring-1 ring-destructive" : ""}`}
-                        placeholder="Enter email"
-                      />
-                      {errors.email && (
-                        <p className="text-destructive text-xs mt-1 flex items-center gap-1">
-                          <AlertCircle className="h-3 w-3" /> {errors.email}
-                        </p>
-                      )}
-                    </div>
+    <div className="space-y-1.5">
+      <Label className="text-xs font-medium">Section *</Label>
+      <Select value={formData.section} onValueChange={handleSectionChange} disabled={!formData.grade_id}>
+        <SelectTrigger className="h-9 text-xs w-full">
+          <SelectValue placeholder="Section" />
+        </SelectTrigger>
+        <SelectContent>
+          {getSectionsForGrade(formData.grade_id, isGrade11or12 ? formData.stream : undefined).map((s) => (
+            <SelectItem key={s.id} value={s.section_name}>Section {s.section_name}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
 
-                    {/* Address */}
-                    <div className="sm:col-span-2 lg:col-span-3">
-                      <Label htmlFor="address">Address</Label>
-                      <Input
-                        id="address"
-                        name="address"
-                        value={formData.address}
-                        onChange={handleInputChange}
-                        className="mt-1.5"
-                        placeholder="City, kebele, house no..."
-                      />
-                    </div>
+    <div className="space-y-1.5">
+      <Label htmlFor="parent_name" className="text-xs font-medium">Parent Name</Label>
+      <Input id="parent_name" name="parent_name" value={formData.parent_name} onChange={handleInputChange} className="h-9 text-xs w-full" placeholder="Parent Name" />
+    </div>
 
-                    {/* Parent / Guardian */}
-                    <div>
-                      <Label htmlFor="parent_name">Parent / Guardian Name</Label>
-                      <Input
-                        id="parent_name"
-                        name="parent_name"
-                        value={formData.parent_name}
-                        onChange={handleInputChange}
-                        className="mt-1.5"
-                        placeholder="Parent full name"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="parent_phone">Parent Phone</Label>
-                      <Input
-                        id="parent_phone"
-                        name="parent_phone"
-                        value={formData.parent_phone}
-                        onChange={handleInputChange}
-                        className="mt-1.5"
-                        placeholder="09xxxxxxxx"
-                      />
-                    </div>
+    <div className="space-y-1.5">
+      <Label htmlFor="parent_phone" className="text-xs font-medium">Parent Phone</Label>
+      <Input id="parent_phone" name="parent_phone" value={formData.parent_phone} onChange={handleInputChange} className="h-9 text-xs w-full" placeholder="09..." />
+    </div>
 
-                  </div>
-                </div>
+    <div className="space-y-1.5">
+      <Label htmlFor="address" className="text-xs font-medium">Home Address</Label>
+      <Input id="address" name="address" value={formData.address} onChange={handleInputChange} className="h-9 text-xs w-full" placeholder="City, Kebele" />
+    </div>
+  </div>
 
-                {/* Academic Information */}
-                <div className="space-y-4">
-                  <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-                    Academic Information
-                  </h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {/* Grade */}
-                    <div>
-                      <Label>Grade *</Label>
-                      <Select value={formData.grade_id} onValueChange={handleGradeChange} disabled={gradesLoading}>
-                        <SelectTrigger
-                          className={`mt-1.5 ${isFieldError("grade_id") ? "border-destructive ring-1 ring-destructive" : ""}`}
-                        >
-                          <SelectValue placeholder={gradesLoading ? "Loading..." : "Select grade"} />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {grades.map((grade) => (
-                            <SelectItem key={grade.id} value={grade.id.toString()}>
-                              {grade.grade_name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      {errors.grade_id && (
-                        <p className="text-destructive text-xs mt-1 flex items-center gap-1">
-                          <AlertCircle className="h-3 w-3" /> {errors.grade_id}
-                        </p>
-                      )}
-                    </div>
-
-                    {/* Section */}
-                    <div>
-                      <Label>Section *</Label>
-                      <Select value={formData.section} onValueChange={handleSectionChange} disabled={!formData.grade_id || (isGrade11or12 && !formData.stream)}>
-                        <SelectTrigger
-                          className={`mt-1.5 ${isFieldError("section") ? "border-destructive ring-1 ring-destructive" : ""}`}
-                        >
-                          <SelectValue
-                            placeholder={
-                              getSectionsForGrade(formData.grade_id, isGrade11or12 ? formData.stream || undefined : undefined).length > 0
-                                ? "Select section"
-                                : isGrade11or12 && !formData.stream
-                                ? "Select stream first"
-                                : "No sections assigned to this grade"
-                            }
-                          />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {getSectionsForGrade(formData.grade_id, isGrade11or12 ? formData.stream || undefined : undefined).length > 0 ? (
-                            getSectionsForGrade(formData.grade_id, isGrade11or12 ? formData.stream || undefined : undefined).map((section) => (
-                              <SelectItem key={section.id} value={section.section_name}>
-                                Section {section.section_name}
-                              </SelectItem>
-                            ))
-                          ) : (
-                            <div className="text-center py-2 text-sm text-muted-foreground">
-                              No sections assigned to this grade
-                            </div>
-                          )}
-                        </SelectContent>
-                      </Select>
-                      {errors.section && (
-                        <p className="text-destructive text-xs mt-1 flex items-center gap-1">
-                          <AlertCircle className="h-3 w-3" /> {errors.section}
-                        </p>
-                      )}
-                      {formData.grade_id && getSectionsForGrade(formData.grade_id, isGrade11or12 ? formData.stream || undefined : undefined).length === 0 && (
-                        <p className="text-xs text-amber-600 mt-1">
-                          {isGrade11or12 && !formData.stream ? "Select stream to see sections." : "Please assign sections to this grade in Grade Management."}
-                        </p>
-                      )}
-                    </div>
-
-                    {/* Stream (only for Grade 11/12) */}
-                    {isGrade11or12 && (
-                      <div>
-                        <Label>Stream *</Label>
-                        <Select value={formData.stream} onValueChange={handleStreamChange}>
-                          <SelectTrigger
-                            className={`mt-1.5 ${isFieldError("stream") ? "border-destructive ring-1 ring-destructive" : ""}`}
-                          >
-                            <SelectValue placeholder="Select stream" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {streamOptions.map((stream) => (
-                              <SelectItem key={stream} value={stream}>
-                                {stream}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        {errors.stream && (
-                          <p className="text-destructive text-xs mt-1 flex items-center gap-1">
-                            <AlertCircle className="h-3 w-3" /> {errors.stream}
-                          </p>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div className="flex justify-end">
-                  <Button type="submit" disabled={loading || !formData.grade_id || (isGrade11or12 && !formData.stream) || getSectionsForGrade(formData.grade_id, isGrade11or12 ? formData.stream || undefined : undefined).length === 0} className="gap-2">
-                    {loading ? (
-                      <>
-                        <RefreshCw className="h-4 w-4 animate-spin" />
-                        Registering...
-                      </>
-                    ) : (
-                      <>
-                        <UserPlus className="h-4 w-4" />
-                        Register Student
-                      </>
-                    )}
-                  </Button>
-                </div>
-              </form>
+  {/* Action Button */}
+  <div className="flex justify-end pt-6 border-t">
+    <Button 
+      type="submit" 
+      disabled={loading || !formData.grade_id}
+      className="gap-2 h-10 px-12 text-sm font-semibold shadow-md transition-all hover:translate-y-[-1px]"
+    >
+      {loading ? <RefreshCw className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}
+      Register Student
+    </Button>
+  </div>
+</form>
             </CardContent>
           </Card>
         </TabsContent>
 
-        {/* Bulk Import Tab */}
+        {/* Bulk Import Tab - Compact table layout */}
         <TabsContent value="bulk">
-          <Card>
-            <CardHeader>
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <Card className="overflow-hidden">
+            <CardHeader className="py-3 px-4 sm:px-5">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center justify-between">
                 <div>
-                  <CardTitle>Bulk Import Students</CardTitle>
-                  <CardDescription>Add multiple students at once or import from CSV file</CardDescription>
+                  <CardTitle className="text-base sm:text-lg">Bulk Import Students</CardTitle>
+                  <CardDescription className="text-xs">Add multiple students or import from CSV</CardDescription>
                 </div>
-                <div className="flex flex-wrap gap-2">
-                  <Button variant="outline" size="sm" onClick={downloadTemplate} className="gap-2 bg-transparent">
-                    <Download className="h-4 w-4" />
-                    Download Template
+                <div className="flex flex-wrap gap-1.5">
+                  <Button variant="outline" size="sm" onClick={downloadTemplate} className="gap-1.5 h-8 text-xs">
+                    <Download className="h-3.5 w-3.5" />
+                    Template
                   </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={isImporting}
-                    className="gap-2"
-                  >
-                    <Upload className="h-4 w-4" />
+                  <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} disabled={isImporting} className="gap-1.5 h-8 text-xs">
+                    <Upload className="h-3.5 w-3.5" />
                     Import CSV
                   </Button>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept=".csv,.txt,.xlsx,.xls"
-                    onChange={handleFileImport}
-                    className="hidden"
-                  />
+                  <input ref={fileInputRef} type="file" accept=".csv,.txt,.xlsx,.xls" onChange={handleFileImport} className="hidden" />
                 </div>
               </div>
             </CardHeader>
-            <CardContent className="space-y-6">
-              {/* Import Progress */}
+            <CardContent className="px-4 sm:px-5 pb-4 space-y-3">
               {isImporting && (
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between text-sm">
-                    <span>Importing students...</span>
+                <div className="space-y-1.5">
+                  <div className="flex justify-between text-xs">
+                    <span>Importing...</span>
                     <span>{importProgress}%</span>
                   </div>
-                  <Progress value={importProgress} className="h-2" />
+                  <Progress value={importProgress} className="h-1.5" />
                 </div>
               )}
 
-              {/* Grade, Section, Stream Selection */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 p-4 bg-muted/50 rounded-lg">
-                <div>
-                  <Label>Grade *</Label>
-                  <Select
-                    value={bulkGradeId}
-                    onValueChange={(v) => {
-                      setBulkGradeId(v)
-                      setBulkSection("")
-                      setBulkStream("")
-                    }}
-                  >
-                    <SelectTrigger className="mt-1.5">
-                      <SelectValue placeholder="Select grade" />
+              {/* Grade, Section, Stream - compact row */}
+              <div className="flex flex-wrap gap-2 sm:gap-3 p-2.5 sm:p-3 bg-muted/50 dark:bg-muted/20 rounded-md">
+                <div className="min-w-[100px] flex-1 sm:flex-initial">
+                  <Label className="text-xs">Grade *</Label>
+                  <Select value={bulkGradeId} onValueChange={(v) => { setBulkGradeId(v); setBulkSection(""); setBulkStream("") }}>
+                    <SelectTrigger className="h-8 text-xs mt-0.5">
+                      <SelectValue placeholder="Select" />
                     </SelectTrigger>
                     <SelectContent>
-                      {grades.map((grade) => (
-                        <SelectItem key={grade.id} value={grade.id.toString()}>
-                          {grade.grade_name}
-                        </SelectItem>
-                      ))}
+                      {grades.map((g) => <SelectItem key={g.id} value={g.id.toString()}>{g.grade_name}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
-                <div>
-                  <Label>Section *</Label>
+                <div className="min-w-[100px] flex-1 sm:flex-initial">
+                  <Label className="text-xs">Section *</Label>
                   <Select value={bulkSection} onValueChange={setBulkSection} disabled={!bulkGradeId || (isBulkGrade11or12 && !bulkStream)}>
-                    <SelectTrigger className="mt-1.5">
-                      <SelectValue placeholder={getSectionsForGrade(bulkGradeId, isBulkGrade11or12 ? bulkStream || undefined : undefined).length > 0 ? "Select section" : isBulkGrade11or12 && !bulkStream ? "Select stream first" : "No sections assigned"} />
+                    <SelectTrigger className="h-8 text-xs mt-0.5">
+                      <SelectValue placeholder={getSectionsForGrade(bulkGradeId, isBulkGrade11or12 ? bulkStream || undefined : undefined).length > 0 ? "Select" : isBulkGrade11or12 && !bulkStream ? "Stream first" : "No sections"} />
                     </SelectTrigger>
                     <SelectContent>
                       {getSectionsForGrade(bulkGradeId, isBulkGrade11or12 ? bulkStream || undefined : undefined).length > 0 ? (
-                        getSectionsForGrade(bulkGradeId, isBulkGrade11or12 ? bulkStream || undefined : undefined).map((section) => (
-                          <SelectItem key={section.id} value={section.section_name}>
-                            Section {section.section_name}
-                          </SelectItem>
+                        getSectionsForGrade(bulkGradeId, isBulkGrade11or12 ? bulkStream || undefined : undefined).map((s) => (
+                          <SelectItem key={s.id} value={s.section_name}>Section {s.section_name}</SelectItem>
                         ))
                       ) : (
-                        <div className="text-center py-2 text-sm text-muted-foreground">
-                          No sections assigned to this grade
-                        </div>
+                        <div className="text-center py-2 text-xs text-muted-foreground">No sections</div>
                       )}
                     </SelectContent>
                   </Select>
                   {bulkGradeId && getSectionsForGrade(bulkGradeId, isBulkGrade11or12 ? bulkStream || undefined : undefined).length === 0 && (
-                    <p className="text-xs text-amber-600 mt-1">
-                      {isBulkGrade11or12 && !bulkStream ? "Select stream to see sections." : "Please assign sections to this grade in Grade Management."}
-                    </p>
+                    <p className="text-[10px] text-amber-600 mt-0.5">{isBulkGrade11or12 && !bulkStream ? "Select stream first." : "Assign sections in Grade Management."}</p>
                   )}
                 </div>
                 {isBulkGrade11or12 && (
-                  <div>
-                    <Label>Stream *</Label>
+                  <div className="min-w-[100px] flex-1 sm:flex-initial">
+                    <Label className="text-xs">Stream *</Label>
                     <Select value={bulkStream} onValueChange={setBulkStream}>
-                      <SelectTrigger className="mt-1.5">
-                        <SelectValue placeholder="Select stream" />
+                      <SelectTrigger className="h-8 text-xs mt-0.5">
+                        <SelectValue placeholder="Select" />
                       </SelectTrigger>
                       <SelectContent>
-                        {streamOptions.map((stream) => (
-                          <SelectItem key={stream} value={stream}>
-                            {stream}
-                          </SelectItem>
-                        ))}
+                        {streamOptions.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
                       </SelectContent>
                     </Select>
                   </div>
                 )}
               </div>
 
-              {/* Bulk Actions */}
-              <div className="flex flex-wrap gap-2">
-                <Button variant="outline" size="sm" onClick={addBulkRow} className="gap-2 bg-transparent">
-                  <Plus className="h-4 w-4" />
-                  Add Row
+              {/* Bulk Actions - compact */}
+              <div className="flex flex-wrap gap-1.5">
+                <Button variant="outline" size="sm" onClick={addBulkRow} className="gap-1 h-7 text-xs">
+                  <Plus className="h-3 w-3" /> Add
                 </Button>
-                <Button variant="outline" size="sm" onClick={() => addMultipleBulkRows(5)} className="gap-2">
-                  <Plus className="h-4 w-4" />
-                  Add 5 Rows
-                </Button>
-                <Button variant="outline" size="sm" onClick={() => addMultipleBulkRows(10)} className="gap-2">
-                  <Plus className="h-4 w-4" />
-                  Add 10 Rows
-                </Button>
-                <Button variant="outline" size="sm" onClick={regenerateBulkIds} className="gap-2 bg-transparent">
-                  <RefreshCw className="h-4 w-4" />
-                  Regenerate IDs
+                <Button variant="outline" size="sm" onClick={() => addMultipleBulkRows(5)} className="h-7 text-xs">+5</Button>
+                <Button variant="outline" size="sm" onClick={() => addMultipleBulkRows(10)} className="h-7 text-xs">+10</Button>
+                <Button variant="outline" size="sm" onClick={regenerateBulkIds} className="gap-1 h-7 text-xs">
+                  <RefreshCw className="h-3 w-3" /> Regenerate IDs
                 </Button>
               </div>
 
-              {/* Student List */}
-              <ScrollArea className="h-[400px] border rounded-lg">
-                <div className="p-4 space-y-4">
-                  {bulkStudents.map((student, index) => (
-                    <div
-                      key={student.id}
-                      className={`p-4 border rounded-lg space-y-3 ${
-                        bulkDuplicateErrors[student.id] ? "border-amber-500 bg-amber-50" : ""
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm font-medium">Student #{index + 1}</span>
-                        <div className="flex items-center gap-2">
-                          <code className="text-xs bg-muted px-2 py-1 rounded">{student.student_id}</code>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => removeBulkRow(student.id)}
-                            className="h-8 w-8 text-destructive"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
+              {/* Student table - normal table with header and input cells */}
+              {/* Wrapper to control the dynamic height and scroll trigger after ~10 rows */}
+<div className="border rounded-md overflow-hidden bg-background">
+  <div className="overflow-auto max-h-[440px] w-full"> 
+    <table className="w-full border-collapse text-xs min-w-[800px] table-fixed">
+      {/* Fixed Header with distinct background */}
+      <thead className="sticky top-0 z-30 bg-muted/95 backdrop-blur-sm border-b">
+        <tr>
+          <th className="text-left p-2.5 font-semibold w-[110px] text-muted-foreground">Student ID</th>
+          <th className="text-left p-2.5 font-semibold min-w-[200px] text-muted-foreground">Full Name *</th>
+          <th className="text-left p-2.5 font-semibold w-[90px] text-muted-foreground">Gender *</th>
+          <th className="text-left p-2.5 font-semibold min-w-[150px] text-muted-foreground">Email</th>
+          <th className="text-left p-2.5 font-semibold w-[120px] text-muted-foreground">Phone</th>
+          <th className="text-left p-2.5 font-semibold min-w-[130px] text-muted-foreground">Parent</th>
+          <th className="text-left p-2.5 font-semibold w-[100px] text-muted-foreground">DOB</th>
+          <th className="text-left p-2.5 font-semibold min-w-[130px] text-muted-foreground">Address</th>
+          <th className="w-12 p-2.5"></th>
+        </tr>
+      </thead>
 
-                      {bulkDuplicateErrors[student.id] && (
-                        <div className="flex items-center gap-2 text-amber-700 text-sm">
-                          <AlertTriangle className="h-4 w-4" />
-                          {bulkDuplicateErrors[student.id]}
-                        </div>
-                      )}
+      {/* Table Body with white/transparent background and horizontal lines */}
+      <tbody className="bg-background">
+        {bulkStudents.map((student, index) => (
+          <tr
+            key={student.id}
+            className={cn(
+              "border-b last:border-b-0 hover:bg-muted/20 transition-colors group",
+              bulkDuplicateErrors[student.id] && "bg-amber-50/50 dark:bg-amber-950/20"
+            )}
+          >
+            <td className="p-0 border-r last:border-r-0">
+              <Input 
+                value={student.student_id} 
+                disabled 
+                className="h-10 w-full border-0 bg-muted/30 text-xs font-mono shadow-none rounded-none cursor-not-allowed" 
+              />
+            </td>
+            <td className="p-0 border-r last:border-r-0">
+              <Input
+                value={getFullName(student)}
+                onChange={(e) => handleBulkFullNameChange(student.id, e.target.value)}
+                onPaste={(e) => handlePaste(e, index, "name")}
+                className={`h-10 w-full border-0 bg-transparent text-xs shadow-none focus-visible:ring-1 rounded-none ${bulkErrors[student.id]?.name || bulkDuplicateErrors[student.id] ? "ring-1 ring-destructive" : ""}`}
+                placeholder="Name Father Grandfather"
+              />
+            </td>
+            <td className="p-0 border-r last:border-r-0">
+              <Select value={student.gender || "__empty__"} onValueChange={(v) => handleBulkInputChange(student.id, "gender", v === "__empty__" ? "" : v)}>
+                <SelectTrigger className="h-10 w-full border-0 bg-transparent text-xs shadow-none focus:ring-1 rounded-none">
+                  <SelectValue placeholder="Select" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__empty__">—</SelectItem>
+                  <SelectItem value="male">Male</SelectItem>
+                  <SelectItem value="female">Female</SelectItem>
+                </SelectContent>
+              </Select>
+            </td>
+            <td className="p-0 border-r last:border-r-0">
+              <Input 
+                value={student.email} 
+                onChange={(e) => handleBulkInputChange(student.id, "email", e.target.value)}
+                className="h-10 w-full border-0 bg-transparent text-xs shadow-none focus-visible:ring-1 rounded-none" 
+                placeholder="Email" 
+              />
+            </td>
+            <td className="p-0 border-r last:border-r-0">
+              <Input 
+                value={student.phone} 
+                onChange={(e) => handleBulkInputChange(student.id, "phone", e.target.value)}
+                className="h-10 w-full border-0 bg-transparent text-xs shadow-none focus-visible:ring-1 rounded-none" 
+                placeholder="+251..." 
+              />
+            </td>
+            <td className="p-0 border-r last:border-r-0">
+              <Input 
+                value={student.parent_name} 
+                onChange={(e) => handleBulkInputChange(student.id, "parent_name", e.target.value)}
+                className="h-10 w-full border-0 bg-transparent text-xs shadow-none focus-visible:ring-1 rounded-none" 
+                placeholder="Parent Name" 
+              />
+            </td>
+            <td className="p-0 border-r last:border-r-0 px-1">
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="ghost" className="h-9 w-full justify-start text-xs font-normal">
+                    <CalendarIcon className="mr-2 h-3 w-3" />
+                    {student.date_of_birth ? format(new Date(student.date_of_birth), "MM/dd/yy") : "Select"}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar 
+                    mode="single" 
+                    selected={student.date_of_birth ? new Date(student.date_of_birth) : undefined}
+                    onSelect={(date) => handleBulkInputChange(student.id, "date_of_birth", date ? format(date, "yyyy-MM-dd") : "")}
+                    captionLayout="dropdown"
+                    startMonth={new Date(1990, 0)}
+                    endMonth={new Date()}
+                    hideNavigation
+                    disabled={(date) => date > new Date()}
+                  />
+                </PopoverContent>
+              </Popover>
+            </td>
+            <td className="p-0 border-r last:border-r-0">
+              <Input 
+                value={student.address} 
+                onChange={(e) => handleBulkInputChange(student.id, "address", e.target.value)}
+                className="h-10 w-full border-0 bg-transparent text-xs shadow-none focus-visible:ring-1 rounded-none" 
+                placeholder="Address" 
+              />
+            </td>
+            <td className="p-1 text-center sticky right-0 z-20 bg-background border-l group-hover:bg-muted/50 transition-colors">
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                onClick={() => removeBulkRow(student.id)} 
+                className="h-8 w-8 text-destructive hover:bg-destructive/10"
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+</div>
 
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                        <div>
-                          <Label className="text-xs">Name *</Label>
-                          <Input
-                            value={student.name}
-                            onChange={(e) => handleBulkInputChange(student.id, "name", e.target.value)}
-                            onPaste={(e) => handlePaste(e, index, "name")}
-                            className={`mt-1 ${bulkErrors[student.id]?.name ? "border-destructive" : ""}`}
-                            placeholder="Name"
-                          />
-                        </div>
-                        <div>
-                          <Label className="text-xs">Father's Name *</Label>
-                          <Input
-                            value={student.father_name}
-                            onChange={(e) => handleBulkInputChange(student.id, "father_name", e.target.value)}
-                            className={`mt-1 ${bulkErrors[student.id]?.father_name ? "border-destructive" : ""}`}
-                            placeholder="Father's name"
-                          />
-                        </div>
-                        <div>
-                          <Label className="text-xs">Grandfather's Name *</Label>
-                          <Input
-                            value={student.grandfather_name}
-                            onChange={(e) => handleBulkInputChange(student.id, "grandfather_name", e.target.value)}
-                            className={`mt-1 ${bulkErrors[student.id]?.grandfather_name ? "border-destructive" : ""}`}
-                            placeholder="Grandfather's name"
-                          />
-                        </div>
-                        <div>
-                          <Label className="text-xs">Gender *</Label>
-                          <Select
-                            value={student.gender}
-                            onValueChange={(v) => handleBulkInputChange(student.id, "gender", v)}
-                          >
-                            <SelectTrigger
-                              className={`mt-1 ${bulkErrors[student.id]?.gender ? "border-destructive" : ""}`}
-                            >
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="male">Male</SelectItem>
-                              <SelectItem value="female">Female</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div>
-                          <Label className="text-xs">Email</Label>
-                          <Input
-                            value={student.email}
-                            onChange={(e) => handleBulkInputChange(student.id, "email", e.target.value)}
-                            className={`mt-1 ${bulkErrors[student.id]?.email ? "border-destructive" : ""}`}
-                            placeholder="Email (optional)"
-                          />
-                        </div>
-                        <div>
-                          <Label className="text-xs">Phone</Label>
-                          <Input
-                            value={student.phone}
-                            onChange={(e) => handleBulkInputChange(student.id, "phone", e.target.value)}
-                            className="mt-1"
-                            placeholder="09xxxxxxxx"
-                          />
-                        </div>
-                        <div>
-                          <Label className="text-xs">Parent Name</Label>
-                          <Input
-                            value={student.parent_name}
-                            onChange={(e) => handleBulkInputChange(student.id, "parent_name", e.target.value)}
-                            className="mt-1"
-                            placeholder="Parent full name"
-                          />
-                        </div>
-                        <div>
-                          <Label className="text-xs">Parent Phone</Label>
-                          <Input
-                            value={student.parent_phone}
-                            onChange={(e) => handleBulkInputChange(student.id, "parent_phone", e.target.value)}
-                            className="mt-1"
-                            placeholder="09xxxxxxxx"
-                          />
-                        </div>
-                        <div>
-                          <Label className="text-xs">Date of Birth</Label>
-                          <Popover>
-                            <PopoverTrigger asChild>
-                              <Button
-                                variant="outline"
-                                className={cn(
-                                  "mt-1 w-full justify-start text-left font-normal",
-                                  !student.date_of_birth && "text-muted-foreground"
-                                )}
-                              >
-                                <CalendarIcon className="mr-2 h-4 w-4" />
-                                {student.date_of_birth
-                                  ? format(new Date(student.date_of_birth), "PPP")
-                                  : <span>Select date</span>}
-                              </Button>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-auto p-0" align="start">
-                              <Calendar
-                                mode="single"
-                                selected={student.date_of_birth ? new Date(student.date_of_birth) : undefined}
-                                onSelect={(date) =>
-                                  handleBulkInputChange(
-                                    student.id,
-                                    "date_of_birth",
-                                    date ? format(date, "yyyy-MM-dd") : ""
-                                  )
-                                }
-                                captionLayout="dropdown-buttons"
-                                fromYear={1990}
-                                toYear={new Date().getFullYear()}
-                                disabled={(date) => date > new Date()}
-                              />
-                            </PopoverContent>
-                          </Popover>
-                        </div>
-                        <div className="sm:col-span-2">
-                          <Label className="text-xs">Address</Label>
-                          <Input
-                            value={student.address}
-                            onChange={(e) => handleBulkInputChange(student.id, "address", e.target.value)}
-                            className="mt-1"
-                            placeholder="Address"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </ScrollArea>
-
-              {/* Submit */}
-              <div className="flex items-center justify-between">
-                <p className="text-sm text-muted-foreground">{bulkStudents.length} student(s) ready to register</p>
-                <Button onClick={handleBulkSubmit} disabled={bulkLoading || !bulkGradeId || (isBulkGrade11or12 && !bulkStream) || getSectionsForGrade(bulkGradeId, isBulkGrade11or12 ? bulkStream || undefined : undefined).length === 0} className="gap-2">
-                  {bulkLoading ? (
-                    <>
-                      <RefreshCw className="h-4 w-4 animate-spin" />
-                      Registering...
-                    </>
-                  ) : (
-                    <>
-                      <Users className="h-4 w-4" />
-                      Register All Students
-                    </>
-                  )}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1">
+                <p className="text-xs text-muted-foreground">{bulkStudents.length} student(s) ready</p>
+                <Button onClick={handleBulkSubmit} disabled={bulkLoading || !bulkGradeId || (isBulkGrade11or12 && !bulkStream) || getSectionsForGrade(bulkGradeId, isBulkGrade11or12 ? bulkStream || undefined : undefined).length === 0}
+                  className="gap-1.5 h-8 text-xs">
+                  {bulkLoading ? <><RefreshCw className="h-3.5 w-3.5 animate-spin" />Registering...</> : <><Users className="h-3.5 w-3.5" />Register All</>}
                 </Button>
               </div>
             </CardContent>
           </Card>
         </TabsContent>
       </Tabs>
+      </div>
 
       {/* ID Settings Dialog */}
       <Dialog open={showIdSettings} onOpenChange={setShowIdSettings}>
