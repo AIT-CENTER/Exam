@@ -29,6 +29,16 @@ const PAGE_KEYS: string[] = [
   "exams_page",
 ];
 
+// Pages restricted to super_admin only (hidden for admin users)
+const SUPER_ADMIN_ONLY_PAGES = [
+  "dashboard_home",
+  "analytics",
+  "settings_system",
+  "teachers_page",
+  "teachers_create",
+  "exams_page",
+];
+
 async function getSupabaseServer() {
   const cookieStore = await cookies();
   return createServerClient(
@@ -110,13 +120,16 @@ export async function GET() {
     }
 
     const map: Record<string, boolean> = {};
+    
+    // Start with defaults: super_admin_only pages are hidden, others are visible
+    for (const pageKey of PAGE_KEYS) {
+      map[pageKey] = !SUPER_ADMIN_ONLY_PAGES.includes(pageKey);
+    }
+    
+    // Override with database permissions if they exist
     for (const row of perms ?? []) {
       if (!row || !row.page_key) continue;
       map[row.page_key as string] = Boolean(row.allowed);
-    }
-    // Promotions: admin may upgrade students only if super admin has permitted it (default false)
-    if (map["students_promotions"] === undefined) {
-      map["students_promotions"] = false;
     }
 
     return NextResponse.json({

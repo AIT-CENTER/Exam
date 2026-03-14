@@ -253,8 +253,8 @@ export default function CreateAdminPage() {
 
           <p className="text-center text-sm text-muted-foreground mt-4">
             Already have an account?{" "}
-            <Link href="/auth/alpha" className="text-primary font-medium hover:underline">
-              Sign in
+            <Link href="/auth/alpha" className="text-slate-900 dark:text-slate-100 font-semibold hover:underline">
+              Sign in here
             </Link>
           </p>
         </CardContent>
