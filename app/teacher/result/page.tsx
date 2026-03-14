@@ -291,6 +291,11 @@ export default function IndividualExamResultsPage() {
   }
 
   const exportToPDF = () => {
+    if (filteredResults.length === 0) {
+      toast.error("No results to export")
+      return
+    }
+
     const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" })
     const pageHeight = doc.internal.pageSize.height
     const pageWidth = doc.internal.pageSize.width
@@ -305,16 +310,15 @@ export default function IndividualExamResultsPage() {
 
       doc.setFontSize(10)
       doc.setFont("helvetica", "normal")
-      doc.text(`Generated: ${format(new Date(), "PPP")} | Total Students: ${paginatedResults.length}`, 14, currentY)
+      doc.text(`Generated: ${format(new Date(), "PPP")}`, 14, currentY)
       currentY += 4
     }
 
     addHeader()
 
-    // Build headers and data
-    const examTitles = allExams.slice(0, 8).map((e) => e.title.substring(0, 8)) // Limit exams shown
-    const headers = ["#", "Student ID", "Full Name", "Section", ...examTitles, "Total"]
-    const columnWidths = [6, 15, 25, 10, ...examTitles.map(() => 10), 10]
+    // Build headers
+    const headers = ["#", "Student ID", "Student Name", "Exam Name", "Subject", "Score", "Gender", "Stream"]
+    const columnWidths = [6, 15, 25, 30, 20, 15, 12, 12]
     const startX = 14
     let colX = startX
 
@@ -327,8 +331,8 @@ export default function IndividualExamResultsPage() {
     headers.forEach((h, i) => {
       const width = columnWidths[i]
       doc.rect(colX, currentY, width, 6, "F")
-      const text = h.substring(0, 6)
-      doc.text(text, colX + width / 2, currentY + 3.5, { align: "center" })
+      const text = h.substring(0, 8)
+      doc.text(text, colX + 1, currentY + 3.5)
       colX += width
     })
 
@@ -337,7 +341,7 @@ export default function IndividualExamResultsPage() {
     doc.setFontSize(7)
 
     // Table data rows
-    paginatedResults.forEach((r, idx) => {
+    filteredResults.forEach((r, idx) => {
       // Check if we need a new page
       if (currentY > pageHeight - 15) {
         doc.addPage()
@@ -353,8 +357,8 @@ export default function IndividualExamResultsPage() {
         headers.forEach((h, i) => {
           const width = columnWidths[i]
           doc.rect(colX, currentY, width, 6, "F")
-          const text = h.substring(0, 6)
-          doc.text(text, colX + width / 2, currentY + 3.5, { align: "center" })
+          const text = h.substring(0, 8)
+          doc.text(text, colX + 1, currentY + 3.5)
           colX += width
         })
         currentY += 6
@@ -371,11 +375,13 @@ export default function IndividualExamResultsPage() {
 
       const rowData = [
         (idx + 1).toString(),
-        r.studentId.substring(0, 10),
-        r.fullName.substring(0, 15),
-        r.section,
-        ...allExams.slice(0, 8).map((e) => (r.examResults[e.id]?.score || 0).toString()),
-        r.totalScore.toString(),
+        r.student_student_id.substring(0, 10),
+        r.student_name.substring(0, 15),
+        r.exam_title.substring(0, 20),
+        r.exam_subject_name.substring(0, 12),
+        `${r.total_marks_obtained}/${r.exam_total_marks}`,
+        r.student_gender.substring(0, 6),
+        r.student_stream.substring(0, 8),
       ]
 
       colX = startX
@@ -383,8 +389,7 @@ export default function IndividualExamResultsPage() {
       rowData.forEach((cell, i) => {
         const width = columnWidths[i]
         doc.rect(colX, currentY, width, 5, "F")
-        const isNumber = i > 3
-        doc.text(cell, colX + (isNumber ? width - 1 : 1), currentY + 3, { align: isNumber ? "right" : "left" })
+        doc.text(cell, colX + 1, currentY + 3)
         colX += width
       })
 
@@ -392,103 +397,6 @@ export default function IndividualExamResultsPage() {
     })
 
     doc.save(`exam_results_${format(new Date(), "yyyy-MM-dd")}.pdf`)
-    toast.success("Exported to PDF successfully")
-  }
-
-    const doc = new jsPDF({
-      orientation: 'portrait',
-      unit: 'mm',
-      format: 'a4'
-    })
-
-    // Add header with styling
-    doc.setFillColor(79, 70, 229)
-    doc.roundedRect(10, 10, 190, 20, 3, 3, 'F')
-    doc.setTextColor(255, 255, 255)
-    doc.setFontSize(18)
-    doc.setFont("helvetica", "bold")
-    doc.text("Individual Exam Results Report", 105, 22, { align: "center" })
-
-    // Add report details
-    doc.setTextColor(50, 50, 50)
-    doc.setFontSize(10)
-    doc.setFont("helvetica", "normal")
-    doc.text(`Generated: ${format(new Date(), "PPPP")}`, 15, 35)
-    doc.text(`Total Students: ${filteredResults.length}`, 15, 40)
-    doc.text(`Average Score: ${stats.averageScore}%`, 15, 45)
-
-    // Add teacher info if available
-    const teacher = getTeacherDataFromCookie()
-    if (teacher) {
-      doc.text(`Teacher: ${teacher.fullName || teacher.username}`, 15, 50)
-    }
-
-    // Create table with only required columns
-    const headers = [
-      ["#", "Student ID", "Student Name", "Exam Name", "Subject", "Score", "Gender", "Stream"]
-    ]
-
-    const tableData = filteredResults.map((r, i) => {
-      return [
-        (i + 1).toString(),
-        r.student_student_id,
-        r.student_name,
-        r.exam_title.substring(0, 25) + (r.exam_title.length > 25 ? '...' : ''),
-        r.exam_subject_name,
-        `${r.total_marks_obtained}/${r.exam_total_marks}`,
-        r.student_gender,
-        r.student_stream
-      ]
-    })
-
-    // Add table with styling
-    autoTable(doc, {
-      head: headers,
-      body: tableData,
-      startY: 60,
-      theme: 'striped',
-      headStyles: {
-        fillColor: [79, 70, 229],
-        textColor: [255, 255, 255],
-        fontSize: 10,
-        fontStyle: 'bold',
-        halign: 'center'
-      },
-      bodyStyles: {
-        fontSize: 9,
-        cellPadding: 3,
-        halign: 'center'
-      },
-      alternateRowStyles: {
-        fillColor: [245, 245, 245]
-      },
-      columnStyles: {
-        0: { cellWidth: 10, halign: 'center' },
-        1: { cellWidth: 25, halign: 'center' },
-        2: { cellWidth: 35, halign: 'left' },
-        3: { cellWidth: 40, halign: 'left' },
-        4: { cellWidth: 25, halign: 'left' },
-        5: { cellWidth: 20, halign: 'center' },
-        6: { cellWidth: 20, halign: 'center' },
-        7: { cellWidth: 20, halign: 'center' }
-      },
-      margin: { left: 10, right: 10 },
-      tableLineColor: [200, 200, 200],
-      tableLineWidth: 0.1,
-      didDrawPage: function (data) {
-        // Add page numbers
-        const pageCount = doc.internal.getNumberOfPages()
-        doc.setFontSize(8)
-        doc.setTextColor(150, 150, 150)
-        doc.text(
-          `Page ${data.pageNumber} of ${pageCount}`,
-          data.settings.margin.left,
-          doc.internal.pageSize.height - 10
-        )
-      }
-    })
-
-    doc.save(`exam_results_${format(new Date(), "yyyy-MM-dd_HH-mm")}.pdf`)
     toast.success("Exported to PDF successfully")
   }
 
