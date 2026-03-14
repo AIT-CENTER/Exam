@@ -265,29 +265,182 @@ export default function ExamResultsPage() {
   }
 
   const exportToPDF = () => {
-    const doc = new jsPDF()
-    doc.setFontSize(16)
-    doc.text("Exam Results Report", 105, 15, { align: "center" })
-    doc.setFontSize(10)
-    doc.text(`Generated: ${format(new Date(), "PPP")}`, 14, 25)
+    if (filteredResults.length === 0) {
+      toast.error("No results to export")
+      return
+    }
 
-    const headers = ["#", "Student ID", "Full Name", "Section", ...allExams.map((e) => e.title), "Total"]
-    const tableData = paginatedResults.map((r, idx) => [
-      idx + 1,
-      r.studentId,
-      r.fullName,
-      r.section,
-      ...allExams.map((e) => r.examResults[e.id]?.score || 0),
-      r.totalScore,
-    ])
-    ;(doc as any).autoTable({
-      head: [headers],
-      body: tableData,
-      startY: 35,
+    const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" })
+    const pageHeight = doc.internal.pageSize.height
+    const pageWidth = doc.internal.pageSize.width
+    let currentY = 12
+
+    // Calculate rankings
+    const uniqueStudents = [...new Map(filteredResults.map(r => [r.studentDatabaseId, r])).values()]
+    const studentRanks: Record<number, number> = {}
+    uniqueStudents.sort((a, b) => b.totalScore - a.totalScore).forEach((s, idx) => {
+      studentRanks[s.studentDatabaseId] = idx + 1
     })
 
-    doc.save("exam_results.pdf")
-    toast.success("Exported to PDF")
+    // Calculate exam counts per student
+    const studentExamCounts: Record<number, number> = {}
+    filteredResults.forEach(r => {
+      studentExamCounts[r.studentDatabaseId] = (studentExamCounts[r.studentDatabaseId] || 0) + 1
+    })
+
+    // Helper function to add header on each page
+    const addHeader = () => {
+      doc.setFontSize(14)
+      doc.setFont("helvetica", "bold")
+      doc.text("Alpha School Individual Exam Results", pageWidth / 2, currentY, { align: "center" })
+      currentY += 6
+
+      doc.setFontSize(10)
+      doc.setFont("helvetica", "normal")
+      doc.text(`Generated: ${format(new Date(), "PPP")}`, 14, currentY)
+      currentY += 4
+    }
+
+    addHeader()
+
+    // Table headers with exam count column
+    const headers = ["#", "Name", "Exams", "Total", "Avg", "Rank"]
+    const columnWidths = [8, 35, 12, 12, 12, 12]
+    const startX = 14
+    let colX = startX
+
+    // Draw header row
+    doc.setFillColor(79, 70, 229)
+    doc.setFont("helvetica", "bold")
+    doc.setFontSize(9)
+    doc.setTextColor(255, 255, 255)
+
+    headers.forEach((h, i) => {
+      const width = columnWidths[i]
+      doc.rect(colX, currentY, width, 6, "F")
+      doc.text(h, colX + width / 2, currentY + 3.5, { align: "center" })
+      colX += width
+    })
+
+    // Add exam columns dynamically
+    const examColumnsStart = colX
+    allExams.forEach((exam) => {
+      const examWidth = 12
+      doc.rect(colX, currentY, examWidth, 6, "F")
+      // Abbreviate exam names
+      const examLabel = exam.title.substring(0, 5)
+      doc.setFontSize(8)
+      doc.text(examLabel, colX + examWidth / 2, currentY + 2.5, { align: "center" })
+      doc.setFontSize(9)
+      colX += examWidth
+    })
+
+    currentY += 6
+    doc.setFont("helvetica", "normal")
+    doc.setFontSize(8)
+
+    // Get unique students for table
+    const studentsToDisplay = uniqueStudents.slice((currentPage - 1) * RESULTS_PER_PAGE, currentPage * RESULTS_PER_PAGE)
+
+    // Table data rows
+    studentsToDisplay.forEach((student, idx) => {
+      // Check if we need a new page
+      if (currentY > pageHeight - 15) {
+        doc.addPage()
+        currentY = 12
+        addHeader()
+
+        // Redraw header row
+        doc.setFillColor(79, 70, 229)
+        doc.setFont("helvetica", "bold")
+        doc.setFontSize(9)
+        doc.setTextColor(255, 255, 255)
+        colX = startX
+        headers.forEach((h, i) => {
+          const width = columnWidths[i]
+          doc.rect(colX, currentY, width, 6, "F")
+          doc.text(h, colX + width / 2, currentY + 3.5, { align: "center" })
+          colX += width
+        })
+        allExams.forEach(() => {
+          const examWidth = 12
+          doc.rect(colX, currentY, examWidth, 6, "F")
+          colX += examWidth
+        })
+        currentY += 6
+        doc.setFont("helvetica", "normal")
+        doc.setFontSize(8)
+      }
+
+      // Alternate row colors
+      if (idx % 2 === 0) {
+        doc.setFillColor(240, 245, 255)
+      } else {
+        doc.setFillColor(255, 255, 255)
+      }
+
+      const examCount = studentExamCounts[student.studentDatabaseId] || 0
+      const avgScore = examCount > 0 ? Math.round(student.totalScore / examCount) : 0
+      const rank = studentRanks[student.studentDatabaseId] || 0
+
+      const rowData = [
+        ((currentPage - 1) * RESULTS_PER_PAGE + idx + 1).toString(),
+        student.fullName.substring(0, 20),
+        examCount.toString(),
+        student.totalScore.toString(),
+        avgScore.toString(),
+        rank.toString(),
+      ]
+
+      colX = startX
+      doc.setTextColor(0, 0, 0)
+      rowData.forEach((cell, i) => {
+        const width = columnWidths[i]
+        doc.rect(colX, currentY, width, 5, "F")
+        const isNumber = i > 0
+        doc.text(cell, colX + (isNumber ? width - 1 : 1), currentY + 3, { align: isNumber ? "right" : "left" })
+        colX += width
+      })
+
+      // Add exam scores for this student
+      allExams.forEach((exam) => {
+        const examWidth = 12
+        doc.rect(colX, currentY, examWidth, 5, "F")
+        const score = student.examResults[exam.id]?.score || 0
+        doc.text(score.toString(), colX + examWidth - 1, currentY + 3, { align: "right" })
+        colX += examWidth
+      })
+
+      currentY += 5
+    })
+
+    // Add summary section at bottom
+    currentY += 5
+    doc.setFont("helvetica", "bold")
+    doc.setFontSize(9)
+    doc.text("Summary Statistics", 14, currentY)
+    currentY += 4
+
+    doc.setFont("helvetica", "normal")
+    doc.setFontSize(8)
+    const summaryData = [
+      `Total Students: ${uniqueStudents.length}`,
+      `Average Score: ${stats.averageScore}%`,
+      `Highest Score: ${stats.highestScore}%`,
+      `Lowest Score: ${stats.lowestScore}%`,
+    ]
+
+    summaryData.forEach((line) => {
+      if (currentY > pageHeight - 15) {
+        doc.addPage()
+        currentY = 15
+      }
+      doc.text(line, 14, currentY)
+      currentY += 4
+    })
+
+    doc.save(`exam_results_individual_${format(new Date(), "yyyy-MM-dd")}.pdf`)
+    toast.success("Exported to PDF successfully")
   }
 
   const exportToExcel = () => {

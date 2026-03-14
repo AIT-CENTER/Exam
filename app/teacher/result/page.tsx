@@ -296,100 +296,107 @@ export default function IndividualExamResultsPage() {
       return
     }
 
-    const doc = new jsPDF({
-      orientation: 'portrait',
-      unit: 'mm',
-      format: 'a4'
-    })
+    const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" })
+    const pageHeight = doc.internal.pageSize.height
+    const pageWidth = doc.internal.pageSize.width
+    let currentY = 12
 
-    // Add header with styling
-    doc.setFillColor(79, 70, 229)
-    doc.roundedRect(10, 10, 190, 20, 3, 3, 'F')
-    doc.setTextColor(255, 255, 255)
-    doc.setFontSize(18)
-    doc.setFont("helvetica", "bold")
-    doc.text("Individual Exam Results Report", 105, 22, { align: "center" })
+    // Helper function to add header on each page
+    const addHeader = () => {
+      doc.setFontSize(14)
+      doc.setFont("helvetica", "bold")
+      doc.text("Alpha School Exam Results Report", pageWidth / 2, currentY, { align: "center" })
+      currentY += 6
 
-    // Add report details
-    doc.setTextColor(50, 50, 50)
-    doc.setFontSize(10)
-    doc.setFont("helvetica", "normal")
-    doc.text(`Generated: ${format(new Date(), "PPPP")}`, 15, 35)
-    doc.text(`Total Students: ${filteredResults.length}`, 15, 40)
-    doc.text(`Average Score: ${stats.averageScore}%`, 15, 45)
-
-    // Add teacher info if available
-    const teacher = getTeacherDataFromCookie()
-    if (teacher) {
-      doc.text(`Teacher: ${teacher.fullName || teacher.username}`, 15, 50)
+      doc.setFontSize(10)
+      doc.setFont("helvetica", "normal")
+      doc.text(`Generated: ${format(new Date(), "PPP")}`, 14, currentY)
+      currentY += 4
     }
 
-    // Create table with only required columns
-    const headers = [
-      ["#", "Student ID", "Student Name", "Exam Name", "Subject", "Score", "Gender", "Stream"]
-    ]
+    addHeader()
 
-    const tableData = filteredResults.map((r, i) => {
-      return [
-        (i + 1).toString(),
-        r.student_student_id,
-        r.student_name,
-        r.exam_title.substring(0, 25) + (r.exam_title.length > 25 ? '...' : ''),
-        r.exam_subject_name,
-        `${r.total_marks_obtained}/${r.exam_total_marks}`,
-        r.student_gender,
-        r.student_stream
-      ]
+    // Build headers
+    const headers = ["#", "Student ID", "Student Name", "Exam Name", "Subject", "Score", "Gender", "Stream"]
+    const columnWidths = [6, 15, 25, 30, 20, 15, 12, 12]
+    const startX = 14
+    let colX = startX
+
+    // Draw header row with smaller font
+    doc.setFillColor(79, 70, 229)
+    doc.setFont("helvetica", "bold")
+    doc.setFontSize(8)
+    doc.setTextColor(255, 255, 255)
+
+    headers.forEach((h, i) => {
+      const width = columnWidths[i]
+      doc.rect(colX, currentY, width, 6, "F")
+      const text = h.substring(0, 8)
+      doc.text(text, colX + 1, currentY + 3.5)
+      colX += width
     })
 
-    // Add table with styling
-    autoTable(doc, {
-      head: headers,
-      body: tableData,
-      startY: 60,
-      theme: 'striped',
-      headStyles: {
-        fillColor: [79, 70, 229],
-        textColor: [255, 255, 255],
-        fontSize: 10,
-        fontStyle: 'bold',
-        halign: 'center'
-      },
-      bodyStyles: {
-        fontSize: 9,
-        cellPadding: 3,
-        halign: 'center'
-      },
-      alternateRowStyles: {
-        fillColor: [245, 245, 245]
-      },
-      columnStyles: {
-        0: { cellWidth: 10, halign: 'center' },
-        1: { cellWidth: 25, halign: 'center' },
-        2: { cellWidth: 35, halign: 'left' },
-        3: { cellWidth: 40, halign: 'left' },
-        4: { cellWidth: 25, halign: 'left' },
-        5: { cellWidth: 20, halign: 'center' },
-        6: { cellWidth: 20, halign: 'center' },
-        7: { cellWidth: 20, halign: 'center' }
-      },
-      margin: { left: 10, right: 10 },
-      tableLineColor: [200, 200, 200],
-      tableLineWidth: 0.1,
-      didDrawPage: function (data) {
-        // Add page numbers
-        const pageCount = doc.internal.getNumberOfPages()
+    currentY += 6
+    doc.setFont("helvetica", "normal")
+    doc.setFontSize(7)
+
+    // Table data rows
+    filteredResults.forEach((r, idx) => {
+      // Check if we need a new page
+      if (currentY > pageHeight - 15) {
+        doc.addPage()
+        currentY = 12
+        addHeader()
+
+        // Redraw header row
+        doc.setFillColor(79, 70, 229)
+        doc.setFont("helvetica", "bold")
         doc.setFontSize(8)
-        doc.setTextColor(150, 150, 150)
-        doc.text(
-          `Page ${data.pageNumber} of ${pageCount}`,
-          data.settings.margin.left,
-          doc.internal.pageSize.height - 10
-        )
+        doc.setTextColor(255, 255, 255)
+        colX = startX
+        headers.forEach((h, i) => {
+          const width = columnWidths[i]
+          doc.rect(colX, currentY, width, 6, "F")
+          const text = h.substring(0, 8)
+          doc.text(text, colX + 1, currentY + 3.5)
+          colX += width
+        })
+        currentY += 6
+        doc.setFont("helvetica", "normal")
+        doc.setFontSize(7)
       }
+
+      // Alternate row colors
+      if (idx % 2 === 0) {
+        doc.setFillColor(240, 245, 255)
+      } else {
+        doc.setFillColor(255, 255, 255)
+      }
+
+      const rowData = [
+        (idx + 1).toString(),
+        r.student_student_id.substring(0, 10),
+        r.student_name.substring(0, 15),
+        r.exam_title.substring(0, 20),
+        r.exam_subject_name.substring(0, 12),
+        `${r.total_marks_obtained}/${r.exam_total_marks}`,
+        r.student_gender.substring(0, 6),
+        r.student_stream.substring(0, 8),
+      ]
+
+      colX = startX
+      doc.setTextColor(0, 0, 0)
+      rowData.forEach((cell, i) => {
+        const width = columnWidths[i]
+        doc.rect(colX, currentY, width, 5, "F")
+        doc.text(cell, colX + 1, currentY + 3)
+        colX += width
+      })
+
+      currentY += 5
     })
 
-    doc.save(`exam_results_${format(new Date(), "yyyy-MM-dd_HH-mm")}.pdf`)
+    doc.save(`exam_results_${format(new Date(), "yyyy-MM-dd")}.pdf`)
     toast.success("Exported to PDF successfully")
   }
 

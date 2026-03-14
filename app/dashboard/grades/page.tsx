@@ -997,39 +997,46 @@ export default function GradesPage() {
 
       {/* Assign Subjects Dialog - stream-aware subject assignment with stream tabs */}
       <Dialog open={isSubjectModalOpen} onOpenChange={setIsSubjectModalOpen}>
-        <DialogContent className="w-[95vw] sm:max-w-2xl max-h-[90vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle>Assign subjects to {selectedGradeForSubjects?.name}</DialogTitle>
-            <DialogDescription>
-              Assign subjects for this grade. If the grade uses streams, use the Natural and Social tabs to configure each stream separately.
+        <DialogContent className="w-[95vw] sm:max-w-2xl max-h-[85vh] md:max-h-[90vh] flex flex-col gap-0">
+          <DialogHeader className="pb-4 border-b border-muted/30">
+            <DialogTitle className="text-lg">Assign subjects to {selectedGradeForSubjects?.name}</DialogTitle>
+            <DialogDescription className="text-xs mt-1">
+              Select subjects for this grade. Use the stream tabs to configure each stream separately if applicable.
             </DialogDescription>
           </DialogHeader>
 
           {selectedGradeForSubjects && isStreamedGrade(selectedGradeForSubjects) ? (
-            <Tabs defaultValue="Natural" className="flex-1 flex flex-col">
-              <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="Natural">Natural</TabsTrigger>
-                <TabsTrigger value="Social">Social</TabsTrigger>
+            <Tabs defaultValue="Natural" className="flex-1 flex flex-col overflow-hidden">
+              <TabsList className="grid w-full grid-cols-2 rounded-none border-b border-muted/30 h-auto p-0 bg-transparent">
+                <TabsTrigger value="Natural" className="rounded-none border-b-2 border-transparent data-[state=active]:border-emerald-500 py-3">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 mr-2" />
+                  Natural
+                </TabsTrigger>
+                <TabsTrigger value="Social" className="rounded-none border-b-2 border-transparent data-[state=active]:border-blue-500 py-3">
+                  <span className="w-2 h-2 rounded-full bg-blue-500 mr-2" />
+                  Social
+                </TabsTrigger>
               </TabsList>
 
               {/* Natural tab content */}
-              <TabsContent value="Natural" className="mt-4 flex-1">
-                <ScrollArea className="h-[60vh] pr-4">
-                  <div className="space-y-3 py-2">
-                    <h4 className="text-sm font-semibold flex items-center gap-2 text-emerald-700">
+              <TabsContent value="Natural" className="flex-1 overflow-hidden flex flex-col">
+                <ScrollArea className="flex-1 pr-4">
+                  <div className="space-y-3 py-4 px-1">
+                    <div className="flex items-center gap-2 mb-3">
                       <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                      Natural stream subjects
-                    </h4>
-                    <div className="space-y-1.5 pl-4">
+                      <h4 className="text-sm font-semibold text-emerald-700">Natural Sciences</h4>
+                      <span className="text-xs text-muted-foreground ml-auto">{subjectsForNatural.length} available</span>
+                    </div>
+                    <div className="space-y-2">
                       {subjectsForNatural.length === 0 ? (
-                        <p className="text-xs text-muted-foreground">
-                          No subjects available for Natural stream.
-                        </p>
+                        <div className="flex flex-col items-center justify-center py-8 text-center">
+                          <p className="text-sm text-muted-foreground">No subjects available for Natural stream.</p>
+                        </div>
                       ) : (
                         subjectsForNatural.map((subject) => (
                           <div
                             key={`nat-${subject.id}`}
-                            className="flex items-center space-x-3 p-2 rounded-lg hover:bg-muted/50"
+                            className="flex items-center space-x-3 p-3 rounded-md hover:bg-muted/40 transition-colors border border-transparent hover:border-muted/60"
                           >
                             <Checkbox
                               id={`sub-nat-${subject.id}`}
@@ -1037,16 +1044,17 @@ export default function GradesPage() {
                               onCheckedChange={() =>
                                 toggleSubjectInStream(subject.id, "Natural")
                               }
+                              className="h-4 w-4"
                             />
                             <Label
                               htmlFor={`sub-nat-${subject.id}`}
-                              className="flex-1 cursor-pointer text-sm"
+                              className="flex-1 cursor-pointer text-sm font-medium text-foreground flex items-center gap-2"
                             >
                               {subject.subject_name}
                               {subject.stream && (
                                 <Badge
-                                  variant="outline"
-                                  className="ml-2 text-[10px] bg-emerald-50 text-emerald-700 border-emerald-200"
+                                  variant="secondary"
+                                  className="text-[10px] bg-emerald-100 text-emerald-700 border-emerald-200"
                                 >
                                   {subject.stream}
                                 </Badge>
@@ -1059,41 +1067,43 @@ export default function GradesPage() {
                   </div>
                 </ScrollArea>
 
-                <Separator className="mt-4" />
-                <div className="flex items-center justify-between pt-4">
-                  <p className="text-sm text-muted-foreground">
-                    {selectedByStream.Common.length +
-                      selectedByStream.Natural.length +
-                      selectedByStream.Social.length}{" "}
-                    assignment(s)
-                  </p>
-                  <div className="flex gap-2">
-                    <DialogClose asChild>
-                      <Button variant="outline">Cancel</Button>
-                    </DialogClose>
-                    <Button onClick={handleSaveSubjects}>Save changes</Button>
+                <div className="border-t border-muted/30 mt-auto pt-4">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs text-muted-foreground">
+                      {selectedByStream.Common.length +
+                        selectedByStream.Natural.length +
+                        selectedByStream.Social.length}{" "}
+                      selected
+                    </p>
+                    <div className="flex gap-2">
+                      <DialogClose asChild>
+                        <Button variant="outline" size="sm">Cancel</Button>
+                      </DialogClose>
+                      <Button size="sm" onClick={handleSaveSubjects}>Save</Button>
+                    </div>
                   </div>
                 </div>
               </TabsContent>
 
               {/* Social tab content */}
-              <TabsContent value="Social" className="mt-4 flex-1">
-                <ScrollArea className="h-[60vh] pr-4">
-                  <div className="space-y-3 py-2">
-                    <h4 className="text-sm font-semibold flex items-center gap-2 text-blue-700">
+              <TabsContent value="Social" className="flex-1 overflow-hidden flex flex-col">
+                <ScrollArea className="flex-1 pr-4">
+                  <div className="space-y-3 py-4 px-1">
+                    <div className="flex items-center gap-2 mb-3">
                       <span className="w-2 h-2 rounded-full bg-blue-500" />
-                      Social stream subjects
-                    </h4>
-                    <div className="space-y-1.5 pl-4">
+                      <h4 className="text-sm font-semibold text-blue-700">Social Sciences</h4>
+                      <span className="text-xs text-muted-foreground ml-auto">{subjectsForSocial.length} available</span>
+                    </div>
+                    <div className="space-y-2">
                       {subjectsForSocial.length === 0 ? (
-                        <p className="text-xs text-muted-foreground">
-                          No subjects available for Social stream.
-                        </p>
+                        <div className="flex flex-col items-center justify-center py-8 text-center">
+                          <p className="text-sm text-muted-foreground">No subjects available for Social stream.</p>
+                        </div>
                       ) : (
                         subjectsForSocial.map((subject) => (
                           <div
                             key={`soc-${subject.id}`}
-                            className="flex items-center space-x-3 p-2 rounded-lg hover:bg-muted/50"
+                            className="flex items-center space-x-3 p-3 rounded-md hover:bg-muted/40 transition-colors border border-transparent hover:border-muted/60"
                           >
                             <Checkbox
                               id={`sub-soc-${subject.id}`}
@@ -1101,16 +1111,17 @@ export default function GradesPage() {
                               onCheckedChange={() =>
                                 toggleSubjectInStream(subject.id, "Social")
                               }
+                              className="h-4 w-4"
                             />
                             <Label
                               htmlFor={`sub-soc-${subject.id}`}
-                              className="flex-1 cursor-pointer text-sm"
+                              className="flex-1 cursor-pointer text-sm font-medium text-foreground flex items-center gap-2"
                             >
                               {subject.subject_name}
                               {subject.stream && (
                                 <Badge
-                                  variant="outline"
-                                  className="ml-2 text-[10px] bg-blue-50 text-blue-700 border-blue-200"
+                                  variant="secondary"
+                                  className="text-[10px] bg-blue-100 text-blue-700 border-blue-200"
                                 >
                                   {subject.stream}
                                 </Badge>
@@ -1123,19 +1134,20 @@ export default function GradesPage() {
                   </div>
                 </ScrollArea>
 
-                <Separator className="mt-4" />
-                <div className="flex items-center justify-between pt-4">
-                  <p className="text-sm text-muted-foreground">
-                    {selectedByStream.Common.length +
-                      selectedByStream.Natural.length +
-                      selectedByStream.Social.length}{" "}
-                    assignment(s)
-                  </p>
-                  <div className="flex gap-2">
-                    <DialogClose asChild>
-                      <Button variant="outline">Cancel</Button>
-                    </DialogClose>
-                    <Button onClick={handleSaveSubjects}>Save changes</Button>
+                <div className="border-t border-muted/30 mt-auto pt-4">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs text-muted-foreground">
+                      {selectedByStream.Common.length +
+                        selectedByStream.Natural.length +
+                        selectedByStream.Social.length}{" "}
+                      selected
+                    </p>
+                    <div className="flex gap-2">
+                      <DialogClose asChild>
+                        <Button variant="outline" size="sm">Cancel</Button>
+                      </DialogClose>
+                      <Button size="sm" onClick={handleSaveSubjects}>Save</Button>
+                    </div>
                   </div>
                 </div>
               </TabsContent>
@@ -1143,59 +1155,62 @@ export default function GradesPage() {
           ) : (
             // Non-stream (common) grades: single responsive list of all available subjects,
             // each assigned as a Common subject.
-            <div className="flex-1 flex flex-col mt-4">
-              <ScrollArea className="max-h-[60vh] pr-4">
-                <div className="space-y-4 py-2">
-                  <div className="space-y-2">
-                    <h4 className="text-sm font-semibold flex items-center gap-2">
+            <div className="flex-1 flex flex-col overflow-hidden">
+              <ScrollArea className="flex-1 pr-4">
+                <div className="space-y-3 py-4 px-1">
+                  <div className="space-y-2 mb-2">
+                    <div className="flex items-center gap-2">
                       <span className="w-2 h-2 rounded-full bg-gray-500" />
-                      All subjects
-                    </h4>
-                    <p className="text-xs text-muted-foreground pl-1">
+                      <h4 className="text-sm font-semibold text-foreground">All Subjects</h4>
+                      <span className="text-xs text-muted-foreground ml-auto">{allSubjects.length} available</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
                       Select subjects to attach to this grade. No streams are used for common grades.
                     </p>
-                    <div className="space-y-1.5 pl-4">
-                      {allSubjects.length === 0 ? (
-                        <p className="text-xs text-muted-foreground">
-                          No subjects found in the system.
-                        </p>
-                      ) : (
-                        allSubjects.map((subject) => (
-                          <div
-                            key={`all-${subject.id}`}
-                            className="flex items-center space-x-3 p-2 rounded-lg hover:bg-muted/50"
+                  </div>
+                  <div className="space-y-2">
+                    {allSubjects.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center py-8 text-center">
+                        <p className="text-sm text-muted-foreground">No subjects found in the system.</p>
+                      </div>
+                    ) : (
+                      allSubjects.map((subject) => (
+                        <div
+                          key={`all-${subject.id}`}
+                          className="flex items-center space-x-3 p-3 rounded-md hover:bg-muted/40 transition-colors border border-transparent hover:border-muted/60"
+                        >
+                          <Checkbox
+                            id={`sub-all-${subject.id}`}
+                            checked={isSubjectSelectedInStream(subject.id, "Common")}
+                            onCheckedChange={() =>
+                              toggleSubjectInStream(subject.id, "Common")
+                            }
+                            className="h-4 w-4"
+                          />
+                          <Label
+                            htmlFor={`sub-all-${subject.id}`}
+                            className="flex-1 cursor-pointer text-sm font-medium text-foreground"
                           >
-                            <Checkbox
-                              id={`sub-all-${subject.id}`}
-                              checked={isSubjectSelectedInStream(subject.id, "Common")}
-                              onCheckedChange={() =>
-                                toggleSubjectInStream(subject.id, "Common")
-                              }
-                            />
-                            <Label
-                              htmlFor={`sub-all-${subject.id}`}
-                              className="flex-1 cursor-pointer text-sm"
-                            >
-                              {subject.subject_name}
-                            </Label>
-                          </div>
-                        ))
-                      )}
-                    </div>
+                            {subject.subject_name}
+                          </Label>
+                        </div>
+                      ))
+                    )}
                   </div>
                 </div>
               </ScrollArea>
 
-              <Separator className="mt-4" />
-              <div className="flex items-center justify-between pt-4">
-                <p className="text-sm text-muted-foreground">
-                  {selectedByStream.Common.length} assignment(s)
-                </p>
-                <div className="flex gap-2">
-                  <DialogClose asChild>
-                    <Button variant="outline">Cancel</Button>
-                  </DialogClose>
-                  <Button onClick={handleSaveSubjects}>Save changes</Button>
+              <div className="border-t border-muted/30 mt-auto pt-4">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs text-muted-foreground">
+                    {selectedByStream.Common.length} selected
+                  </p>
+                  <div className="flex gap-2">
+                    <DialogClose asChild>
+                      <Button variant="outline" size="sm">Cancel</Button>
+                    </DialogClose>
+                    <Button size="sm" onClick={handleSaveSubjects}>Save</Button>
+                  </div>
                 </div>
               </div>
             </div>

@@ -24,7 +24,7 @@ import { Suspense } from 'react';
 import { DashboardSpinner } from '@/components/ui/dashboard-spinner';
 
 async function DashboardContent() {
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -130,105 +130,114 @@ async function DashboardContent() {
   ];
 
   return (
-    <div className="flex-1 space-y-8 bg-transparent p-4 lg:p-8">
-      <div className="flex items-center justify-between space-y-2">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight text-foreground">Dashboard Overview</h1>
-          <p className="text-muted-foreground mt-1">
-            A comprehensive summary of student performance, exam activity, and system metrics.
-          </p>
+    <div className="flex-1 space-y-6 bg-transparent p-6 lg:p-8">
+      {/* Page Header Section */}
+      <div className="space-y-2">
+        <h1 className="text-3xl font-bold tracking-tight text-foreground">Dashboard Overview</h1>
+        <p className="text-sm text-muted-foreground">
+          A comprehensive summary of student performance, exam activity, and system metrics.
+        </p>
+      </div>
+
+      {/* Stat Cards - Enhanced Spacing */}
+      <div>
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          {adminStats.map((stat, index) => (
+            <Card key={stat.title} className="transition-shadow duration-200 hover:shadow-md shadow-sm border-muted/50">
+              <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-3">
+                <CardTitle className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{stat.title}</CardTitle>
+                <stat.icon className="h-5 w-5 text-muted-foreground/70 flex-shrink-0" />
+              </CardHeader>
+              <CardContent className="space-y-1">
+                <div className="text-2xl font-bold text-foreground">{stat.value}</div>
+                <p className="text-xs text-muted-foreground">{stat.change}</p>
+              </CardContent>
+            </Card>
+          ))}
         </div>
       </div>
 
-      {/* Stat Cards */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3">
-        {adminStats.map((stat, index) => (
-          <Card key={stat.title} className="transition-shadow duration-200 hover:shadow-lg shadow-sm">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">{stat.title}</CardTitle>
-              <stat.icon className="h-5 w-5 text-indigo-500" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-foreground">{stat.value}</div>
-              <p className="text-xs text-muted-foreground mt-1">{stat.change}</p>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      {/* Teachers Table */}
-      <Card className="shadow-sm border border-muted/60">
-        <CardHeader className="flex flex-row items-center justify-between">
+      {/* Teachers Table Section */}
+      <div className="space-y-3">
+        <div className="flex items-baseline justify-between">
           <div>
-            <CardTitle className="text-xl text-foreground">Teachers</CardTitle>
-            <CardDescription className="text-muted-foreground">
+            <h2 className="text-lg font-semibold text-foreground">Teachers</h2>
+            <p className="text-xs text-muted-foreground mt-1">
               List of active teachers in the system ({totalTeachers} total)
-            </CardDescription>
+            </p>
           </div>
           <Link href="/dashboard/teachers">
-            <Button variant="outline" className="text-indigo-600 border-indigo-200 hover:bg-indigo-50 dark:hover:bg-indigo-950/50">
+            <Button variant="outline" size="sm" className="text-xs h-8">
               View All
             </Button>
           </Link>
-        </CardHeader>
-        <CardContent>
-          {teachers.length === 0 ? (
-            <p className="text-muted-foreground py-8 text-center">No teachers found.</p>
-          ) : (
-            <div className="rounded-lg border border-muted/50 overflow-hidden">
-              <Table>
-                <TableHeader>
-                  <TableRow className="bg-muted/40">
-                    <TableHead>Full Name</TableHead>
-                    <TableHead>Username</TableHead>
-                    <TableHead>Phone Number</TableHead>
-                    <TableHead>Section</TableHead>
-                    <TableHead>Grade</TableHead>
-                    <TableHead>Subject</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {teachers.map((teacher, index) => (
-                    <TableRow
-                      key={teacher.id}
-                      className={index % 2 === 0 ? "bg-muted/20" : ""}
-                    >
-                      <TableCell className="font-medium">
-                        {teacher.full_name}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {teacher.username}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {teacher.phone_number}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {teacher.section}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {teacher.grade_name}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {teacher.subject_name}
-                      </TableCell>
+        </div>
+        <Card className="shadow-sm border-muted/50">
+          <CardContent className="pt-6">
+            {teachers.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-8 text-center">No teachers found.</p>
+            ) : (
+              <div className="rounded-md border border-muted/40 overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-muted/30 hover:bg-muted/30">
+                      <TableHead className="text-xs font-semibold">Full Name</TableHead>
+                      <TableHead className="text-xs font-semibold">Username</TableHead>
+                      <TableHead className="text-xs font-semibold">Phone Number</TableHead>
+                      <TableHead className="text-xs font-semibold">Section</TableHead>
+                      <TableHead className="text-xs font-semibold">Grade</TableHead>
+                      <TableHead className="text-xs font-semibold">Subject</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                  </TableHeader>
+                  <TableBody>
+                    {teachers.map((teacher, index) => (
+                      <TableRow
+                        key={teacher.id}
+                        className="hover:bg-muted/25 border-b border-muted/30 last:border-b-0"
+                      >
+                        <TableCell className="font-medium text-sm py-3">
+                          {teacher.full_name}
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground py-3">
+                          {teacher.username}
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground py-3">
+                          {teacher.phone_number}
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground py-3">
+                          {teacher.section}
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground py-3">
+                          {teacher.grade_name}
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground py-3">
+                          {teacher.subject_name}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
 
-      <div className="space-y-4">
-        <h2 className="text-2xl font-bold tracking-tight text-foreground">Quick Access</h2>
+      {/* Quick Access Section */}
+      <div className="space-y-3">
+        <div>
+          <h2 className="text-lg font-semibold text-foreground">Quick Access</h2>
+          <p className="text-xs text-muted-foreground mt-1">Common actions and shortcuts</p>
+        </div>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           {quickAccessLinks.map((link) => (
             <Link key={link.href} href={link.href}>
-              <Card className="cursor-pointer transition-shadow duration-200 hover:bg-muted/60 hover:shadow-lg shadow-sm">
+              <Card className="cursor-pointer transition-all duration-200 hover:shadow-md hover:border-muted shadow-sm border-muted/50 h-full">
                 <CardContent className="flex flex-col items-center justify-center gap-3 py-8">
-                  <link.icon className="h-8 w-8 text-indigo-500" />
-                  <p className="text-center font-medium text-foreground">{link.label}</p>
+                  <div className="p-2 rounded-lg bg-muted/40">
+                    <link.icon className="h-6 w-6 text-foreground/70" />
+                  </div>
+                  <p className="text-center text-sm font-medium text-foreground">{link.label}</p>
                 </CardContent>
               </Card>
             </Link>

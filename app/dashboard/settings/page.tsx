@@ -165,9 +165,6 @@ export default function SettingsPage() {
   const [confirmDeleteText, setConfirmDeleteText] = useState("")
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [currentUserRole, setCurrentUserRole] = useState<"super_admin" | "admin" | null>(null)
-  const [adminPageAccess, setAdminPageAccess] = useState<Record<string, boolean>>({})
-  const [adminRolePermissions, setAdminRolePermissions] = useState<Record<string, boolean>>({})
-  const [savingPagePermission, setSavingPagePermission] = useState<string | null>(null)
 
   // Exam Sessions
   const [showDeleteSessionsDialog, setShowDeleteSessionsDialog] = useState(false)
@@ -875,13 +872,11 @@ export default function SettingsPage() {
       const fetchAccessConfig = async () => {
         try {
           const res = await fetch("/api/admin/page-permissions", { cache: "no-store" })
-          if (res.ok) {
-            const json = await res.json()
-            const role = (json.role as "super_admin" | "admin" | undefined) ?? "super_admin"
-            setCurrentUserRole(role)
-            setAdminPageAccess(json.permissions ?? {})
-            if (json.adminRolePermissions) setAdminRolePermissions(json.adminRolePermissions)
-            return role
+  if (res.ok) {
+  const json = await res.json()
+  const role = (json.role as "super_admin" | "admin" | undefined) ?? "super_admin"
+  setCurrentUserRole(role)
+  return role
           }
         } catch {
           /* ignore; fall back to super_admin UX */
@@ -1907,46 +1902,7 @@ export default function SettingsPage() {
             </CardContent>
           </Card>
 
-          {/* Admin role page access: super admin can allow or hide each page for admin role */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Shield className="h-5 w-5 text-indigo-600" />
-                Admin role page access
-              </CardTitle>
-              <CardDescription>
-                Control which pages admins can see in the sidebar. When disabled, the page is hidden for admin users. Promote students is off by default until you enable it here.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {currentUserRole !== "super_admin" ? (
-                <p className="text-sm text-muted-foreground">
-                  Only the <span className="font-medium">super admin</span> can change which pages the Admin role can access.
-                </p>
-              ) : (
-                <div className="space-y-4">
-                  {Object.entries(ADMIN_PAGE_KEY_LABELS).map(([pageKey, label]) => (
-                    <div
-                      key={pageKey}
-                      className="flex items-center justify-between rounded-lg border p-3"
-                    >
-                      <Label htmlFor={`perm-${pageKey}`} className="flex-1 cursor-pointer">
-                        {label}
-                      </Label>
-                      <Switch
-                        id={`perm-${pageKey}`}
-                        checked={adminRolePermissions[pageKey] === true}
-                        onCheckedChange={(checked) =>
-                          handlePagePermissionToggle(pageKey, Boolean(checked))
-                        }
-                        disabled={savingPagePermission === pageKey}
-                      />
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+
         </TabsContent>
         )}
       </Tabs>
