@@ -46,7 +46,8 @@ interface QuickAccessItem {
   title: string
   url: string
   icon: LucideIcon
-  isActive: boolean 
+  isActive: boolean
+  pageKey?: string
 }
 
 export function AdminSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
@@ -186,12 +187,16 @@ export function AdminSidebar({ ...props }: React.ComponentProps<typeof Sidebar>)
         url: "/dashboard/students/new",
         icon: Plus,
         isActive: pathname === "/dashboard/students/new",
+        pageKey: "students_create",
       },
     ] as QuickAccessItem[],
   }
 
   // Only show nav items the admin is allowed to use (hidden when not permitted, not locked)
   const visibleNavMain = data.navMain.filter((item) => canAccess(item.pageKey))
+  const visibleQuickActions = data.quickActions.filter((item) =>
+    canAccess(item.pageKey)
+  )
 
   const renderSidebarItem = (item: {
     title: string
@@ -278,7 +283,7 @@ export function AdminSidebar({ ...props }: React.ComponentProps<typeof Sidebar>)
             Quick Actions
           </SidebarGroupLabel>
           <SidebarMenu>
-            {data.quickActions.map((item) => (
+            {visibleQuickActions.map((item) => (
               <SidebarMenuItem key={item.title}>{renderSidebarItem(item)}</SidebarMenuItem>
             ))}
           </SidebarMenu>

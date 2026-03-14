@@ -47,7 +47,8 @@ export function setTeacherDataCookie(data: TeacherCookieData): void {
     expirationDate.setDate(expirationDate.getDate() + 7) // 7 days expiration
 
     const cookieValue = encodeURIComponent(JSON.stringify(data))
-    document.cookie = `teacherData=${cookieValue}; expires=${expirationDate.toUTCString()}; path=/; SameSite=Lax`
+    const secure = typeof window !== "undefined" && window.location?.protocol === "https:"
+    document.cookie = `teacherData=${cookieValue}; expires=${expirationDate.toUTCString()}; path=/; SameSite=Lax${secure ? "; Secure" : ""}`
   } catch (error) {
     console.error("Error setting teacher cookie:", error)
   }

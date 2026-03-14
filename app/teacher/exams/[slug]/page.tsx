@@ -1341,7 +1341,7 @@ export default function CreateExamPage() {
         const teacher = await getTeacherDataFromCookie();
         if (!teacher || !teacher.teacherId) {
           toast.error("❌ Please login as a teacher");
-          router.push("/teacher/login");
+          router.push("/login/tech");
           return;
         }
         setTeacherData(teacher);
@@ -1362,7 +1362,7 @@ export default function CreateExamPage() {
       } catch (error) {
         console.error("Error fetching teacher data:", error);
         toast.error("❌ Failed to load teacher data.");
-        router.push("/teacher/login");
+        router.push("/login/tech");
       } finally {
         setLoading(false);
       }

@@ -79,6 +79,7 @@ export async function POST(request: NextRequest) {
           device_takeover_count: 1,
           last_takeover_time: now,
           instruction_seen: true,
+          time_remaining: timeRemaining,
         })
         .select("id, security_token, started_at, end_time")
         .single();
@@ -98,6 +99,31 @@ export async function POST(request: NextRequest) {
         is_active: true,
         last_verified: now,
       });
+
+      // Copy answers server-side so continuity works even if the client cannot access tables directly.
+      try {
+        const { data: oldAnswers } = await admin
+          .from("student_answers")
+          .select("question_id, selected_option_id, answer_text, is_flagged, is_correct, answered_at, created_at")
+          .eq("session_id", takeoverSessionId);
+
+        if (oldAnswers && oldAnswers.length > 0) {
+          await admin.from("student_answers").insert(
+            oldAnswers.map((a: any) => ({
+              session_id: newSession.id,
+              question_id: a.question_id,
+              selected_option_id: a.selected_option_id,
+              answer_text: a.answer_text,
+              is_flagged: a.is_flagged,
+              is_correct: a.is_correct,
+              answered_at: a.answered_at,
+              created_at: a.created_at,
+            }))
+          );
+        }
+      } catch (copyErr) {
+        console.error("[create-session] takeover answer copy failed:", copyErr);
+      }
 
       return NextResponse.json({
         created: true,
@@ -177,6 +203,7 @@ export async function POST(request: NextRequest) {
         security_token: securityToken,
         device_takeover_count: 0,
         instruction_seen: false,
+        time_remaining: durationSeconds,
       })
       .select("id, security_token, started_at, end_time")
       .single();

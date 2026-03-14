@@ -1,25 +1,123 @@
 /**
- * Electron main process – secure exam environment.
- * Security: fullscreen on exam page, DevTools disabled, single instance,
- * content protection (screenshots), close-event detection for exam in progress.
- * Graceful handling: power/network loss is handled by the web app (online/offline
- * and heartbeat); window close triggers optional notify to renderer to log disconnect.
+ * Electron Main Process - High-Security Exam Kiosk
+ * Index = normal window. All other pages = secure kiosk mode.
  */
-const { app, BrowserWindow, Menu, ipcMain } = require("electron");
+const { app, BrowserWindow, Menu, ipcMain, globalShortcut } = require("electron");
 const path = require("path");
 
 let mainWindow;
-let modal; // Optional modal for exam warning
-
 const isDev = !app.isPackaged;
 
+// Allowed origin: localhost:3000 in dev, or set APP_URL in production
+const ALLOWED_ORIGIN = "http://localhost:3000";
+
+// ---------------------------------------------------------------------------
+// 1. isIndexPage(url)
+// ---------------------------------------------------------------------------
+function isIndexPage(url) {
+  try {
+    const u = new URL(url);
+    const pathname = (u.pathname || "/").replace(/\/$/, "") || "/";
+    return pathname === "/" || pathname === "/index";
+  } catch {
+    return false;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 2. lockExamMode(win) / unlockExamMode()
+// ---------------------------------------------------------------------------
+
+function lockExamMode(win) {
+  if (!win || win.isDestroyed()) return;
+
+  globalShortcut.unregisterAll();
+
+  // Kiosk + Fullscreen
+  win.setFullScreen(true);
+  win.setKiosk(true);
+  win.setAlwaysOnTop(true, "screen-saver");
+  win.setMovable(false);
+  win.setResizable(false);
+  win.setMinimizable(false);
+  win.setMaximizable(false);
+
+  // Screenshot protection
+  win.setContentProtection(true);
+
+  // Block: ESC, F11, F12, F5, Win+Shift+S (snipping), PrintScreen
+  try {
+    globalShortcut.register("Escape", () => {});
+    globalShortcut.register("F11", () => {});
+    globalShortcut.register("F12", () => {});
+    globalShortcut.register("F5", () => {});
+    globalShortcut.register("CommandOrControl+R", () => {});
+    globalShortcut.register("CommandOrControl+Shift+R", () => {});
+    globalShortcut.register("CommandOrControl+Shift+I", () => {});
+    globalShortcut.register("CommandOrControl+Shift+J", () => {});
+    globalShortcut.register("CommandOrControl+U", () => {});
+    globalShortcut.register("Alt+Tab", () => {});
+    globalShortcut.register("CommandOrControl+Tab", () => {});
+    globalShortcut.register("Super+D", () => {});
+    globalShortcut.register("Super+L", () => {});
+    globalShortcut.register("Super+Shift+S", () => {});
+    globalShortcut.register("PrintScreen", () => {});
+  } catch (e) {
+    console.warn("Shortcut registration:", e.message);
+  }
+}
+
+function unlockExamMode() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  mainWindow.setKiosk(false);
+  mainWindow.setFullScreen(false);
+  mainWindow.setAlwaysOnTop(false);
+  mainWindow.setMovable(true);
+  mainWindow.setResizable(true);
+  mainWindow.setMinimizable(true);
+  mainWindow.setMaximizable(true);
+  globalShortcut.unregisterAll();
+}
+
+// ---------------------------------------------------------------------------
+// 3. before-input-event: block keys in exam mode
+// ---------------------------------------------------------------------------
+function setupInputBlocking(win) {
+  win.webContents.on("before-input-event", (event, input) => {
+    const url = win.webContents.getURL();
+    if (isIndexPage(url)) return;
+
+    const key = input.key?.toLowerCase?.() || "";
+    const ctrl = input.control || input.meta;
+
+    const block =
+      key === "f12" ||
+      key === "f11" ||
+      key === "f5" ||
+      (ctrl && key === "r") ||
+      (ctrl && input.shift && (key === "i" || key === "j")) ||
+      (ctrl && key === "u") ||
+      key === "printscreen" ||
+      (ctrl && (key === "c" || key === "v" || key === "x" || key === "a"));
+
+    if (block) event.preventDefault();
+  });
+}
+
+// ---------------------------------------------------------------------------
+// createWindow
+// ---------------------------------------------------------------------------
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
-    fullscreen: false, // login page normal
+    fullscreen: false,
     alwaysOnTop: false,
     autoHideMenuBar: true,
+    frame: true,
+    minimizable: true,
+    maximizable: true,
+    resizable: true,
     icon: path.join(__dirname, "icon.png"),
     webPreferences: {
       nodeIntegration: false,
@@ -27,151 +125,79 @@ function createWindow() {
       sandbox: true,
       webSecurity: true,
       devTools: isDev,
-      allowRunningInsecureContent: false,
     },
   });
 
-  mainWindow.setContentProtection(true); // block screenshots
-
+  mainWindow.setContentProtection(true);
   mainWindow.setMenu(null);
   Menu.setApplicationMenu(null);
 
-  const allowedDomain = "https://exam.alphainstitutetech.com/";
-
-  mainWindow.loadURL(allowedDomain).catch((err) => {
-    console.error("Failed to load URL:", err);
+  const loadUrl = `${ALLOWED_ORIGIN.replace(/\/$/, "")}/`;
+  mainWindow.loadURL(loadUrl).catch((err) => {
+    console.error("URL loading failed:", err);
   });
 
-  if (isDev) {
-    mainWindow.webContents.openDevTools({ mode: "detach" });
-  }
-
-  // Log network issues reaching Supabase from within Electron
-  mainWindow.webContents.session.webRequest.onErrorOccurred((details) => {
-    if (details.url && details.url.includes("supabase.co")) {
-      console.error("[Electron] Supabase request error", {
-        url: details.url,
-        error: details.error,
-        fromCache: details.fromCache,
-      });
-    }
-  });
-
-  // Conditional behavior based on URL
+  // did-navigate
   mainWindow.webContents.on("did-navigate", () => {
     const url = mainWindow.webContents.getURL();
+    if (isIndexPage(url)) {
+      unlockExamMode();
+    } else {
+      lockExamMode(mainWindow);
+    }
+  });
 
-    // -----------------------
-    // Exam page (anything except index)
-    // -----------------------
-    if (!url.endsWith("/")) {
+  // did-navigate-in-page (SPA)
+  mainWindow.webContents.on("did-navigate-in-page", () => {
+    const url = mainWindow.webContents.getURL();
+    if (isIndexPage(url)) {
+      unlockExamMode();
+    } else {
+      lockExamMode(mainWindow);
+    }
+  });
+
+  // leave-full-screen: force back into fullscreen in exam mode
+  mainWindow.on("leave-full-screen", () => {
+    const url = mainWindow.webContents.getURL();
+    if (!isIndexPage(url) && mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.setFullScreen(true);
-      mainWindow.setResizable(false);
-      mainWindow.setMinimizable(false);
-      mainWindow.setMaximizable(false);
-      mainWindow.setAlwaysOnTop(true);
-
-      // Focus enforcement
-      mainWindow.on("blur", () => {
-        mainWindow.webContents.executeJavaScript(
-          "alert('You are not allowed to leave the exam window!')"
-        );
-        mainWindow.focus();
-      });
-
-      // Modal warning
-      if (!modal) {
-        modal = new BrowserWindow({
-          parent: mainWindow,
-          modal: true,
-          width: 400,
-          height: 200,
-          frame: false,
-          alwaysOnTop: true,
-        });
-        modal.loadURL(
-          "data:text/html,<h2>Exam in progress - Do not leave</h2>"
-        );
-      }
-    }
-    // -----------------------
-    // Login page (index)
-    // -----------------------
-    else {
-      mainWindow.setFullScreen(false);
-      mainWindow.setResizable(true);
-      mainWindow.setMinimizable(true);
-      mainWindow.setMaximizable(true);
-      mainWindow.setAlwaysOnTop(false);
-
-      mainWindow.removeAllListeners("blur");
-
-      if (modal && !modal.isDestroyed()) modal.close();
-      modal = null;
     }
   });
 
-  // Prevent navigation outside allowed domain
-  mainWindow.webContents.on("will-navigate", (event, url) => {
-    if (!url.startsWith(allowedDomain)) {
-      event.preventDefault();
+  // blur: refocus and log
+  mainWindow.on("blur", () => {
+    const url = mainWindow.webContents.getURL();
+    if (!isIndexPage(url) && mainWindow && !mainWindow.isDestroyed()) {
+      console.log("Focus lost – possible cheating");
+      mainWindow.focus();
+      mainWindow.setAlwaysOnTop(true, "screen-saver");
     }
   });
 
-  // Block new window
-  mainWindow.webContents.setWindowOpenHandler(() => {
-    return { action: "deny" };
-  });
+  setupInputBlocking(mainWindow);
 
-  // Disable right click
+  // Disable right-click
   mainWindow.webContents.on("context-menu", (e) => e.preventDefault());
 
-  // Disable shortcut keys
-  mainWindow.webContents.on("before-input-event", (event, input) => {
-    if (
-      (input.control && input.shift && input.key.toLowerCase() === "i") ||
-      input.key === "F12" ||
-      (input.control && input.key.toLowerCase() === "r") ||
-      (input.alt && input.key === "F4")
-    ) {
+  // Navigation security: block outside allowed domain
+  const allowedBase = ALLOWED_ORIGIN.replace(/\/$/, "");
+  mainWindow.webContents.on("will-navigate", (event, url) => {
+    if (!url.startsWith(allowedBase)) {
       event.preventDefault();
     }
   });
 
-  // Close-event detection: when user closes window during exam, notify renderer
-  // so it can attempt to log disconnect/activity (best-effort before process exits)
-  mainWindow.on("close", (event) => {
-    const url = mainWindow.webContents.getURL();
-    const isExamPage = url && !url.endsWith("/");
-    if (isExamPage) {
-      mainWindow.webContents.send("exam-window-closing");
-      // Allow close; renderer may have logged activity if it received the event in time
-    }
-  });
+  mainWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
 
   mainWindow.on("closed", () => {
     mainWindow = null;
   });
 }
 
-// Controlled Exam Exit Function
-function endExam() {
-  if (modal && !modal.isDestroyed()) modal.close();
-  mainWindow.removeAllListeners("blur");
-  mainWindow.setFullScreen(false);
-  mainWindow.setResizable(true);
-  mainWindow.setMinimizable(true);
-  mainWindow.setMaximizable(true);
-  mainWindow.setAlwaysOnTop(false);
-  mainWindow.close();
-}
-
-// IPC example to trigger exam finish from renderer
-ipcMain.on("finish-exam", () => {
-  endExam();
-});
-
-// Prevent multiple instances
+// ---------------------------------------------------------------------------
+// Single instance
+// ---------------------------------------------------------------------------
 const gotTheLock = app.requestSingleInstanceLock();
 if (!gotTheLock) {
   app.quit();
@@ -184,12 +210,17 @@ if (!gotTheLock) {
   });
 
   app.whenReady().then(createWindow);
-
-  app.on("window-all-closed", () => {
-    if (process.platform !== "darwin") app.quit();
-  });
-
-  app.on("activate", () => {
-    if (!mainWindow) createWindow();
-  });
 }
+
+app.on("will-quit", () => {
+  globalShortcut.unregisterAll();
+});
+
+app.on("window-all-closed", () => {
+  if (process.platform !== "darwin") app.quit();
+});
+
+ipcMain.on("finish-exam", () => {
+  unlockExamMode();
+  app.quit();
+});

@@ -111,7 +111,7 @@ export default function ExamsPage() {
         toast.error("Please login as teacher");
         setIsAuthenticated(false);
         setIsLoading(false);
-        router.push("/teacher/login");
+        router.push("/login/tech");
         return;
       }
 
@@ -126,7 +126,7 @@ export default function ExamsPage() {
         toast.error("Invalid teacher session");
         setIsAuthenticated(false);
         setIsLoading(false);
-        router.push("/teacher/login");
+        router.push("/login/tech");
         return;
       }
 
@@ -142,7 +142,7 @@ export default function ExamsPage() {
     } catch (error) {
       toast.error("Authentication failed");
       setIsAuthenticated(false);
-      router.push("/teacher/login");
+      router.push("/login/tech");
     } finally {
       setIsLoading(false);
     }
@@ -352,11 +352,11 @@ export default function ExamsPage() {
         router.push(`/teacher/exams/create`);
       } else {
         toast.error("Please login as teacher");
-        router.push("/teacher/login");
+        router.push("/login/tech");
       }
     } catch (err) {
       toast.error("Error accessing teacher data. Please login again.");
-      router.push("/teacher/login");
+      router.push("/login/tech");
     }
   };
 
@@ -613,7 +613,7 @@ export default function ExamsPage() {
           <p className="mt-2 text-sm text-gray-500">
             Please login as teacher to access this page.
           </p>
-          <Button className="mt-4" onClick={() => router.push("/teacher/login")}>
+          <Button className="mt-4" onClick={() => router.push("/login/tech")}>
             Go to Login
           </Button>
         </div>
@@ -680,7 +680,7 @@ export default function ExamsPage() {
           };
 
           return (
-            <Card key={exam.id} className="flex flex-col hover:shadow-lg transition-all duration-200 shadow-sm">
+            <Card key={exam.id} className="flex flex-col hover:shadow-lg transition-all duration-200 shadow-sm pb-0">
               <CardHeader className="pb-3">
                 <div className="flex items-start justify-between">
                   <div className="flex-1 space-y-2">
@@ -729,7 +729,7 @@ export default function ExamsPage() {
                 </div>
               </CardHeader>
               
-              <CardContent className="flex-grow space-y-4 pb-3">
+              <CardContent className="flex-grow space-y-4">
 
                 <div className="grid grid-cols-2 gap-3 text-sm">
                   <div className="flex items-center gap-2 text-muted-foreground">
@@ -752,7 +752,7 @@ export default function ExamsPage() {
 
                 <div className="bg-zinc-50 dark:bg-zinc-800/50 rounded-lg p-2 border border-zinc-200 dark:border-zinc-800">
                   <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">Exam Date:</span>
+                    <span className="text-muted-foreground">Created At:</span>
                     <span className="font-medium text-foreground">
                       {formatDate(exam.exam_date)}
                     </span>
@@ -760,7 +760,7 @@ export default function ExamsPage() {
                 </div>
               </CardContent>
               
-              <CardFooter className="flex items-center justify-between bg-zinc-50/50 dark:bg-zinc-800/20 py-3 px-4 border-t border-zinc-200 dark:border-zinc-800">
+              <CardFooter className="flex items-center justify-between bg-zinc-50/50 dark:bg-zinc-800/20 border-t pb-3 pt-0 border-zinc-200 dark:border-zinc-800">
                 <div className="text-sm text-muted-foreground">
                   {exam.assigned_count} students assigned
                 </div>

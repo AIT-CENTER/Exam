@@ -26,6 +26,7 @@ const PAGE_KEYS: string[] = [
   "grades_create",
   "subjects_page",
   "subjects_create",
+  "exams_page",
 ];
 
 async function getSupabaseServer() {

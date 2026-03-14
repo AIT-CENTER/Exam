@@ -45,8 +45,6 @@ import {
   Key,
   Users,
   Search,
-  ChevronLeft,
-  ChevronRight,
   MoreHorizontal,
   Settings,
   Eye,
@@ -646,30 +644,34 @@ export default function TeacherManagementPage() {
         </div>
 
         {/* Table */}
-        <Card className="shadow-sm">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Username</TableHead>
-                <TableHead>Full Name</TableHead>
-                <TableHead>Email</TableHead>
-                <TableHead>Phone</TableHead>
-                <TableHead>Stream</TableHead>
-                <TableHead>Subject</TableHead>
-                <TableHead>Created At</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {paginatedUsers.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={9} className="h-24 text-center text-muted-foreground">
-                    No teachers found
-                  </TableCell>
+        <Card className="shadow-sm border border-muted/60">
+          <div className="rounded-lg border border-muted/50 overflow-hidden">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-muted/40">
+                  <TableHead>Username</TableHead>
+                  <TableHead>Full Name</TableHead>
+                  <TableHead>Email</TableHead>
+                  <TableHead>Phone</TableHead>
+                  <TableHead>Stream</TableHead>
+                  <TableHead>Subject</TableHead>
+                  <TableHead>Created At</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
-              ) : (
-                paginatedUsers.map((user) => (
-                  <TableRow key={user.id} className="transition-colors hover:bg-muted/40">
+              </TableHeader>
+              <TableBody>
+                {paginatedUsers.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={8} className="h-24 text-center text-muted-foreground">
+                      No teachers found
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  paginatedUsers.map((user, index) => (
+                    <TableRow
+                      key={user.id}
+                      className={index % 2 === 0 ? "bg-muted/20" : ""}
+                    >
 
                     <TableCell title={user.username}>{truncateText(user.username)}</TableCell>
                     <TableCell title={user.fullName}>{truncateText(user.fullName)}</TableCell>
@@ -721,32 +723,36 @@ export default function TeacherManagementPage() {
               )}
             </TableBody>
           </Table>
+          </div>
         </Card>
 
         {/* Pagination */}
         {totalPages > 1 && (
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-2">
             <p className="text-sm text-muted-foreground">
               Showing {(currentPage - 1) * USERS_PER_PAGE + 1} to{" "}
               {Math.min(currentPage * USERS_PER_PAGE, filteredUsers.length)} of {filteredUsers.length} teachers
             </p>
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                size="sm"
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                className="inline-flex items-center rounded-md border px-3 py-1 text-sm bg-background hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed"
                 onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
                 disabled={currentPage === 1}
               >
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
+                Prev
+              </button>
+              <span className="text-xs text-muted-foreground">
+                Page {currentPage} of {totalPages}
+              </span>
+              <button
+                type="button"
+                className="inline-flex items-center rounded-md border px-3 py-1 text-sm bg-background hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed"
                 onClick={() => setCurrentPage((p) => Math.min(p + 1, totalPages))}
                 disabled={currentPage === totalPages}
               >
-                <ChevronRight className="h-4 w-4" />
-              </Button>
+                Next
+              </button>
             </div>
           </div>
         )}

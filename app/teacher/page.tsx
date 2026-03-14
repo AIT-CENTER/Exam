@@ -105,7 +105,7 @@ export default function TeacherDashboardPage() {
       const teacher = await getTeacherDataFromCookie()
 
       if (!teacher) {
-        router.push("/teacher/login")
+        router.push("/login/tech")
         return
       }
 
@@ -447,7 +447,7 @@ export default function TeacherDashboardPage() {
       </div>
 
       {/* Students Section */}
-      <Card className="hover:shadow-lg transition-shadow duration-200 shadow-sm">
+      <Card className="hover:shadow-lg transition-shadow duration-200 shadow-sm border border-muted/60">
         <CardHeader className="flex flex-row items-center justify-between">
           <div>
             <CardTitle className="text-xl text-foreground">My Students</CardTitle>
@@ -489,21 +489,25 @@ export default function TeacherDashboardPage() {
                   </Badge>
                 ))}
               </div>
-              <Table>
-                <TableHeader>
-                  <TableRow className="border-b dark:border-zinc-800">
-                    <TableHead className="w-[50px] text-muted-foreground">#</TableHead>
-                    <TableHead className="text-muted-foreground">Student ID</TableHead>
-                    <TableHead className="text-muted-foreground">Full Name</TableHead>
-                    <TableHead className="text-muted-foreground">Grade</TableHead>
-                    <TableHead className="text-muted-foreground">Section</TableHead>
-                    <TableHead className="text-muted-foreground">Gender</TableHead>
-                    <TableHead className="text-muted-foreground">Stream</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {topStudents.map((student, idx) => (
-                    <TableRow key={student.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors">
+              <div className="rounded-lg border border-muted/50 overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-muted/40">
+                      <TableHead className="w-[50px] text-muted-foreground">#</TableHead>
+                      <TableHead className="text-muted-foreground">Student ID</TableHead>
+                      <TableHead className="text-muted-foreground">Full Name</TableHead>
+                      <TableHead className="text-muted-foreground">Grade</TableHead>
+                      <TableHead className="text-muted-foreground">Section</TableHead>
+                      <TableHead className="text-muted-foreground">Gender</TableHead>
+                      <TableHead className="text-muted-foreground">Stream</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {topStudents.map((student, idx) => (
+                      <TableRow
+                        key={student.id}
+                        className={idx % 2 === 0 ? "bg-muted/20" : ""}
+                      >
                       <TableCell className="font-medium text-foreground">{idx + 1}</TableCell>
                       <TableCell className="font-medium text-foreground">{student.student_id}</TableCell>
                       <TableCell className="text-foreground">
@@ -538,16 +542,17 @@ export default function TeacherDashboardPage() {
                         )}
                       </TableCell>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
             </>
           )}
         </CardContent>
       </Card>
 
       {/* Exams Section */}
-      <Card className="hover:shadow-lg transition-shadow duration-200 shadow-sm">
+      <Card className="hover:shadow-lg transition-shadow duration-200 shadow-sm border border-muted/60">
         <CardHeader className="flex flex-row items-center justify-between">
           <div>
             <CardTitle className="text-xl text-foreground">
@@ -582,26 +587,29 @@ export default function TeacherDashboardPage() {
               <div className="mb-4 text-sm text-muted-foreground">
                 Showing {allExams.length} unique exams (no duplicates)
               </div>
-              <Table>
-                <TableHeader>
-                  <TableRow className="border-b dark:border-zinc-800">
-                    <TableHead className="text-muted-foreground">Status</TableHead>
-                    <TableHead className="text-muted-foreground">Exam Code</TableHead>
-                    <TableHead className="text-muted-foreground">Title</TableHead>
-                    <TableHead className="text-muted-foreground">Subject</TableHead>
-                    <TableHead className="text-muted-foreground">Grade</TableHead>
-                    <TableHead className="text-muted-foreground">Section</TableHead>
-                    <TableHead className="text-muted-foreground">Marks</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {allExams.slice(0, 5).map((exam) => {
+              <div className="rounded-lg border border-muted/50 overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-muted/40">
+                      <TableHead className="text-muted-foreground">Status</TableHead>
+                      <TableHead className="text-muted-foreground">Exam Code</TableHead>
+                      <TableHead className="text-muted-foreground">Title</TableHead>
+                      <TableHead className="text-muted-foreground">Subject</TableHead>
+                      <TableHead className="text-muted-foreground">Grade</TableHead>
+                      <TableHead className="text-muted-foreground">Section</TableHead>
+                      <TableHead className="text-muted-foreground">Marks</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {allExams.slice(0, 5).map((exam, index) => {
                     // Check if this exam was created by the current teacher
                     const isCreatedByMe = exams.some(e => e.id === exam.id)
                     
                     return (
-                      <TableRow key={`${exam.id}-${isCreatedByMe ? 'created' : 'assigned'}`} 
-                               className="hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors">
+                      <TableRow
+                        key={`${exam.id}-${isCreatedByMe ? 'created' : 'assigned'}`}
+                        className={index % 2 === 0 ? "bg-muted/20" : ""}
+                      >
                         <TableCell>
                           <Badge 
                             variant={exam.exam_active ? "default" : "outline"} 
@@ -635,69 +643,11 @@ export default function TeacherDashboardPage() {
                       </TableRow>
                     )
                   })}
-                </TableBody>
-              </Table>
+                  </TableBody>
+                </Table>
+              </div>
             </div>
           )}
-        </CardContent>
-      </Card>
-
-      {/* Summary Card */}
-      <Card className="hover:shadow-lg transition-shadow duration-200 shadow-sm">
-        <CardHeader>
-          <CardTitle className="text-xl text-foreground">Teaching Summary</CardTitle>
-          <CardDescription className="text-muted-foreground">
-            Overview of your teaching responsibilities
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="border border-zinc-200 dark:border-zinc-800 bg-card rounded-lg p-4">
-              <div className="flex items-center">
-                <Users className="h-5 w-5 text-blue-500 mr-2" />
-                <h3 className="font-medium text-foreground">Total Students</h3>
-              </div>
-              <p className="text-2xl font-bold text-foreground mt-2">{students.length}</p>
-              <p className="text-sm text-muted-foreground">
-                Across {stats.uniqueGrades} grade{stats.uniqueGrades !== 1 ? 's' : ''}
-              </p>
-            </div>
-            
-            <div className="border border-zinc-200 dark:border-zinc-800 bg-card rounded-lg p-4">
-              <div className="flex items-center">
-                <ClipboardList className="h-5 w-5 text-green-500 mr-2" />
-                <h3 className="font-medium text-foreground">Total Exams</h3>
-              </div>
-              <p className="text-2xl font-bold text-foreground mt-2">{allExams.length}</p>
-              <p className="text-sm text-muted-foreground">
-                {allActiveExams.length} active • {allExams.length - allActiveExams.length} inactive
-              </p>
-            </div>
-            
-            <div className="border border-zinc-200 dark:border-zinc-800 bg-card rounded-lg p-4">
-              <div className="flex items-center">
-                <TrendingUp className="h-5 w-5 text-purple-500 mr-2" />
-                <h3 className="font-medium text-foreground">Success Rate</h3>
-              </div>
-              <p className="text-2xl font-bold text-foreground mt-2">{stats.overallSuccessRate}%</p>
-              <p className="text-sm text-muted-foreground">
-                Based on {results.length} exam results
-              </p>
-            </div>
-            
-            <div className="border border-zinc-200 dark:border-zinc-800 bg-card rounded-lg p-4">
-              <div className="flex items-center">
-                <BookOpen className="h-5 w-5 text-orange-500 mr-2" />
-                <h3 className="font-medium text-foreground">Primary Subject</h3>
-              </div>
-              <p className="text-2xl font-bold text-foreground mt-2">
-                {teacherData?.subjectName || "N/A"}
-              </p>
-              <p className="text-sm text-muted-foreground">
-                {teacherData?.gradeName ? `Grade ${teacherData.gradeName}` : "All Grades"}
-              </p>
-            </div>
-          </div>
         </CardContent>
       </Card>
     </div>

@@ -218,6 +218,11 @@ export default function SettingsPage() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [isDragOver, setIsDragOver] = useState(false)
 
+  // Derived: total records in all selected tables (for summary in dialogs)
+  const totalSelectedRecords = selectedTables.reduce((total, tableName) => {
+    return total + (tableStats[tableName] || 0)
+  }, 0)
+
   // Individual table export (multiple tables allowed, CSV default)
   const [exportTableSelection, setExportTableSelection] = useState<string[]>([])
   const [showExportTablesDialog, setShowExportTablesDialog] = useState(false)
@@ -1278,51 +1283,26 @@ export default function SettingsPage() {
   }
 
   const handleDeleteAllSessions = async () => {
-    setDeletingSessionsLoading(true);
+    setDeletingSessionsLoading(true)
     try {
-      console.log("Deleting all exam session data...");
-      
-      // First delete student_answers table
-      console.log("Deleting student_answers...");
-      const { error: answersError } = await supabase
-        .from('student_answers')
+      const { error } = await supabase
+        .from("exam_sessions")
         .delete()
-        .not('id', 'is', null);
-      
-      if (answersError) {
-        console.error("Error deleting student_answers:", answersError);
-        toast.error("Failed to delete student answers: " + answersError.message);
-        setDeletingSessionsLoading(false);
-        return;
+        .not("id", "is", null)
+
+      if (error) {
+        toast.error("Failed to delete exam sessions: " + error.message)
+        return
       }
-      
-      console.log("Student answers deleted successfully");
-      
-      // Then delete exam_sessions table
-      console.log("Deleting exam_sessions...");
-      const { error: sessionsError } = await supabase
-        .from('exam_sessions')
-        .delete()
-        .not('id', 'is', null);
-      
-      if (sessionsError) {
-        console.error("Error deleting exam_sessions:", sessionsError);
-        toast.error("Failed to delete exam sessions: " + sessionsError.message);
-        setDeletingSessionsLoading(false);
-        return;
-      }
-      
-      console.log("Exam sessions deleted successfully");
-      
-      toast.success("All exam session data deleted successfully!");
-      setShowDeleteSessionsDialog(false);
-      fetchSessionStats();
-      fetchTableStats();
+
+      toast.success("All exam session data deleted successfully!")
+      setShowDeleteSessionsDialog(false)
+      fetchSessionStats()
     } catch (err) {
-      console.error("Error deleting sessions:", err);
-      toast.error("Failed to delete exam sessions: " + (err as Error).message);
+      console.error("Error deleting sessions:", err)
+      toast.error("Failed to delete exam sessions: " + (err as Error).message)
     } finally {
-      setDeletingSessionsLoading(false);
+      setDeletingSessionsLoading(false)
     }
   }
 
@@ -1334,12 +1314,23 @@ export default function SettingsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ pageKey, allowed }),
       })
+
       if (res.ok) {
         setAdminRolePermissions((prev) => ({ ...prev, [pageKey]: allowed }))
         toast.success(allowed ? "Access enabled for admins" : "Access disabled for admins")
-      } else toast.error("Failed to update")
+        return
+      }
+
+      // More helpful error messages based on status
+      if (res.status === 401) {
+        toast.error("You are not signed in as an admin.")
+      } else if (res.status === 403) {
+        toast.error("Only super admin can change page access.")
+      } else {
+        toast.error("Failed to update page access.")
+      }
     } catch {
-      toast.error("Failed to update")
+      toast.error("Failed to update page access.")
     } finally {
       setSavingPagePermission(null)
     }
@@ -1356,10 +1347,30 @@ export default function SettingsPage() {
     return true;
   };
 
-  // Calculate total selected records
-  const totalSelectedRecords = selectedTables.reduce((total, tableName) => {
-    return total + (tableStats[tableName] || 0)
-  }, 0)
+  const handleSaveSystemSettings = async () => {
+    setSavingSystemSettings(true)
+    try {
+      const res = await fetch("/api/admin/system-settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          max_risk_before_submit: maxRiskBeforeSubmit,
+          max_time_extension_minutes: maxTimeExtensionMinutes,
+          enable_results_archive: enableResultsArchive,
+          enable_student_results_portal: enableStudentResultsPortal,
+          enable_student_teacher_chat: enableStudentTeacherChat,
+          enable_realtime_features: enableRealtimeFeatures,
+          student_current_results_mode: studentCurrentResultsMode,
+        }),
+      })
+      if (res.ok) toast.success("Settings saved")
+      else toast.error("Failed to save")
+    } catch {
+      toast.error("Failed to save")
+    } finally {
+      setSavingSystemSettings(false)
+    }
+  }
 
   if (loading) {
     return <PageSpinner />
@@ -1474,33 +1485,7 @@ export default function SettingsPage() {
                   </p>
                 </div>
               </div>
-              <Button
-                onClick={async () => {
-                  setSavingSystemSettings(true)
-                  try {
-                    const res = await fetch("/api/admin/system-settings", {
-                      method: "PUT",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({
-                        max_risk_before_submit: maxRiskBeforeSubmit,
-                        max_time_extension_minutes: maxTimeExtensionMinutes,
-                        enable_results_archive: enableResultsArchive,
-                        enable_student_results_portal: enableStudentResultsPortal,
-                        enable_student_teacher_chat: enableStudentTeacherChat,
-                        enable_realtime_features: enableRealtimeFeatures,
-                        student_current_results_mode: studentCurrentResultsMode,
-                      }),
-                    })
-                    if (res.ok) toast.success("Settings saved")
-                    else toast.error("Failed to save")
-                  } catch {
-                    toast.error("Failed to save")
-                  } finally {
-                    setSavingSystemSettings(false)
-                  }
-                }}
-                disabled={savingSystemSettings}
-              >
+              <Button onClick={handleSaveSystemSettings} disabled={savingSystemSettings}>
                 Save settings
               </Button>
             </CardContent>
@@ -1565,9 +1550,20 @@ export default function SettingsPage() {
                 />
               </div>
 
-              <p className="text-xs text-muted-foreground">
-                After changing these settings, click <span className="font-medium">Save settings</span> in the Risk &amp; Time Control card above.
-              </p>
+              <div className="flex items-center justify-between gap-4 flex-col sm:flex-row">
+                <p className="text-xs text-muted-foreground">
+                  Changes to these options affect what students can see in portals and transcripts.
+                </p>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleSaveSystemSettings}
+                  disabled={savingSystemSettings}
+                  className="whitespace-nowrap"
+                >
+                  Save results settings
+                </Button>
+              </div>
             </CardContent>
           </Card>
 
@@ -1611,189 +1607,7 @@ export default function SettingsPage() {
             </CardContent>
           </Card>
 
-          {/* Database Tables Card */}
-          <Card>
-            <CardHeader>
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div>
-                  <CardTitle className="flex items-center gap-2">
-                    <TableIcon className="h-5 w-5 text-indigo-600" />
-                    Database Tables
-                  </CardTitle>
-                  <CardDescription>Select and manage multiple tables at once</CardDescription>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setShowTablesList(!showTablesList)}
-                    className="gap-2"
-                  >
-                    {showTablesList ? (
-                      <>
-                        <ChevronUp className="h-4 w-4" />
-                        Hide List
-                      </>
-                    ) : (
-                      <>
-                        <ChevronDown className="h-4 w-4" />
-                        Show List
-                      </>
-                    )}
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleSelectAll}
-                    className="gap-2"
-                  >
-                    {selectAllTables ? (
-                      <>
-                        <X className="h-4 w-4" />
-                        Deselect All
-                      </>
-                    ) : (
-                      <>
-                        <CheckCircle className="h-4 w-4" />
-                        Select All
-                      </>
-                    )}
-                  </Button>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {/* Selection Summary */}
-              <div className="mb-6 p-4 bg-indigo-50 dark:bg-indigo-900/10 rounded-lg border border-indigo-200 dark:border-indigo-800">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                  <div>
-                    <h3 className="font-medium text-indigo-900 dark:text-indigo-300">Selection Summary</h3>
-                    <div className="flex flex-wrap items-center gap-4 mt-2">
-                      <div className="flex items-center gap-2">
-                        <div className="h-3 w-3 rounded-full bg-indigo-600 dark:bg-indigo-400"></div>
-                        <span className="text-sm text-indigo-700 dark:text-indigo-400">
-                          {selectedTables.length} table{selectedTables.length !== 1 ? 's' : ''} selected
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="h-3 w-3 rounded-full bg-green-600 dark:bg-green-400"></div>
-                        <span className="text-sm text-green-700 dark:text-green-400">
-                          {totalSelectedRecords.toLocaleString()} total records
-                        </span>
-                      </div>
-                    </div>
-                    {selectedTables.length > 0 && (
-                      <div className="mt-3">
-                        <p className="text-xs text-indigo-600 dark:text-indigo-400 mb-1">Selected tables:</p>
-                        <div className="flex flex-wrap gap-1">
-                          {selectedTables.map(tableName => (
-                            <Badge key={tableName} variant="outline" className="bg-white dark:bg-zinc-900">
-                              {tableName}
-                            </Badge>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex flex-col sm:items-end gap-2">
-                    <Button
-                      variant="destructive"
-                      onClick={() => {
-                        if (selectedTables.length === 0) {
-                          toast.error("Please select at least one table")
-                        } else {
-                          setShowDeleteMultipleDialog(true)
-                        }
-                      }}
-                      disabled={selectedTables.length === 0}
-                      className="gap-2 whitespace-nowrap"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                      Delete Selected ({selectedTables.length})
-                    </Button>
-                    <p className="text-xs text-gray-500 text-center sm:text-right">
-                      {selectedTables.length === 0 ? "Select tables to enable deletion" : "Will delete all data from selected tables"}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Tables List */}
-              {showTablesList && (
-                <div className="space-y-5">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
-                    {tables.map((table) => (
-                      <div
-                        key={table.name}
-                        role="button"
-                        tabIndex={0}
-                        onClick={() => handleTableSelect(table.name)}
-                        onKeyDown={(e) => e.key === "Enter" && handleTableSelect(table.name)}
-                        className={`
-                          group flex items-start gap-3 p-4 rounded-xl border-2 transition-all cursor-pointer
-                          ${table.selected
-                            ? "border-indigo-500 bg-indigo-50/80 dark:bg-indigo-950/30 dark:border-indigo-500 shadow-sm"
-                            : "border-border bg-card hover:border-muted-foreground/30 hover:shadow-sm"
-                          }
-                        `}
-                      >
-                        <div className={`shrink-0 p-2.5 rounded-lg ${table.color}`}>
-                          <table.icon className="h-5 w-5" aria-hidden />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="font-semibold text-sm text-foreground truncate">{table.name}</span>
-                            <span className={`shrink-0 flex items-center justify-center w-5 h-5 rounded-md border-2 transition-colors ${table.selected ? "bg-indigo-600 border-indigo-600 text-white" : "border-muted-foreground/40"}`}>
-                              {table.selected && <Check className="h-3 w-3" strokeWidth={2.5} />}
-                            </span>
-                          </div>
-                          <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{table.description}</p>
-                          <div className="flex items-center justify-between mt-3 flex-wrap gap-2">
-                            <Badge variant="secondary" className="text-xs font-normal tabular-nums">
-                              {table.count.toLocaleString()} rows
-                            </Badge>
-                            <div className="flex items-center gap-1">
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="ghost"
-                                className="h-7 w-7 p-0 opacity-70 hover:opacity-100 text-destructive hover:text-destructive hover:bg-destructive/10"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleDeleteTableClick(table);
-                                }}
-                                disabled={table.count === 0}
-                                title={table.count === 0 ? "No data" : `Clear ${table.name}`}
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </Button>
-                              {table.name === "admin" && (
-                                <Badge variant="outline" className="text-[10px] px-1.5 py-0">Protected</Badge>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50/80 dark:bg-amber-950/20 p-4">
-                    <div className="flex gap-3">
-                      <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-500 shrink-0 mt-0.5" />
-                      <div className="text-sm text-amber-800 dark:text-amber-200">
-                        <p className="font-medium">Important</p>
-                        <ul className="list-disc list-inside mt-1.5 space-y-0.5 text-amber-700 dark:text-amber-300">
-                          <li>Click a table to select or deselect it for bulk delete</li>
-                          <li>Deletion is permanent; backup first</li>
-                          <li>Admin table: your account is never removed</li>
-                        </ul>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+          {/* Database tables management has been removed to keep focus on exam session data. */}
         </TabsContent>
         )}
 
@@ -2105,26 +1919,32 @@ export default function SettingsPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                {Object.entries(ADMIN_PAGE_KEY_LABELS).map(([pageKey, label]) => (
-                  <div
-                    key={pageKey}
-                    className="flex items-center justify-between rounded-lg border p-3"
-                  >
-                    <Label htmlFor={`perm-${pageKey}`} className="flex-1 cursor-pointer">
-                      {label}
-                    </Label>
-                    <Switch
-                      id={`perm-${pageKey}`}
-                      checked={adminRolePermissions[pageKey] === true}
-                      onCheckedChange={(checked) =>
-                        handlePagePermissionToggle(pageKey, Boolean(checked))
-                      }
-                      disabled={savingPagePermission === pageKey}
-                    />
-                  </div>
-                ))}
-              </div>
+              {currentUserRole !== "super_admin" ? (
+                <p className="text-sm text-muted-foreground">
+                  Only the <span className="font-medium">super admin</span> can change which pages the Admin role can access.
+                </p>
+              ) : (
+                <div className="space-y-4">
+                  {Object.entries(ADMIN_PAGE_KEY_LABELS).map(([pageKey, label]) => (
+                    <div
+                      key={pageKey}
+                      className="flex items-center justify-between rounded-lg border p-3"
+                    >
+                      <Label htmlFor={`perm-${pageKey}`} className="flex-1 cursor-pointer">
+                        {label}
+                      </Label>
+                      <Switch
+                        id={`perm-${pageKey}`}
+                        checked={adminRolePermissions[pageKey] === true}
+                        onCheckedChange={(checked) =>
+                          handlePagePermissionToggle(pageKey, Boolean(checked))
+                        }
+                        disabled={savingPagePermission === pageKey}
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>

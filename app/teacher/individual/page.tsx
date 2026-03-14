@@ -61,7 +61,7 @@ export default function ExamResultsPage() {
 
         if (!teacher || !teacher.teacherId) {
           toast.error("Please login as teacher")
-          router.push("/teacher/login")
+          router.push("/login/tech")
           return
         }
 
@@ -80,7 +80,7 @@ export default function ExamResultsPage() {
         }
       } catch (error) {
         toast.error("Authentication error")
-        router.push("/teacher/login")
+        router.push("/login/tech")
       }
     }
 
@@ -461,11 +461,11 @@ export default function ExamResultsPage() {
         </Card>
       ) : (
         <>
-          <Card className="overflow-hidden border shadow-sm">
+          <Card className="shadow-sm border border-muted/60 p-0">
             <div className="relative">
-              <div className="overflow-auto">
+              <div className="rounded-lg border border-muted/50 overflow-hidden p-0">
                 <table className="w-full border-collapse text-sm">
-                  <thead className="sticky top-0 z-20 bg-zinc-50 dark:bg-zinc-900/40">
+                  <thead className="sticky top-0 z-20 bg-muted/40">
                     <tr className="border-b dark:border-zinc-800">
                       {/* Fixed columns - # only */}
                       <th className="sticky left-0 z-30 bg-zinc-50 dark:bg-zinc-900 w-12 text-xs font-medium text-center p-3 text-muted-foreground border-r dark:border-zinc-800">
@@ -498,7 +498,16 @@ export default function ExamResultsPage() {
                     {paginatedResults.map((student, idx) => {
                       const isFailing = isStudentFailing(student)
                       return (
-                        <tr key={student.studentDatabaseId} className={isFailing ? "bg-red-50 dark:bg-red-900/20" : "hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors border-b dark:border-zinc-800"}>
+                        <tr
+                          key={student.studentDatabaseId}
+                          className={
+                            isFailing
+                              ? "bg-red-50 dark:bg-red-900/20"
+                              : idx % 2 === 0
+                              ? "bg-muted/20"
+                              : ""
+                          }
+                        >
                           {/* Fixed column - # only */}
                           <td className="sticky left-0 z-10 bg-white dark:bg-zinc-950 text-xs font-medium text-center p-3 text-foreground border-r dark:border-zinc-800">
                             {(currentPage - 1) * RESULTS_PER_PAGE + idx + 1}

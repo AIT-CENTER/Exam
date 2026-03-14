@@ -382,11 +382,28 @@ export default function GradesPage() {
   const handleOpenAssignSubjects = (grade: Grade) => {
     setSelectedGradeForSubjects(grade);
     const byStream = assignedSubjects[grade.id!] || { Common: [], Natural: [], Social: [] };
-    setSelectedByStream({
-      Common: byStream.Common || [],
-      Natural: byStream.Natural || [],
-      Social: byStream.Social || [],
-    });
+
+    // For non-stream (common) grades, collapse any existing per-stream assignments into a single Common list
+    if (!isStreamedGrade(grade)) {
+      const mergedIds = Array.from(
+        new Set([
+          ...(byStream.Common || []),
+          ...(byStream.Natural || []),
+          ...(byStream.Social || []),
+        ]),
+      );
+      setSelectedByStream({
+        Common: mergedIds,
+        Natural: [],
+        Social: [],
+      });
+    } else {
+      setSelectedByStream({
+        Common: byStream.Common || [],
+        Natural: byStream.Natural || [],
+        Social: byStream.Social || [],
+      });
+    }
     setIsSubjectModalOpen(true);
   };
 
@@ -598,14 +615,10 @@ export default function GradesPage() {
     () => subjects.filter((s) => !s.stream || s.stream === "Common"),
     [subjects]
   );
-  const subjectsForNatural = useMemo(
-    () => subjects.filter((s) => s.stream === "Natural" || s.stream === "Common" || !s.stream),
-    [subjects]
-  );
-  const subjectsForSocial = useMemo(
-    () => subjects.filter((s) => s.stream === "Social" || s.stream === "Common" || !s.stream),
-    [subjects]
-  );
+  // In stream-aware assignment, allow any subject to be chosen for either stream;
+  // the subject's own stream flag is only used for labels, not to restrict choices.
+  const subjectsForNatural = useMemo(() => subjects, [subjects]);
+  const subjectsForSocial = useMemo(() => subjects, [subjects]);
 
   if (isLoading) {
     return <PageSpinner />;
@@ -658,7 +671,6 @@ export default function GradesPage() {
                 common,
                 all: allAssigned,
               } = getAssignedSubjectsByStream(grade.id!);
-              const gradeSections = getAssignedSections(grade.id!);
               
               return (
                 <Card
@@ -771,39 +783,12 @@ export default function GradesPage() {
                            </div>
 
                            {/* Link to view detailed subjects */}
-                           <div 
-                             className="text-xs text-primary cursor-pointer hover:underline flex items-center gap-1 pt-1"
-                             onClick={() => handleOpenViewSubjects(grade)}
-                           >
-                             View full subject list <ArrowRight className="h-3 w-3" />
-                           </div>
-
-                           {/* Sections Row */}
-                           <div className="text-sm flex justify-between items-center group pt-2 border-t border-dashed border-muted/60 mt-2">
-                             <span className="text-foreground/80 font-medium group-hover:text-foreground transition-colors flex items-center gap-1.5">
-                               <Users className="h-3 w-3 text-muted-foreground" />
-                               Active Sections
-                             </span>
-                             <div className="flex gap-1 flex-wrap justify-end">
-                                {gradeSections.length > 0 ? (
-                                    gradeSections.slice(0, 3).map(sec => (
-                                        <Badge key={sec.id} variant="secondary" className="text-[10px] px-1.5 h-5">
-                                            {sec.section_name}
-                                            {sec.stream && (
-                                              <span className="ml-1 opacity-80">
-                                                · {sec.stream}
-                                              </span>
-                                            )}
-                                        </Badge>
-                                    ))
-                                ) : (
-                                    <span className="text-[10px] text-muted-foreground italic">None</span>
-                                )}
-                                {gradeSections.length > 3 && (
-                                    <Badge variant="outline" className="text-[10px] px-1.5 h-5">+{gradeSections.length - 3}</Badge>
-                                )}
-                             </div>
-                           </div>
+                          <div 
+                            className="text-xs text-primary cursor-pointer hover:underline flex items-center gap-1 pt-1"
+                            onClick={() => handleOpenViewSubjects(grade)}
+                          >
+                            View full subject list <ArrowRight className="h-3 w-3" />
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -1156,51 +1141,19 @@ export default function GradesPage() {
               </TabsContent>
             </Tabs>
           ) : (
-            // Non-stream grades: single scrolling list with common + all subjects
+            // Non-stream (common) grades: single responsive list of all available subjects,
+            // each assigned as a Common subject.
             <div className="flex-1 flex flex-col mt-4">
-              <ScrollArea className="h-[60vh] pr-4">
-                <div className="space-y-6 py-2">
-                  {/* Common subjects – always available */}
+              <ScrollArea className="max-h-[60vh] pr-4">
+                <div className="space-y-4 py-2">
                   <div className="space-y-2">
                     <h4 className="text-sm font-semibold flex items-center gap-2">
                       <span className="w-2 h-2 rounded-full bg-gray-500" />
-                      Common subjects
-                    </h4>
-                    <div className="space-y-1.5 pl-4">
-                      {subjectsForCommon.length === 0 ? (
-                        <p className="text-xs text-muted-foreground">
-                          No common subjects defined.
-                        </p>
-                      ) : (
-                        subjectsForCommon.map((subject) => (
-                          <div
-                            key={`common-${subject.id}`}
-                            className="flex items-center space-x-3 p-2 rounded-lg hover:bg-muted/50"
-                          >
-                            <Checkbox
-                              id={`sub-common-${subject.id}`}
-                              checked={isSubjectSelectedInStream(subject.id, "Common")}
-                              onCheckedChange={() =>
-                                toggleSubjectInStream(subject.id, "Common")
-                              }
-                            />
-                            <Label
-                              htmlFor={`sub-common-${subject.id}`}
-                              className="flex-1 cursor-pointer text-sm"
-                            >
-                              {subject.subject_name}
-                            </Label>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  </div>
-
-                  {/* All available subjects list */}
-                  <div className="space-y-2">
-                    <h4 className="text-sm font-semibold text-muted-foreground">
                       All subjects
                     </h4>
+                    <p className="text-xs text-muted-foreground pl-1">
+                      Select subjects to attach to this grade. No streams are used for common grades.
+                    </p>
                     <div className="space-y-1.5 pl-4">
                       {allSubjects.length === 0 ? (
                         <p className="text-xs text-muted-foreground">
@@ -1214,11 +1167,7 @@ export default function GradesPage() {
                           >
                             <Checkbox
                               id={`sub-all-${subject.id}`}
-                              checked={
-                                isSubjectSelectedInStream(subject.id, "Common") ||
-                                isSubjectSelectedInStream(subject.id, "Natural") ||
-                                isSubjectSelectedInStream(subject.id, "Social")
-                              }
+                              checked={isSubjectSelectedInStream(subject.id, "Common")}
                               onCheckedChange={() =>
                                 toggleSubjectInStream(subject.id, "Common")
                               }
@@ -1228,14 +1177,6 @@ export default function GradesPage() {
                               className="flex-1 cursor-pointer text-sm"
                             >
                               {subject.subject_name}
-                              {subject.stream && (
-                                <Badge
-                                  variant="outline"
-                                  className="ml-2 text-[10px]"
-                                >
-                                  {subject.stream}
-                                </Badge>
-                              )}
                             </Label>
                           </div>
                         ))
@@ -1248,10 +1189,7 @@ export default function GradesPage() {
               <Separator className="mt-4" />
               <div className="flex items-center justify-between pt-4">
                 <p className="text-sm text-muted-foreground">
-                  {selectedByStream.Common.length +
-                    selectedByStream.Natural.length +
-                    selectedByStream.Social.length}{" "}
-                  assignment(s)
+                  {selectedByStream.Common.length} assignment(s)
                 </p>
                 <div className="flex gap-2">
                   <DialogClose asChild>

@@ -1281,7 +1281,7 @@ export default function EditExamPage() {
         const teacher = await getTeacherDataFromCookie();
         if (!teacher || !teacher.teacherId) {
           toast.error("❌ Please login as a teacher");
-          router.push("/teacher/login");
+          router.push("/login/tech");
           return;
         }
         setTeacherData(teacher);

@@ -2,16 +2,21 @@
  * Teacher live monitor API – fetches active exam sessions and recent risk logs.
  * Only returns in_progress sessions (submitted = false). Max 10 flagged students.
  * Poll every 5 seconds for live updates.
+ * Auto-submits expired sessions so disconnected students disappear from monitor.
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseClient";
+import { autoSubmitExpiredSessions } from "@/lib/autoSubmitExpiredSessions";
 
 const MAX_FLAGGED = 10;
 const RISK_LOGS_LIMIT = 20;
 
 export async function GET(request: NextRequest) {
   try {
+    // Auto-submit expired sessions (handles disconnected students when time reaches 00)
+    await autoSubmitExpiredSessions();
+
     const { searchParams } = new URL(request.url);
     const teacherId = searchParams.get("teacherId") || undefined;
 

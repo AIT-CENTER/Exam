@@ -32,7 +32,7 @@ const loginSchema = z.object({
     ),
   password: z
     .string()
-    .min(6, { message: "Password must be at least 6 characters" })
+    .min(8, { message: "Password must be at least 8 characters" })
     .max(50, { message: "Password too long" }),
 });
 
@@ -74,24 +74,18 @@ export default function AdminLogin() {
 
       // If identifier is username, fetch email from admin table
       if (!data.identifier.includes('@')) {
-        const { data: adminData, error: fetchError } = await supabase
-          .from('admin')
-          .select('email')
-          .eq('username', data.identifier)
-          .single();
-
-        if (fetchError) {
-          console.error('Fetch admin error:', fetchError);
-          toast.error("Invalid username. Please check and try again.");
+        const res = await fetch("/api/admin/resolve-email", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username: data.identifier }),
+        });
+        const json = await res.json().catch(() => ({}));
+        const resolved = typeof json?.email === "string" ? json.email : null;
+        if (!resolved) {
+          toast.error("Invalid username or password.");
           return;
         }
-
-        if (!adminData) {
-          toast.error("No account found with this username.");
-          return;
-        }
-
-        email = adminData.email;
+        email = resolved;
       }
 
       // Client-side Supabase auth sign in
@@ -122,12 +116,17 @@ export default function AdminLogin() {
         .from('admin')
         .select('id')
         .eq('id', authData.user.id)
-        .single();
+        .maybeSingle();
 
       if (verifyError) {
-        console.error('Verify admin error:', verifyError);
+        console.error("Verify admin error:", {
+          message: (verifyError as any)?.message,
+          code: (verifyError as any)?.code,
+          details: (verifyError as any)?.details,
+          hint: (verifyError as any)?.hint,
+        });
         await supabase.auth.signOut();
-        toast.error("Verification error. Please contact support.");
+        toast.error("Verification error. Please try again or contact support.");
         return;
       }
 
@@ -135,6 +134,14 @@ export default function AdminLogin() {
         await supabase.auth.signOut();
         toast.error("Access denied. Admin privileges required.");
         return;
+      }
+
+      // Best-effort: sync JWT role claim for RLS policies, then refresh token
+      try {
+        await fetch("/api/admin/sync-role-claim", { method: "POST" });
+        await supabase.auth.refreshSession();
+      } catch {
+        // ignore
       }
 
       toast.success("Login successful! Redirecting to dashboard...");

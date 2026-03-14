@@ -95,7 +95,7 @@ export default function TeacherSettingsPage() {
       
       if (!cookieData) {
         toast.error("You must be logged in");
-        router.push("/teacher/login");
+        router.push("/login/tech");
         return;
       }
 

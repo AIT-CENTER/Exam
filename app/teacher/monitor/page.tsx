@@ -56,6 +56,7 @@ import {
   Search,
   Timer,
   ShieldOff,
+  Smartphone,
   UserMinus,
 } from "lucide-react";
 import { getTeacherDataFromCookie } from "@/utils/teacherCookie";
@@ -140,6 +141,8 @@ export default function LiveMonitorPage() {
     addTimeToStudent,
     addTimeToAll,
     removeRiskFromStudent,
+    removeRiskFromAll,
+    removeDeviceFromSession,
     removeStudentFromMonitor,
     forceSubmitExam,
   } = useLiveMonitor(teacherId);
@@ -205,6 +208,18 @@ export default function LiveMonitorPage() {
       toast.success("Risk reset to 0");
     } catch {
       toast.error("Failed to remove risk");
+    }
+  };
+
+  const [removeDeviceSessionId, setRemoveDeviceSessionId] = useState<string | null>(null);
+
+  const handleRemoveDevice = async (sessionId: string) => {
+    try {
+      await removeDeviceFromSession(sessionId);
+      setRemoveDeviceSessionId(null);
+      toast.success("Device removed. Student can continue on a new device.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Remove device failed");
     }
   };
 
@@ -296,19 +311,61 @@ export default function LiveMonitorPage() {
 
   return (
     <div className="p-4 md:p-6 space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold flex items-center gap-2">
-          <Activity className="h-6 w-6" />
-          Live Monitoring
-        </h1>
-        <CardDescription className="mt-1">
-          Real-time student status, time remaining, and risk flags. Use actions to add time or force-submit.
-        </CardDescription>
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold flex items-center gap-2">
+            <Activity className="h-6 w-6" />
+            Live Monitoring
+          </h1>
+          <CardDescription className="mt-1">
+            Real-time student status, time remaining, and risk flags.
+          </CardDescription>
+        </div>
+        <div className="flex items-center gap-2">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="gap-1">
+                <MoreHorizontal className="h-4 w-4" />
+                Bulk actions
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => setAddTimeAllOpen(true)}>
+                <Timer className="h-4 w-4 mr-2" />
+                Add time for all
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleAddTimeToAll(5)}>
+                <Plus className="h-4 w-4 mr-2" />
+                +5 min for all
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleAddTimeToAll(10)}>
+                <Plus className="h-4 w-4 mr-2" />
+                +10 min for all
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={async () => {
+                try {
+                  const changed = await removeRiskFromAll();
+                  if (changed) toast.success("Removed risk from all flagged students");
+                  else toast.info("No students currently have risk");
+                } catch {
+                  toast.error("Failed to remove risk from all");
+                }
+              }}>
+                <ShieldOff className="h-4 w-4 mr-2" />
+                Remove risk from all
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <Button variant="outline" size="sm" onClick={() => fetchLiveData()}>
+            <RefreshCw className="h-4 w-4 mr-1" />
+            Refresh
+          </Button>
+        </div>
       </div>
 
       {/* Summary cards */}
       <div className="grid gap-4 md:grid-cols-4">
-        <Card className="shadow-sm">
+        <Card className="shadow-sm border border-muted/60">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Total Sessions</CardTitle>
           </CardHeader>
@@ -316,7 +373,7 @@ export default function LiveMonitorPage() {
             <p className="text-2xl font-bold">{students.length}</p>
           </CardContent>
         </Card>
-        <Card className="shadow-sm">
+        <Card className="shadow-sm border border-muted/60">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Active</CardTitle>
           </CardHeader>
@@ -324,7 +381,7 @@ export default function LiveMonitorPage() {
             <p className="text-2xl font-bold text-green-600">{activeCount}</p>
           </CardContent>
         </Card>
-        <Card className="shadow-sm">
+        <Card className="shadow-sm border border-muted/60">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Disconnected</CardTitle>
           </CardHeader>
@@ -332,7 +389,7 @@ export default function LiveMonitorPage() {
             <p className="text-2xl font-bold text-amber-600">{disconnectedCount}</p>
           </CardContent>
         </Card>
-        <Card className="shadow-sm">
+        <Card className="shadow-sm border border-muted/60">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Flagged</CardTitle>
           </CardHeader>
@@ -342,7 +399,7 @@ export default function LiveMonitorPage() {
         </Card>
       </div>
 
-      <Card className="shadow-sm">
+      <Card className="shadow-sm border border-muted/60">
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
           <CardTitle>Students</CardTitle>
           <div className="flex items-center gap-2 flex-wrap">
@@ -355,35 +412,6 @@ export default function LiveMonitorPage() {
                 className="pl-8 w-48"
               />
             </div>
-            <Button variant="outline" size="sm" onClick={() => fetchLiveData()}>
-              <RefreshCw className="h-4 w-4 mr-1" />
-              Refresh
-            </Button>
-            {students.some((s) => s.status === "Active" || s.status === "Disconnected") && (
-              <>
-                <Button variant="outline" size="sm" onClick={() => setAddTimeAllOpen(true)}>
-                  <Timer className="h-4 w-4 mr-1" />
-                  Add time for all
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleAddTimeToAll(5)}
-                  title="Adds up to 5 min per student (respects admin limit)"
-                >
-                  <Plus className="h-4 w-4 mr-1" />
-                  +5 min all
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleAddTimeToAll(10)}
-                  title="Adds up to 10 min per student (respects admin limit)"
-                >
-                  +10 min all
-                </Button>
-              </>
-            )}
           </div>
         </CardHeader>
         <CardContent>
@@ -396,20 +424,24 @@ export default function LiveMonitorPage() {
               No active exam sessions. Assign an exam and have students start to see them here.
             </p>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Student</TableHead>
-                  <TableHead>Exam</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Time left</TableHead>
-                  <TableHead>Risk</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredAndSortedStudents.map((row) => (
-                  <TableRow key={row.sessionId}>
+            <div className="rounded-lg border border-muted/50 overflow-hidden p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-muted/40">
+                    <TableHead>Student</TableHead>
+                    <TableHead>Exam</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Time left</TableHead>
+                    <TableHead>Risk</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredAndSortedStudents.map((row, index) => (
+                    <TableRow
+                      key={row.sessionId}
+                      className={index % 2 === 0 ? "bg-muted/20" : ""}
+                    >
                     <TableCell>
                       <div className="font-medium">{row.name}</div>
                       <div className="text-xs text-muted-foreground">{row.studentId}</div>
@@ -474,9 +506,13 @@ export default function LiveMonitorPage() {
                             {(row.riskCount ?? 0) > 0 && (
                               <DropdownMenuItem onClick={() => handleRemoveRisk(row.sessionId)}>
                                 <ShieldOff className="h-4 w-4 mr-2" />
-                                Remove risk
+                                Remove all risk
                               </DropdownMenuItem>
                             )}
+                            <DropdownMenuItem onClick={() => setRemoveDeviceSessionId(row.sessionId)}>
+                              <Smartphone className="h-4 w-4 mr-2" />
+                              Remove device
+                            </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => setRemoveSessionId(row.sessionId)}>
                               <UserMinus className="h-4 w-4 mr-2" />
                               Remove from monitor
@@ -493,9 +529,10 @@ export default function LiveMonitorPage() {
                       )}
                     </TableCell>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           )}
         </CardContent>
       </Card>
@@ -574,13 +611,13 @@ export default function LiveMonitorPage() {
       </AlertDialog>
 
       <AlertDialog open={!!removeSessionId} onOpenChange={() => setRemoveSessionId(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Remove from monitor?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This student will be hidden from the live monitor. Their exam continues normally; they are not submitted.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
+       <AlertDialogContent>
+         <AlertDialogHeader>
+           <AlertDialogTitle>End and remove session?</AlertDialogTitle>
+           <AlertDialogDescription>
+              This will immediately terminate the student&apos;s active exam session and auto-submit it. Their device will be disconnected and they will not be able to continue this exam.
+           </AlertDialogDescription>
+         </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={() => removeSessionId && handleRemoveFromMonitor(removeSessionId)}>
@@ -605,6 +642,24 @@ export default function LiveMonitorPage() {
               onClick={() => forceSubmitSessionId && handleForceSubmit(forceSubmitSessionId)}
             >
               Force submit
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={!!removeDeviceSessionId} onOpenChange={() => setRemoveDeviceSessionId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove device?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will immediately disconnect the student&apos;s current device and exit the exam page on that device.
+              The exam will remain active so the student can continue by logging in on a new device (time does not reset).
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => removeDeviceSessionId && handleRemoveDevice(removeDeviceSessionId)}>
+              Remove device
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

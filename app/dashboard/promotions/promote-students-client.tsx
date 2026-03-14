@@ -534,7 +534,7 @@ export default function PromoteStudentsClient() {
       </Card>
 
       {/* Step 2: Students table */}
-      <Card className="shadow-sm border-muted/60 overflow-hidden">
+      <Card className="shadow-sm border border-muted/60 overflow-hidden pb-0">
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between gap-4 flex-wrap">
             <div>
@@ -577,10 +577,10 @@ export default function PromoteStudentsClient() {
               </div>
             </div>
           ) : (
-            <div className="rounded-lg border overflow-hidden">
+            <div className="rounded-lg border border-muted/50 overflow-hidden">
               <Table>
                 <TableHeader>
-                  <TableRow className="bg-muted/50 hover:bg-muted/50 border-b">
+                  <TableRow className="bg-muted/40">
                     <TableHead className="w-[48px] text-center">
                       <Checkbox
                         checked={allFilteredSelected ? true : someFilteredSelected ? "indeterminate" : false}
@@ -616,9 +616,7 @@ export default function PromoteStudentsClient() {
                     filteredStudents.map((s, idx) => (
                       <TableRow
                         key={s.id}
-                        className={`hover:bg-muted/30 transition-colors ${
-                          idx % 2 === 1 ? "bg-muted/20" : ""
-                        }`}
+                        className={idx % 2 === 0 ? "bg-muted/20" : ""}
                       >
                         <TableCell className="w-[48px] text-center">
                           <Checkbox

@@ -280,7 +280,8 @@ create table public.grade_subjects (
   created_at timestamp with time zone null default CURRENT_TIMESTAMP,
   stream text not null default 'Common'::text,
   constraint grade_subjects_pkey primary key (id),
-  constraint grade_subjects_unique unique (grade_id, subject_id),
+  -- Allow the same subject to be assigned to multiple streams for the same grade
+  constraint grade_subjects_unique unique (grade_id, subject_id, stream),
   constraint grade_subjects_grade_id_fkey foreign KEY (grade_id) references grades (id) on delete CASCADE,
   constraint grade_subjects_subject_id_fkey foreign KEY (subject_id) references subjects (id) on delete CASCADE,
   constraint grade_subjects_stream_check check (
@@ -501,6 +502,13 @@ create table public.system_settings (
   id integer not null default 1,
   max_risk_before_submit integer not null default 7,
   max_time_extension_minutes integer not null default 30,
+  -- Feature flags + student visibility controls used across the app
+  enable_results_archive boolean not null default false,
+  enable_student_results_portal boolean not null default false,
+  enable_student_teacher_chat boolean not null default false,
+  enable_realtime_features boolean not null default false,
+  student_current_results_mode text not null default 'semester_1',
+  current_academic_year integer null,
   created_at timestamp with time zone null default CURRENT_TIMESTAMP,
   updated_at timestamp with time zone null default CURRENT_TIMESTAMP,
   constraint system_settings_pkey primary key (id),

@@ -43,16 +43,19 @@ export function ModernHeader({ title }: { title: string }) {
   const [user, setUser] = useState<{ name: string; email: string; avatar?: string } | null>(null)
   const [loading, setLoading] = useState(true)
   const [logoutOpen, setLogoutOpen] = useState(false)
+  const [canViewSettings, setCanViewSettings] = useState(false)
 
   useEffect(() => {
-    const fetchUser = async () => {
+    const fetchUserAndPermissions = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession()
+        const {
+          data: { session },
+        } = await supabase.auth.getSession()
         if (session?.user) {
           const { data: adminData, error } = await supabase
-            .from('admin')
-            .select('full_name, email')
-            .eq('id', session.user.id)
+            .from("admin")
+            .select("full_name, email")
+            .eq("id", session.user.id)
             .single()
 
           if (!error && adminData) {
@@ -61,12 +64,55 @@ export function ModernHeader({ title }: { title: string }) {
               email: adminData.email,
             })
           }
+
+          // Role + page access: use same API as sidebar so Settings respects real permissions
+          try {
+            const res = await fetch("/api/admin/page-permissions", { cache: "no-store" })
+            if (res.ok) {
+              const json = await res.json()
+              const role = (json.role as "super_admin" | "admin" | undefined) ?? "super_admin"
+              const permissions = (json.permissions || {}) as Record<string, boolean>
+
+              if (!role || role === "super_admin") {
+                // Super admin: always show Settings
+                setCanViewSettings(true)
+              } else {
+                // Admin: respect stored permissions for settings_system
+                setCanViewSettings(permissions["settings_system"] !== false)
+              }
+            } else {
+              setCanViewSettings(false)
+            }
+          } catch {
+            setCanViewSettings(false)
+          }
+        } else {
+          setUser(null)
+          setCanViewSettings(false)
         }
       } finally {
         setLoading(false)
       }
     }
-    fetchUser()
+
+    fetchUserAndPermissions()
+
+    const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+      // If the underlying Supabase session changes (e.g. Super Admin logs out
+      // because an Admin logged in on another tab), immediately reflect that
+      // in this header and redirect to login when signed out.
+      if (!session) {
+        setUser(null)
+        setCanViewSettings(false)
+        router.push("/auth/alpha")
+      } else {
+        fetchUserAndPermissions()
+      }
+    })
+
+    return () => {
+      data.subscription.unsubscribe()
+    }
   }, [router])
 
   const handleLogout = async () => {
@@ -102,14 +148,16 @@ export function ModernHeader({ title }: { title: string }) {
                   <Moon className="absolute h-4 w-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
                 </Button>
 
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="relative h-9 w-9 rounded-full hover:bg-black/5 dark:hover:bg-white/5"
-                  onClick={() => router.push("/dashboard/settings")}
-                >
-                  <Settings className="h-4 w-4" />
-                </Button>
+                {canViewSettings && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="relative h-9 w-9 rounded-full hover:bg-black/5 dark:hover:bg-white/5"
+                    onClick={() => router.push("/dashboard/settings")}
+                  >
+                    <Settings className="h-4 w-4" />
+                  </Button>
+                )}
 
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>

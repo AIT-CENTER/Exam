@@ -135,11 +135,16 @@ export function StudentSidebar(props: React.ComponentProps<typeof Sidebar>) {
         >
           <span className="flex items-center gap-2">
             <LogOut className="h-4 w-4 sm:h-3.5 sm:w-3.5 shrink-0" />
-            <span>{loggingOut ? "Logging out..." : "Log out"}</span>
+            {!isCollapsed && <span>{loggingOut ? "Logging out..." : "Log out"}</span>}
           </span>
-          <Badge variant="outline" className="text-[10px] text-red-600 border-red-200 dark:border-red-800 shrink-0">
-            Exit
-          </Badge>
+          {!isCollapsed && (
+            <Badge
+              variant="outline"
+              className="text-[10px] text-red-600 border-red-200 dark:border-red-800 shrink-0"
+            >
+              Exit
+            </Badge>
+          )}
         </button>
       </SidebarFooter>
       <SidebarRail />

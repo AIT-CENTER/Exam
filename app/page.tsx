@@ -139,10 +139,6 @@ export default function StudentLogin() {
 
   const [resumeSession, setResumeSession] = useState<any>(null);
   const [showResumeDialog, setShowResumeDialog] = useState(false);
-  const [deviceConflict, setDeviceConflict] = useState<any>(null);
-  const [showDeviceConflictDialog, setShowDeviceConflictDialog] = useState(false);
-  const [showActiveSessionBlockDialog, setShowActiveSessionBlockDialog] = useState(false);
-  const [activeSessionBlockInfo, setActiveSessionBlockInfo] = useState<any>(null);
   const [showIPWarningDialog, setShowIPWarningDialog] = useState(false);
   const [suspiciousIP, setSuspiciousIP] = useState("");
 
@@ -160,7 +156,6 @@ export default function StudentLogin() {
   const studentInputRef = useRef<HTMLInputElement>(null);
   const examInputRef = useRef<HTMLInputElement>(null);
 
-  const [countdown, setCountdown] = useState(10);
   const [idsVerified, setIdsVerified] = useState(false);
   const [verifyingIds, setVerifyingIds] = useState(false);
   const [idCheckError, setIdCheckError] = useState("");
@@ -171,25 +166,7 @@ export default function StudentLogin() {
     initializeSecurity();
   }, []);
 
-  useEffect(() => {
-    let interval: NodeJS.Timeout | null = null;
-
-    if (showActiveSessionBlockDialog && countdown > 0) {
-      interval = setInterval(() => {
-        setCountdown((prev) => {
-          if (prev <= 1) {
-            if (interval) clearInterval(interval);
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-    }
-
-    return () => {
-      if (interval) clearInterval(interval);
-    };
-  }, [showActiveSessionBlockDialog, countdown]);
+  // No countdown needed now; cross-device access is handled via a controlled takeover dialog.
 
   // Verify that Student ID and Exam ID map to real records before showing Start button
   useEffect(() => {
@@ -282,10 +259,10 @@ export default function StudentLogin() {
   const checkSuspiciousActivity = async (ip: string) => {
     try {
       const { data: ipSessions } = await supabase
-        .from("exam_sessions")
-        .select("id, status, students!inner(student_id, name)")
-        .eq("status", "in_progress")
-        .like("session_security->>ip_address", `%${ip}%`)
+        .from("session_security")
+        .select("id, session_id, ip_address, is_active")
+        .eq("is_active", true)
+        .eq("ip_address", ip)
         .limit(5);
 
       if (ipSessions && ipSessions.length >= 3) {
@@ -498,6 +475,46 @@ export default function StudentLogin() {
         setValidatedSessionInfo(validationResult);
       }
 
+      // Client-side guard: prevent opening the same exam in a second tab
+      // on the same device while it is actively running.
+      try {
+        if (typeof window !== "undefined") {
+          const raw = localStorage.getItem("examSession");
+          if (raw) {
+            const existing = JSON.parse(raw);
+            if (
+              existing &&
+              existing.studentId === validationResult.student.id &&
+              existing.examId === validationResult.exam.id &&
+              existing.sessionId
+            ) {
+              const sessionId = existing.sessionId;
+              const lastSeenKey = `alpha_exam_tab_last_seen_${sessionId}`;
+              const lastSeenRaw = localStorage.getItem(lastSeenKey);
+              const lastSeen = lastSeenRaw ? Number(lastSeenRaw) : 0;
+              const now = Date.now();
+              const isActive = lastSeen && now - lastSeen <= 15000; // 15s window
+
+              if (isActive) {
+                setLoading(false);
+                toast.error(
+                  "You already have this exam open in another browser tab on this device. Please return to that tab to continue."
+                );
+                return;
+              }
+
+              // Stale marker (tab was closed or crashed) – clean up and allow a new login.
+              if (!isActive) {
+                localStorage.removeItem("examSession");
+                localStorage.removeItem(lastSeenKey);
+              }
+            }
+          }
+        }
+      } catch (localErr) {
+        console.error("Local exam session check failed:", localErr);
+      }
+
       // Server-based session check: do not create duplicate; reuse existing if any.
       const checkRes = await fetch("/api/exam/check-session", {
         method: "POST",
@@ -523,6 +540,7 @@ export default function StudentLogin() {
           time_remaining: apiSession.time_remaining,
         };
 
+        // Same device: allow safe resume of the existing session.
         if (checkData.isSameDevice) {
           setResumeSession({
             student: validationResult.student,
@@ -536,17 +554,12 @@ export default function StudentLogin() {
           return;
         }
 
-        setDeviceConflict({
-          session: existingSession,
-          student: validationResult.student,
-          exam: validationResult.exam,
-          assignment: validationResult.assignment,
-          oldSessionId: apiSession.id,
-          oldSecurityToken: apiSession.security_token,
-          timeRemaining: apiSession.time_remaining,
-        });
-        setShowDeviceConflictDialog(true);
+        // Different device: block access instead of allowing takeover.
+        // This enforces a strict single-device policy for the exam session.
         setLoading(false);
+        toast.error(
+          "This student account is already logged in and currently taking the exam on another device. Please continue the exam there or contact your invigilator."
+        );
         return;
       }
 
@@ -583,79 +596,6 @@ export default function StudentLogin() {
     } catch (error) {
       console.error("Error resuming session:", error);
       toast.error("Failed to resume session");
-      setLoading(false);
-    }
-  };
-
-  const handleForceTakeover = async () => {
-    if (!deviceConflict) return;
-
-    setLoading(true);
-    try {
-      // Server creates new session with same end_time (timer does not reset), marks old inactive.
-      const createRes = await fetch("/api/exam/create-session", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          studentId: deviceConflict.student.id,
-          examId: deviceConflict.exam.id,
-          teacherId: deviceConflict.assignment?.teacher_id,
-          deviceFingerprint,
-          ipAddress,
-          userAgent: typeof navigator !== "undefined" ? navigator.userAgent : "",
-          takeoverSessionId: deviceConflict.oldSessionId,
-        }),
-      });
-      const createData = await createRes.json();
-      if (!createRes.ok) {
-        throw new Error(createData.error || "Takeover failed");
-      }
-
-      const session = createData.session;
-
-      const { data: oldAnswers } = await supabase
-        .from("student_answers")
-        .select("*")
-        .eq("session_id", deviceConflict.oldSessionId);
-
-      if (oldAnswers && oldAnswers.length > 0) {
-        const newAnswers = oldAnswers.map((answer: any) => ({
-          session_id: session.id,
-          question_id: answer.question_id,
-          selected_option_id: answer.selected_option_id,
-          answer_text: answer.answer_text,
-          is_flagged: answer.is_flagged,
-          is_correct: answer.is_correct,
-          answered_at: answer.answered_at,
-        }));
-
-        await supabase.from("student_answers").insert(newAnswers);
-      }
-
-      toast.warning("Session taken over. Continuing exam from previous time...");
-      setShowDeviceConflictDialog(false);
-
-      const examSession = {
-        sessionId: session.id,
-        securityToken: session.security_token,
-        studentId: deviceConflict.student.id,
-        studentNumber: deviceConflict.student.student_id,
-        studentName: deviceConflict.student.name,
-        examId: deviceConflict.exam.id,
-        examCode: deviceConflict.exam.exam_code,
-        examTitle: deviceConflict.exam.title,
-        timeRemaining: session.time_remaining ?? deviceConflict.timeRemaining,
-        deviceFingerprint: deviceFingerprint,
-        isTakeover: true,
-      };
-
-      localStorage.setItem("examSession", JSON.stringify(examSession));
-
-      const slug = deviceConflict.exam.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)+/g, "");
-
-      router.push(`/start/${slug}?student=${deviceConflict.student.student_id}&exam=${deviceConflict.exam.exam_code}&session=${session.id}&token=${session.security_token}`);
-    } catch (error: any) {
-      toast.error(error.message || "Takeover failed. Please try again.");
       setLoading(false);
     }
   };
@@ -728,90 +668,6 @@ export default function StudentLogin() {
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
     return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
-  };
-
-  const handleRetryAfterBlock = async () => {
-    setShowActiveSessionBlockDialog(false);
-    setLoading(true);
-
-    try {
-      const validationResult = await validateExamAccess(studentId, examId);
-
-      const checkRes = await fetch("/api/exam/check-session", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          studentId: validationResult.student.id,
-          examId: validationResult.exam.id,
-          deviceFingerprint,
-        }),
-      });
-      const checkData = await checkRes.json();
-      if (!checkRes.ok) {
-        toast.error(checkData.error || "Session check failed");
-        setLoading(false);
-        return;
-      }
-
-      if (checkData.exists) {
-        const apiSession = checkData.session;
-        const existingSession = {
-          id: apiSession.id,
-          security_token: apiSession.security_token,
-          started_at: apiSession.started_at,
-          end_time: apiSession.end_time,
-          time_remaining: apiSession.time_remaining,
-        };
-        if (checkData.isSameDevice) {
-          setResumeSession({
-            student: validationResult.student,
-            exam: validationResult.exam,
-            assignment: validationResult.assignment,
-            existingSession,
-            timeRemaining: apiSession.time_remaining,
-          });
-          setShowResumeDialog(true);
-        } else {
-          setDeviceConflict({
-            session: existingSession,
-            student: validationResult.student,
-            exam: validationResult.exam,
-            assignment: validationResult.assignment,
-            oldSessionId: apiSession.id,
-            oldSecurityToken: apiSession.security_token,
-            timeRemaining: apiSession.time_remaining,
-          });
-          setShowDeviceConflictDialog(true);
-        }
-        setLoading(false);
-        return;
-      }
-
-      const createRes = await fetch("/api/exam/create-session", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          studentId: validationResult.student.id,
-          examId: validationResult.exam.id,
-          teacherId: validationResult.assignment?.teacher_id,
-          deviceFingerprint,
-          ipAddress,
-          userAgent: typeof navigator !== "undefined" ? navigator.userAgent : "",
-        }),
-      });
-      const createData = await createRes.json();
-      if (!createRes.ok) {
-        toast.error(createData.error || "Failed to create session");
-        setLoading(false);
-        return;
-      }
-      toast.success("Login successful! Starting exam...");
-      redirectToExam(createData.session, validationResult);
-    } catch (error: any) {
-      toast.error(error.message || "Login failed");
-    } finally {
-      setLoading(false);
-    }
   };
 
   return (
@@ -891,176 +747,6 @@ export default function StudentLogin() {
                   </>
                 ) : (
                   "Continue Exam"
-                )}
-              </Button>
-            </DialogFooter>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Active Session Block Dialog */}
-      <Dialog open={showActiveSessionBlockDialog} onOpenChange={setShowActiveSessionBlockDialog}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-red-600">
-              <XCircle className="h-5 w-5" />
-              Active Session Detected
-            </DialogTitle>
-            <DialogDescription>
-              Your account is currently active on another device.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4 py-4">
-            <div className="rounded-lg bg-red-50 border border-red-200 p-4">
-              <div className="flex items-start gap-3">
-                <Shield className="h-5 w-5 text-red-500 mt-0.5" />
-                <div>
-                  <p className="text-sm text-red-700 font-medium mb-1">
-                    ⚠️ 10-Second Device Lock
-                  </p>
-                  <p className="text-sm text-red-600">
-                    Another device is actively taking this exam. For security,
-                    you must wait before logging in from this device.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="text-center">
-              <div className="inline-flex items-center justify-center w-24 h-24 rounded-full bg-gradient-to-r from-red-100 to-rose-100 mb-4">
-                <div className="text-center">
-                  <div className="text-3xl font-bold text-red-600">{countdown}</div>
-                  <div className="text-xs text-red-500">seconds</div>
-                </div>
-              </div>
-              <p className="text-gray-600 mb-4">
-                Please wait {countdown} second{countdown !== 1 ? "s" : ""} before trying again.
-              </p>
-
-              {countdown === 0 ? (
-                <div className="bg-green-50 border border-green-200 p-3 rounded-lg">
-                  <p className="text-green-700 font-medium">✓ You can now proceed</p>
-                  <p className="text-sm text-green-600 mt-1">
-                    The other device session is now available for takeover.
-                  </p>
-                </div>
-              ) : (
-                <div className="bg-amber-50 border border-amber-200 p-3 rounded-lg">
-                  <p className="text-amber-700">
-                    <span className="font-medium">Note:</span> This prevents exam sharing and ensures fair assessment.
-                  </p>
-                </div>
-              )}
-            </div>
-
-            <DialogFooter>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setShowActiveSessionBlockDialog(false);
-                  setLoading(false);
-                }}
-                className="flex-1"
-              >
-                Cancel
-              </Button>
-              <Button
-                onClick={handleRetryAfterBlock}
-                disabled={countdown > 0}
-                className={`flex-1 ${
-                  countdown > 0
-                    ? "bg-gray-400 cursor-not-allowed"
-                    : "bg-red-600 hover:bg-red-700"
-                }`}
-              >
-                {countdown > 0 ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Wait {countdown}s
-                  </>
-                ) : (
-                  "Try Again Now"
-                )}
-              </Button>
-            </DialogFooter>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Device Conflict Dialog */}
-      <Dialog open={showDeviceConflictDialog} onOpenChange={setShowDeviceConflictDialog}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-amber-600">
-              <ChevronRight className="h-5 w-5" />
-              Session Takeover Required
-            </DialogTitle>
-            <DialogDescription>
-              Continue exam from another device?
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4 py-4">
-            <div className="rounded-lg bg-amber-50 border border-amber-200 p-4">
-              <div className="flex items-start gap-3">
-                <Shield className="h-5 w-5 text-amber-500 mt-0.5" />
-                <div>
-                  <p className="text-sm text-amber-700 font-medium mb-1">
-                    Device Switch Detected
-                  </p>
-                  <p className="text-sm text-amber-600">
-                    Your exam session was started on another device. You can
-                    take over the session on this device.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              <div className="rounded-lg bg-blue-50 border border-blue-200 p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-medium text-blue-800">Time Continuation</p>
-                    <p className="text-sm text-blue-600">
-                      Your exam time will continue from where it left off
-                    </p>
-                  </div>
-                  <Clock className="h-5 w-5 text-blue-500" />
-                </div>
-                <div className="mt-2 text-center">
-                  <div className="text-2xl font-bold text-blue-700">
-                    {deviceConflict?.timeRemaining && formatTime(deviceConflict.timeRemaining)}
-                  </div>
-                  <p className="text-xs text-blue-600">Time remaining</p>
-                </div>
-              </div>
-            </div>
-
-            <DialogFooter className="flex-col sm:flex-row gap-2">
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setShowDeviceConflictDialog(false);
-                  setDeviceConflict(null);
-                  setLoading(false);
-                }}
-                className="flex-1"
-              >
-                Cancel
-              </Button>
-              <Button
-                onClick={handleForceTakeover}
-                className="flex-1 bg-amber-600 hover:bg-amber-700"
-                disabled={loading}
-              >
-                {loading ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Taking Over...
-                  </>
-                ) : (
-                  "Take Over Session"
                 )}
               </Button>
             </DialogFooter>

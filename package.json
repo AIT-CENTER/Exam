@@ -10,14 +10,20 @@
     "node": "24.x"
   },
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "next lint",
-    "postbuild": "next-sitemap",
-    "electron": "electron .",
-    "dist": "electron-builder"
-  },
+  "dev": "next dev -p 3000",
+  "build": "next build",
+  "start": "electron .",
+  "lint": "next lint",
+  "postbuild": "next-sitemap",
+
+  "electron": "electron .",
+
+  "desktop:dev": "concurrently \"npm run dev\" \"wait-on http://localhost:3000 && electron .\"",
+
+  "desktop:start": "concurrently \"next start -p 3000\" \"wait-on http://localhost:3000 && electron .\"",
+
+  "dist": "electron-builder"
+},
   "build": {
     "appId": "com.alpha.exam",
     "productName": "EUEE",

@@ -708,7 +708,7 @@ export default function ResultsArchiveClient() {
         </CardContent>
       </Card>
 
-      <Card className="shadow-sm">
+      <Card className="shadow-sm border border-muted/60">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <FileText className="h-5 w-5" />
@@ -828,10 +828,10 @@ export default function ResultsArchiveClient() {
             </Button>
           </div>
 
-          <div className="rounded-lg border overflow-hidden">
+          <div className="rounded-lg border border-muted/50 overflow-hidden">
             <Table>
               <TableHeader>
-                <TableRow className="bg-muted/50">
+                <TableRow className="bg-muted/40">
                   <TableHead className="font-semibold">Student ID</TableHead>
                   <TableHead className="font-semibold">Full name</TableHead>
                   <TableHead className="font-semibold">Grade</TableHead>
@@ -861,8 +861,11 @@ export default function ResultsArchiveClient() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  rows.map((r) => (
-                    <TableRow key={r.enrollment_id} className="hover:bg-muted/30">
+                  rows.map((r, index) => (
+                    <TableRow
+                      key={r.enrollment_id}
+                      className={index % 2 === 0 ? "bg-muted/20" : ""}
+                    >
                       <TableCell className="font-mono">{r.student_number ?? "—"}</TableCell>
                       <TableCell className="font-medium">{r.full_name}</TableCell>
                       <TableCell>{r.grade_name ?? `Grade ${r.grade_id}`}</TableCell>

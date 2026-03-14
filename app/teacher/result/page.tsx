@@ -89,7 +89,7 @@ export default function IndividualExamResultsPage() {
 
       if (!teacher || !teacher.teacherId) {
         toast.error("Please login as teacher to view results")
-        router.push("/teacher/login")
+        router.push("/login/tech")
         return
       }
 
@@ -97,7 +97,7 @@ export default function IndividualExamResultsPage() {
     } catch (error) {
       console.error("Authentication error:", error)
       toast.error("Authentication error. Please login again.")
-      router.push("/teacher/login")
+      router.push("/login/tech")
     }
   }
 
@@ -882,10 +882,10 @@ export default function IndividualExamResultsPage() {
         </Card>
       ) : (
         <>
-          <Card className="border shadow-sm overflow-hidden">
-            <div className="overflow-auto">
+          <Card className="shadow-sm border border-muted/60 p-0">
+            <div className="rounded-lg border border-muted/50 overflow-hidden p-0">
               <table className="w-full border-collapse text-sm">
-                <thead className="bg-zinc-50 dark:bg-zinc-900/40">
+                <thead className="bg-muted/40">
                   <tr className="border-b dark:border-zinc-800">
                     <th className="w-12 text-xs font-medium text-center p-4 text-muted-foreground">#</th>
                     <th className="min-w-[120px] text-xs font-medium text-left p-4 text-muted-foreground">
@@ -931,7 +931,10 @@ export default function IndividualExamResultsPage() {
                     }
                     
                     return (
-                      <tr key={result.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors border-b dark:border-zinc-800 last:border-b-0">
+                      <tr
+                        key={result.id}
+                        className={index % 2 === 0 ? "bg-muted/20" : ""}
+                      >
                         <td className="text-center text-xs font-medium p-4 text-foreground">
                           {(currentPage - 1) * RESULTS_PER_PAGE + index + 1}
                         </td>

@@ -11,7 +11,10 @@ const protectedTeacherRoutes = [
   "/teacher/individual",
   "/teacher/exams/[slug]",
   "/teacher/security",
+  "/teacher/monitor",
 ]
+
+const protectedStudentRoutes = ["/student"]
 
 // Edge-safe Supabase session updater
 async function updateSession(request: NextRequest) {
@@ -44,27 +47,49 @@ export async function middleware(request: NextRequest) {
   const isProtectedTeacherRoute = protectedTeacherRoutes.some(
     (route) => pathname === route || pathname.startsWith(route + "/")
   )
+  const isProtectedStudentRoute = protectedStudentRoutes.some(
+    (route) => pathname === route || pathname.startsWith(route + "/")
+  )
+
+  if (isProtectedStudentRoute && !pathname.startsWith("/student/login")) {
+    const studentSession = request.cookies.get("studentSession")
+    if (!studentSession || !studentSession.value) {
+      return NextResponse.redirect(new URL("/student/login", request.url))
+    }
+  }
 
   if (isProtectedTeacherRoute) {
-    const teacherCookie = request.cookies.get("teacherData")
+    const teacherCookie =
+      request.cookies.get("teacherData") ?? request.cookies.get("teacher_data")
 
-    if (!teacherCookie) {
+    if (!teacherCookie?.value?.trim()) {
       return NextResponse.redirect(new URL("/login/tech", request.url))
     }
 
     try {
-      const teacherData = JSON.parse(decodeURIComponent(teacherCookie.value))
+      const decoded = decodeURIComponent(teacherCookie.value.trim())
+      const teacherData = JSON.parse(decoded)
+      const teacherId = teacherData.teacherId ?? teacherData.id
+
+      if (!teacherId) {
+        const response = NextResponse.redirect(new URL("/login/tech", request.url))
+        response.cookies.delete("teacherData")
+        response.cookies.delete("teacher_data")
+        return response
+      }
 
       if (teacherData.expires && new Date(teacherData.expires) < new Date()) {
-        const response = NextResponse.redirect(new URL("/", request.url))
+        const response = NextResponse.redirect(new URL("/login/tech", request.url))
         response.cookies.delete("teacherData")
+        response.cookies.delete("teacher_data")
         return response
       }
 
       return await updateSession(request)
-    } catch (err) {
+    } catch {
       const response = NextResponse.redirect(new URL("/login/tech", request.url))
       response.cookies.delete("teacherData")
+      response.cookies.delete("teacher_data")
       return response
     }
   }

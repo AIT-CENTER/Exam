@@ -14,7 +14,7 @@ import jsPDF from "jspdf"
 import * as XLSX from "xlsx"
 import { format } from "date-fns"
 
-import { Search, ChevronLeft, ChevronRight, Users, Download, FileSpreadsheet, FileIcon } from "lucide-react"
+import { Search, Users, Download, FileSpreadsheet, FileIcon } from "lucide-react"
 import { getTeacherDataFromCookie } from "@/utils/teacherCookie"
 import { supabase } from "@/lib/supabaseClient"
 
@@ -58,7 +58,7 @@ export default function StudentsPage() {
         const teacher = await getTeacherDataFromCookie()
 
         if (!teacher) {
-          router.push("/teacher/login")
+          router.push("/login/tech")
           return
         }
 
@@ -525,100 +525,110 @@ export default function StudentsPage() {
         </div>
 
         {/* Table */}
-        <Card>
-          <Table>
-            <TableHeader>
-              <TableRow className="border-b dark:border-zinc-800">
-                <TableHead className="text-muted-foreground">#</TableHead>
-                <TableHead className="text-muted-foreground">Student ID</TableHead>
-                <TableHead className="text-muted-foreground">Full Name</TableHead>
-                <TableHead className="text-muted-foreground">Section</TableHead>
-                <TableHead className="text-muted-foreground">Stream</TableHead>
-                <TableHead className="text-muted-foreground">Gender</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {paginatedStudents.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
-                    {students.length === 0
-                      ? teacherData?.gradeId
-                        ? "No students found in your assigned sections."
-                        : "You are not assigned to any classes yet."
-                      : "No students match your search criteria."}
-                  </TableCell>
+        <Card className="shadow-sm border border-muted/60 p-0">
+          <div className="rounded-lg border border-muted/50 overflow-hidden p-0">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-muted/40">
+                  <TableHead className="text-muted-foreground">#</TableHead>
+                  <TableHead className="text-muted-foreground">Student ID</TableHead>
+                  <TableHead className="text-muted-foreground">Full Name</TableHead>
+                  <TableHead className="text-muted-foreground">Section</TableHead>
+                  <TableHead className="text-muted-foreground">Stream</TableHead>
+                  <TableHead className="text-muted-foreground">Gender</TableHead>
                 </TableRow>
-              ) : (
-                paginatedStudents.map((student, index) => (
-                  <TableRow key={student.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors">
-                    <TableCell className="font-medium text-foreground">{(currentPage - 1) * STUDENTS_PER_PAGE + index + 1}</TableCell>
-                    <TableCell className="font-medium text-foreground">{student.student_id}</TableCell>
-                    <TableCell className="font-medium text-foreground">
-                      {student.name} {student.father_name} {student.grandfather_name}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline" className="text-indigo-600 dark:text-indigo-400 border-indigo-200 dark:border-indigo-800">
-                        {student.section}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      {student.stream ? (
-                        <Badge variant="outline" className="text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800">
-                          {student.stream}
-                        </Badge>
-                      ) : (
-                        <span className="text-muted-foreground">-</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <Badge 
-                        variant={
-                          student.gender === "male" ? "default" : 
-                          student.gender === "female" ? "secondary" : 
-                          "outline"
-                        }
-                        className={
-                          student.gender === "male" ? "" :
-                          student.gender === "female" ? "bg-pink-100 dark:bg-pink-900/40 text-pink-800 dark:text-pink-400 hover:bg-pink-100 dark:hover:bg-pink-900/40" :
-                          "bg-gray-100 text-gray-800 border-gray-300 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-300"
-                        }
-                      >
-                        {student.gender.charAt(0).toUpperCase() + student.gender.slice(1)}
-                      </Badge>
+              </TableHeader>
+              <TableBody>
+                {paginatedStudents.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
+                      {students.length === 0
+                        ? teacherData?.gradeId
+                          ? "No students found in your assigned sections."
+                          : "You are not assigned to any classes yet."
+                        : "No students match your search criteria."}
                     </TableCell>
                   </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
+                ) : (
+                  paginatedStudents.map((student, index) => (
+                    <TableRow
+                      key={student.id}
+                      className={index % 2 === 0 ? "bg-muted/20" : ""}
+                    >
+                      <TableCell className="font-medium text-foreground">
+                        {(currentPage - 1) * STUDENTS_PER_PAGE + index + 1}
+                      </TableCell>
+                      <TableCell className="font-medium text-foreground">
+                        {student.student_id}
+                      </TableCell>
+                      <TableCell className="font-medium text-foreground">
+                        {student.name} {student.father_name} {student.grandfather_name}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className="text-indigo-600 dark:text-indigo-400 border-indigo-200 dark:border-indigo-800">
+                          {student.section}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        {student.stream ? (
+                          <Badge variant="outline" className="text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800">
+                            {student.stream}
+                          </Badge>
+                        ) : (
+                          <span className="text-muted-foreground">-</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <Badge 
+                          variant={
+                            student.gender === "male" ? "default" : 
+                            student.gender === "female" ? "secondary" : 
+                            "outline"
+                          }
+                          className={
+                            student.gender === "male" ? "" :
+                            student.gender === "female" ? "bg-pink-100 dark:bg-pink-900/40 text-pink-800 dark:text-pink-400 hover:bg-pink-100 dark:hover:bg-pink-900/40" :
+                            "bg-gray-100 text-gray-800 border-gray-300 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-300"
+                          }
+                        >
+                          {student.gender.charAt(0).toUpperCase() + student.gender.slice(1)}
+                        </Badge>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
         </Card>
 
         {/* Pagination */}
         {totalPages > 1 && (
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-2">
             <p className="text-sm text-muted-foreground">
               Showing {(currentPage - 1) * STUDENTS_PER_PAGE + 1} to{" "}
               {Math.min(currentPage * STUDENTS_PER_PAGE, filteredStudents.length)} of {filteredStudents.length} students
             </p>
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                size="sm"
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                className="inline-flex items-center rounded-md border px-3 py-1 text-sm bg-background hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed"
                 onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
                 disabled={currentPage === 1}
               >
-                <ChevronLeft className="h-4 w-4" />
-                Previous
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
+                Prev
+              </button>
+              <span className="text-xs text-muted-foreground">
+                Page {currentPage} of {totalPages}
+              </span>
+              <button
+                type="button"
+                className="inline-flex items-center rounded-md border px-3 py-1 text-sm bg-background hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed"
                 onClick={() => setCurrentPage((p) => Math.min(p + 1, totalPages))}
                 disabled={currentPage === totalPages}
               >
                 Next
-                <ChevronRight className="h-4 w-4" />
-              </Button>
+              </button>
             </div>
           </div>
         )}

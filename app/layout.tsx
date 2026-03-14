@@ -57,10 +57,10 @@ export default function RootLayout({
         className={`${inter.variable} ${poppins.variable} font-inter antialiased`}
       >
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false}>
-          {/* TooltipProvider ashaaraa haaraatiif asitti dabalameera */}
+          
           <TooltipProvider>
             {children}
-            <Toaster richColors position="top-center" />
+            <Toaster richColors position="bottom-right" />
           </TooltipProvider>
 
           <Script

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,24 @@ export default function StudentLoginPage() {
   const [loginId, setLoginId] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
   const [loginBusy, setLoginBusy] = useState(false);
+  const [checkingSession, setCheckingSession] = useState(true);
+
+  // If the student is already authenticated, skip the login screen and go
+  // straight to the dashboard.
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch("/api/student/me", { cache: "no-store" });
+        const json = await res.json().catch(() => ({}));
+        if (json?.authenticated) {
+          router.replace("/student");
+          return;
+        }
+      } finally {
+        setCheckingSession(false);
+      }
+    })();
+  }, [router]);
 
   async function login() {
     try {
@@ -49,6 +67,14 @@ export default function StudentLoginPage() {
     } finally {
       setLoginBusy(false);
     }
+  }
+
+  if (checkingSession) {
+    return (
+      <div className="min-h-screen flex items-center justify-center w-full bg-gradient-to-b from-gray-50 via-white to-gray-50 dark:from-gray-950 dark:via-gray-950 dark:to-gray-950 px-4">
+        <div className="text-sm text-muted-foreground">Checking session…</div>
+      </div>
+    );
   }
 
   return (

@@ -157,7 +157,7 @@ async function DashboardContent() {
       </div>
 
       {/* Teachers Table */}
-      <Card className="transition-shadow duration-200 hover:shadow-lg shadow-sm">
+      <Card className="shadow-sm border border-muted/60">
         <CardHeader className="flex flex-row items-center justify-between">
           <div>
             <CardTitle className="text-xl text-foreground">Teachers</CardTitle>
@@ -173,51 +173,49 @@ async function DashboardContent() {
         </CardHeader>
         <CardContent>
           {teachers.length === 0 ? (
-            <div className="text-center py-10 text-muted-foreground">
-              No teachers found.
-            </div>
+            <p className="text-muted-foreground py-8 text-center">No teachers found.</p>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow className="border-b">
-                  <TableHead>Full Name</TableHead>
-                  <TableHead>Username</TableHead>
-                  <TableHead>Phone Number</TableHead>
-                  <TableHead>Section</TableHead>
-                  <TableHead>Grade</TableHead>
-                  <TableHead>Subject</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {teachers.map((teacher) => (
-                  <TableRow key={teacher.id} className="transition-colors hover:bg-muted/40">
-                    <TableCell className="max-w-[150px] truncate font-medium">
-                      {teacher.full_name}
-                    </TableCell>
-                    <TableCell className="max-w-[120px] overflow-hidden whitespace-nowrap text-muted-foreground">
-                      {teacher.username}
-                    </TableCell>
-
-                    <TableCell className="max-w-[120px] overflow-hidden whitespace-nowrap text-muted-foreground">
-                      {teacher.phone_number}
-                    </TableCell>
-
-                    <TableCell className="max-w-[120px] overflow-hidden whitespace-nowrap text-muted-foreground">
-                      {teacher.section}
-                    </TableCell>
-
-                    <TableCell className="max-w-[120px] overflow-hidden whitespace-nowrap text-muted-foreground">
-                      {teacher.grade_name}
-                    </TableCell>
-
-                    <TableCell className="text-muted-foreground truncate max-w-[120px] overflow-hidden whitespace-nowrap">
-                      {teacher.subject_name}
-                    </TableCell>
-
+            <div className="rounded-lg border border-muted/50 overflow-hidden">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-muted/40">
+                    <TableHead>Full Name</TableHead>
+                    <TableHead>Username</TableHead>
+                    <TableHead>Phone Number</TableHead>
+                    <TableHead>Section</TableHead>
+                    <TableHead>Grade</TableHead>
+                    <TableHead>Subject</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {teachers.map((teacher, index) => (
+                    <TableRow
+                      key={teacher.id}
+                      className={index % 2 === 0 ? "bg-muted/20" : ""}
+                    >
+                      <TableCell className="font-medium">
+                        {teacher.full_name}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {teacher.username}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {teacher.phone_number}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {teacher.section}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {teacher.grade_name}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {teacher.subject_name}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           )}
         </CardContent>
       </Card>

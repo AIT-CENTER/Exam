@@ -112,6 +112,26 @@ export function useLiveMonitor(teacherId?: string | null) {
     [fetchLiveData]
   )
 
+  const removeDeviceFromSession = useCallback(
+    async (sessionId: string) => {
+      try {
+        const res = await fetch("/api/teacher/remove-device", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionId }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || "Remove device failed");
+        await fetchLiveData();
+        return true;
+      } catch (err) {
+        console.error("[useLiveMonitor] Error removing device:", err);
+        throw err;
+      }
+    },
+    [fetchLiveData]
+  );
+
   const removeRiskFromStudent = useCallback(
     async (sessionId: string) => {
       try {
@@ -150,6 +170,32 @@ export function useLiveMonitor(teacherId?: string | null) {
       } catch (err) {
         console.error("[useLiveMonitor] Error adding time to all:", err)
         throw err
+      }
+    },
+    [fetchLiveData, students]
+  )
+
+  const removeRiskFromAll = useCallback(
+    async () => {
+      const targetSessions = students.filter((s) => (s.riskCount ?? 0) > 0);
+      if (!targetSessions.length) return false;
+      try {
+        for (const s of targetSessions) {
+          try {
+            await fetch("/api/teacher/remove-risk", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ sessionId: s.sessionId }),
+            });
+          } catch {
+            // ignore per-session failure; continue with others
+          }
+        }
+        await fetchLiveData();
+        return true;
+      } catch (err) {
+        console.error("[useLiveMonitor] Error removing risk from all:", err);
+        throw err;
       }
     },
     [fetchLiveData, students]
@@ -237,6 +283,8 @@ export function useLiveMonitor(teacherId?: string | null) {
     addTimeToStudent,
     addTimeToAll,
     removeRiskFromStudent,
+    removeRiskFromAll,
+    removeDeviceFromSession,
     removeStudentFromMonitor,
     forceSubmitExam,
     fetchLiveData,

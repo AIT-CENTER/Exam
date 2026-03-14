@@ -204,7 +204,8 @@ export default function TeacherLogin() {
 
     setTeacherDataCookie(cookieData)
     toast.success("Login successful!")
-    router.push("/teacher")
+    // Use full navigation so the cookie is definitely sent with the request
+    window.location.href = "/teacher"
   }
 
   const handleSelectAssignment = async (assignment: TeacherAssignment) => {

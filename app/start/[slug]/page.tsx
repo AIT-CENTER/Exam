@@ -1123,6 +1123,8 @@ export default function ExamTakingPage() {
   const maxRiskBeforeSubmitRef = useRef<number>(7);
   const tabExitPendingRef = useRef<boolean>(false);
   const tabExitLastSentAtRef = useRef<number>(0);
+  const examTabIdRef = useRef<string | null>(null);
+  const examTabHeartbeatRef = useRef<NodeJS.Timeout | null>(null);
 
   // Refs to track latest state for timer callback
   const questionsRef = useRef<any[]>([]);
@@ -1255,6 +1257,13 @@ export default function ExamTakingPage() {
       } catch (err) {
         console.log("Fullscreen exit failed:", err);
       }
+    }
+
+    // Ensure the user is fully logged out at the auth level
+    try {
+      await supabase.auth.signOut();
+    } catch (err) {
+      console.error("Error signing out after session termination:", err);
     }
 
     // Clear session data
@@ -1614,26 +1623,44 @@ export default function ExamTakingPage() {
 
           const base = typeof window !== "undefined" ? window.location.origin : "";
           const timeRes = await fetch(
-            `${base}/api/exam/server-time?sessionId=${encodeURIComponent(activeSession.id)}&securityToken=${encodeURIComponent(sessionToken)}`
+            `${base}/api/exam/server-time?sessionId=${encodeURIComponent(
+              activeSession.id
+            )}&securityToken=${encodeURIComponent(sessionToken)}`
           );
-          const timeData = await timeRes.json();
-          if (timeRes.ok && typeof timeData.serverTimeRemaining === "number") {
-            const remaining = Math.max(0, timeData.serverTimeRemaining);
+          const timeData = await timeRes.json().catch(() => ({} as any));
+
+          let instructionSeen = false;
+
+          if (timeRes.ok && typeof (timeData as any).serverTimeRemaining === "number") {
+            const remaining = Math.max(0, (timeData as any).serverTimeRemaining);
             setTimeLeft(remaining);
             timeLeftRef.current = remaining;
-            if (timeData.risk_count != null) setRiskCount(timeData.risk_count);
-            if (timeData.max_risk_before_submit != null) setMaxRiskBeforeSubmit(timeData.max_risk_before_submit);
-            if (timeData.expired) {
+            if ((timeData as any).risk_count != null)
+              setRiskCount((timeData as any).risk_count);
+            if ((timeData as any).max_risk_before_submit != null)
+              setMaxRiskBeforeSubmit((timeData as any).max_risk_before_submit);
+            if ((timeData as any).expired) {
               toast.error("Exam time has expired");
               router.push("/");
               return;
             }
+            instructionSeen = (timeData as any).instruction_seen === true;
+          } else if (timeRes.status === 401) {
+            // Backend no longer recognizes this session (e.g. table reset). Treat as fresh instructions.
+            console.warn(
+              "[ExamTakingPage] server-time rejected session – clearing stale session and showing instructions."
+            );
+            setSessionId(null);
+            sessionIdRef.current = null;
+            setSecurityToken("");
+            securityTokenRef.current = "";
+            activeSession = null;
           } else {
-            const fallback = activeSession.time_remaining ?? examDurationRef.current;
+            const fallback =
+              (activeSession as any)?.time_remaining ?? examDurationRef.current;
             setTimeLeft(fallback);
             timeLeftRef.current = fallback;
           }
-          const instructionSeen = timeRes.ok && timeData.instruction_seen === true;
 
         // Load saved answers
         const { data: savedAnswers } = await supabase
@@ -1741,6 +1768,189 @@ export default function ExamTakingPage() {
 
     loadExamData();
   }, [searchParams, router]);
+
+  // --- Single-tab lock per exam session on this device ---
+  // Prevent the same student/exam session from being actively opened
+  // in multiple tabs in the same browser. A lightweight localStorage
+  // "lock + heartbeat" is used so that:
+  // - If another tab is actively running the exam (last_seen < ~15s),
+  //   this tab is blocked and redirected home.
+  // - If the other tab was closed/crashed (stale heartbeat), this tab
+  //   can safely reclaim the lock.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!sessionId || examStatus !== "in-progress") return;
+
+    const lockKey = `alpha_exam_tab_lock_${sessionId}`;
+    const lastSeenKey = `alpha_exam_tab_last_seen_${sessionId}`;
+
+    const tabId =
+      examTabIdRef.current ||
+      (examTabIdRef.current =
+        (window.crypto?.randomUUID?.() as string) ??
+        `${Date.now()}_${Math.random().toString(36).slice(2)}`);
+
+    try {
+      const existing = localStorage.getItem(lockKey);
+      if (existing && existing !== tabId) {
+        const lastSeenRaw = localStorage.getItem(lastSeenKey);
+        const lastSeen = lastSeenRaw ? Number(lastSeenRaw) : 0;
+        const now = Date.now();
+        const isStale = !lastSeen || now - lastSeen > 15000; // 15s grace window
+
+        if (!isStale) {
+          toast.error(
+            "This exam is already open in another browser tab on this device. Please switch back to that tab to continue."
+          );
+
+          // Best-effort: stop local timers/monitors in this extra tab
+          if (sessionMonitorRef.current) {
+            sessionMonitorRef.current.stop();
+            sessionMonitorRef.current = null;
+          }
+          if (timerIntervalRef.current) {
+            clearInterval(timerIntervalRef.current);
+            timerIntervalRef.current = null;
+          }
+
+          router.push("/");
+          return;
+        }
+      }
+
+      // Acquire or refresh the lock for this tab
+      localStorage.setItem(lockKey, tabId);
+      localStorage.setItem(lastSeenKey, String(Date.now()));
+
+      if (examTabHeartbeatRef.current) {
+        clearInterval(examTabHeartbeatRef.current);
+        examTabHeartbeatRef.current = null;
+      }
+      examTabHeartbeatRef.current = setInterval(() => {
+        try {
+          localStorage.setItem(lastSeenKey, String(Date.now()));
+        } catch {
+          // ignore heartbeat errors
+        }
+      }, 5000);
+
+      const release = () => {
+        try {
+          const current = localStorage.getItem(lockKey);
+          if (current === tabId) {
+            localStorage.removeItem(lockKey);
+            localStorage.removeItem(lastSeenKey);
+          }
+        } catch {
+          // ignore
+        }
+      };
+
+      window.addEventListener("beforeunload", release);
+
+      return () => {
+        window.removeEventListener("beforeunload", release);
+        if (examTabHeartbeatRef.current) {
+          clearInterval(examTabHeartbeatRef.current);
+          examTabHeartbeatRef.current = null;
+        }
+        release();
+      };
+    } catch (e) {
+      console.error("Exam tab lock failed:", e);
+    }
+  }, [examStatus, sessionId, router]);
+
+  // --- Single-tab lock per exam session on this device ---
+  // Prevent the same student/exam session from being actively opened
+  // in multiple tabs in the same browser. A lightweight localStorage
+  // "lock + heartbeat" is used so that:
+  // - If another tab is actively running the exam (last_seen < ~15s),
+  //   this tab is blocked and redirected home.
+  // - If the other tab was closed/crashed (stale heartbeat), this tab
+  //   can safely reclaim the lock.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!sessionId || examStatus !== "in-progress") return;
+
+    const lockKey = `alpha_exam_tab_lock_${sessionId}`;
+    const lastSeenKey = `alpha_exam_tab_last_seen_${sessionId}`;
+
+    const tabId =
+      examTabIdRef.current ||
+      (examTabIdRef.current =
+        (window.crypto?.randomUUID?.() as string) ??
+        `${Date.now()}_${Math.random().toString(36).slice(2)}`);
+
+    try {
+      const existing = localStorage.getItem(lockKey);
+      if (existing && existing !== tabId) {
+        const lastSeenRaw = localStorage.getItem(lastSeenKey);
+        const lastSeen = lastSeenRaw ? Number(lastSeenRaw) : 0;
+        const now = Date.now();
+        const isStale = !lastSeen || now - lastSeen > 15000; // 15s grace window
+
+        if (!isStale) {
+          toast.error(
+            "This exam is already open in another browser tab on this device. Please switch back to that tab to continue."
+          );
+
+          // Best-effort: stop local timers/monitors in this extra tab
+          if (sessionMonitorRef.current) {
+            sessionMonitorRef.current.stop();
+            sessionMonitorRef.current = null;
+          }
+          if (timerIntervalRef.current) {
+            clearInterval(timerIntervalRef.current);
+            timerIntervalRef.current = null;
+          }
+
+          router.push("/");
+          return;
+        }
+      }
+
+      // Acquire or refresh the lock for this tab
+      localStorage.setItem(lockKey, tabId);
+      localStorage.setItem(lastSeenKey, String(Date.now()));
+
+      if (examTabHeartbeatRef.current) {
+        clearInterval(examTabHeartbeatRef.current);
+      }
+      examTabHeartbeatRef.current = setInterval(() => {
+        try {
+          localStorage.setItem(lastSeenKey, String(Date.now()));
+        } catch {
+          // ignore heartbeat errors
+        }
+      }, 5000);
+
+      const release = () => {
+        try {
+          const current = localStorage.getItem(lockKey);
+          if (current === tabId) {
+            localStorage.removeItem(lockKey);
+            localStorage.removeItem(lastSeenKey);
+          }
+        } catch {
+          // ignore
+        }
+      };
+
+      window.addEventListener("beforeunload", release);
+
+      return () => {
+        window.removeEventListener("beforeunload", release);
+        if (examTabHeartbeatRef.current) {
+          clearInterval(examTabHeartbeatRef.current);
+          examTabHeartbeatRef.current = null;
+        }
+        release();
+      };
+    } catch (e) {
+      console.error("Exam tab lock failed:", e);
+    }
+  }, [examStatus, sessionId, router]);
 
   // --- Calculate Score Function ---
   const calculateScore = (questions: any[], answers: any[]) => {
@@ -1886,8 +2096,15 @@ export default function ExamTakingPage() {
         sessionMonitorRef.current &&
         !sessionMonitorRef.current.isSessionActive()
       ) {
-        toast.error("Session is no longer active");
-        return;
+        // For auto-submit (timer/risk/fullscreen), proceed so we can gracefully
+        // finalize UI even if the server already marked the session inactive.
+        if (!isAutoSubmit) {
+          toast.error("Session is no longer active");
+          return;
+        }
+        console.warn(
+          "[submitExam] Auto-submit called after session became inactive; continuing to finalize."
+        );
       }
 
       // Calculate score using current data
@@ -1982,6 +2199,13 @@ export default function ExamTakingPage() {
         } catch (err) {
           console.log("Fullscreen exit failed:", err);
         }
+      }
+
+      // Log the user out at the auth level once the exam is submitted
+      try {
+        await supabase.auth.signOut();
+      } catch (err) {
+        console.error("Error signing out after exam submission:", err);
       }
 
       // Clear session data

@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
     const { data: session, error: sessionError } = await admin
       .from("exam_sessions")
       .select(
-        "id, exam_id, student_id, status, started_at, end_time, extra_time_seconds, security_token, risk_count"
+        "id, exam_id, student_id, teacher_id, status, started_at, end_time, extra_time_seconds, security_token, risk_count"
       )
       .eq("id", sessionId)
       .eq("security_token", securityToken)
@@ -79,19 +79,67 @@ export async function POST(request: NextRequest) {
       maxRiskBeforeSubmit = Number(settings.max_risk_before_submit);
     }
 
-    // Auto-submit when time is up: return expired so client can submit
+    // Auto-submit when time is up: mark session submitted and end security token.
     if (serverTimeRemaining <= 0) {
+      const isoNow = new Date().toISOString();
+
+      // 1) Mark the session as submitted (only if still in_progress).
+      if (session.status === "in_progress") {
+        const { error: updateErr } = await admin
+          .from("exam_sessions")
+          .update({
+            status: "submitted",
+            submitted_at: isoNow,
+            updated_at: isoNow,
+            time_remaining: 0,
+          })
+          .eq("id", sessionId)
+          .eq("security_token", securityToken);
+
+        if (updateErr) {
+          console.error("[heartbeat] auto-submit update error:", updateErr);
+        }
+
+        // 2) Deactivate any active session_security rows for this session.
+        const { error: secErr } = await admin
+          .from("session_security")
+          .update({ is_active: false })
+          .eq("session_id", sessionId)
+          .eq("token", securityToken);
+
+        if (secErr) {
+          console.error("[heartbeat] auto-submit security error:", secErr);
+        }
+
+        // 3) Upsert a result row (0 marks by default; teacher can adjust later).
+        const { error: resErr } = await admin.from("results").upsert(
+          {
+            exam_id: session.exam_id,
+            student_id: session.student_id,
+            teacher_id: session.teacher_id,
+            total_marks_obtained: 0,
+            comments: "Auto-submitted by system (time expired via heartbeat). Please correct manually.",
+            submission_time: isoNow,
+          },
+          { onConflict: "exam_id,student_id" }
+        );
+
+        if (resErr) {
+          console.error("[heartbeat] auto-submit result error:", resErr);
+        }
+      }
+
       return NextResponse.json({
         ok: true,
         serverTime: now,
         serverTimeRemaining: 0,
         expired: true,
+        auto_submitted: true,
         risk_count: session.risk_count ?? 0,
         max_risk_before_submit: maxRiskBeforeSubmit,
       });
     }
 
-    // Update last activity only. NEVER store time_remaining — timer is always end_time - now().
     const isoNow = new Date().toISOString();
     await Promise.all([
       admin
@@ -99,6 +147,8 @@ export async function POST(request: NextRequest) {
         .update({
           last_activity_at: isoNow,
           updated_at: isoNow,
+          // Keep database time_remaining in sync for admin views / reports.
+          time_remaining: serverTimeRemaining,
         })
         .eq("id", sessionId)
         .eq("security_token", securityToken),
