@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
+import { Progress } from "@/components/ui/progress"
 import { Skeleton } from "@/components/ui/skeleton"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { format } from "date-fns"
@@ -105,6 +106,7 @@ export default function IndividualExamResultsPage() {
       setLoading(true)
       setStatsLoading(true)
 
+      // Fetch teacher's exams
       const { data: teacherExams, error: examsError } = await supabase
         .from("exams")
         .select(`
@@ -155,8 +157,10 @@ export default function IndividualExamResultsPage() {
         return
       }
 
+      // Get exam IDs
       const examIds = formattedExams.map((exam) => exam.id)
 
+      // Fetch results for these exams with proper joins including gender and stream
       const { data: examResults, error: resultsError } = await supabase
         .from("results")
         .select(`
@@ -185,6 +189,7 @@ export default function IndividualExamResultsPage() {
         return
       }
 
+      // Format results properly
       const formattedResults: Result[] = (examResults || []).map((result: any) => {
         const percentage = result.exams?.total_marks
           ? Math.round((result.total_marks_obtained / result.exams.total_marks) * 100)
@@ -236,6 +241,7 @@ export default function IndividualExamResultsPage() {
         return matchesSearch && matchesExam && matchesSection
       })
       .sort((a, b) => {
+        // Sort by student name, then by exam title
         if (a.student_name !== b.student_name) {
           return a.student_name.localeCompare(b.student_name)
         }
@@ -250,6 +256,7 @@ export default function IndividualExamResultsPage() {
     return [...new Set(results.map((r) => r.student_section))].filter(Boolean).sort()
   }, [results])
 
+  // Statistics calculations
   const stats = useMemo(() => {
     if (filteredResults.length === 0) {
       return {
@@ -289,93 +296,107 @@ export default function IndividualExamResultsPage() {
       return
     }
 
-    const doc = new jsPDF({
-      orientation: "landscape",
-      unit: "mm",
-      format: "a4"
-    })
+    const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" })
+    const pageHeight = doc.internal.pageSize.height
+    const pageWidth = doc.internal.pageSize.width
+    let currentY = 12
 
-    // School header
-    doc.setFontSize(16)
+    // Helper function to add header on each page
+    const addHeader = () => {
+      doc.setFontSize(14)
+      doc.setFont("helvetica", "bold")
+      doc.text("Alpha School Exam Results Report", pageWidth / 2, currentY, { align: "center" })
+      currentY += 6
+
+      doc.setFontSize(10)
+      doc.setFont("helvetica", "normal")
+      doc.text(`Generated: ${format(new Date(), "PPP")}`, 14, currentY)
+      currentY += 4
+    }
+
+    addHeader()
+
+    // Build headers
+    const headers = ["#", "Student ID", "Student Name", "Exam Name", "Subject", "Score", "Gender", "Stream"]
+    const columnWidths = [6, 15, 25, 30, 20, 15, 12, 12]
+    const startX = 14
+    let colX = startX
+
+    // Draw header row with smaller font
+    doc.setFillColor(79, 70, 229)
     doc.setFont("helvetica", "bold")
-    doc.text("KUMSA MORODA SECONDARY SCHOOL", 148, 15, { align: "center" })
+    doc.setFontSize(8)
+    doc.setTextColor(255, 255, 255)
 
-    doc.setFontSize(14)
-    doc.text("GRADE 12 SECTION B STUDENT MARK LIST", 148, 22, { align: "center" })
+    headers.forEach((h, i) => {
+      const width = columnWidths[i]
+      doc.rect(colX, currentY, width, 6, "F")
+      const text = h.substring(0, 8)
+      doc.text(text, colX + 1, currentY + 3.5)
+      colX += width
+    })
 
-    doc.setFontSize(12)
-    doc.text("SUBJECT: ______", 148, 29, { align: "center" })
-
-    // Academic year
-    doc.setFontSize(11)
+    currentY += 6
     doc.setFont("helvetica", "normal")
-    doc.text("2018 E.C", 270, 15, { align: "right" })
+    doc.setFontSize(7)
 
-    // Table headers matching the image
-    const headers = [
-      ["No", "Name", "F.Name", "G.F.Name", "Sex", "Age", "SEC", "10%", "20%", "50%", "Final 50%", "Total 100%"]
-    ]
+    // Table data rows
+    filteredResults.forEach((r, idx) => {
+      // Check if we need a new page
+      if (currentY > pageHeight - 15) {
+        doc.addPage()
+        currentY = 12
+        addHeader()
 
-    // Prepare data rows
-    const tableData = filteredResults.map((result, index) => {
-      return [
-        (index + 1).toString(),
-        result.student_name.split(' ')[0] || "",
-        result.student_name.split(' ')[1] || "",
-        result.student_name.split(' ')[2] || "",
-        result.student_gender.substring(0, 1),
-        "18", // Default age since we don't have it in the data
-        result.student_section,
-        "", // 10% - empty as in image
-        "", // 20% - empty as in image
-        "", // 50% - empty as in image
-        result.total_marks_obtained.toString(), // Final 50%
-        result.total_marks_obtained.toString() // Total 100%
+        // Redraw header row
+        doc.setFillColor(79, 70, 229)
+        doc.setFont("helvetica", "bold")
+        doc.setFontSize(8)
+        doc.setTextColor(255, 255, 255)
+        colX = startX
+        headers.forEach((h, i) => {
+          const width = columnWidths[i]
+          doc.rect(colX, currentY, width, 6, "F")
+          const text = h.substring(0, 8)
+          doc.text(text, colX + 1, currentY + 3.5)
+          colX += width
+        })
+        currentY += 6
+        doc.setFont("helvetica", "normal")
+        doc.setFontSize(7)
+      }
+
+      // Alternate row colors
+      if (idx % 2 === 0) {
+        doc.setFillColor(240, 245, 255)
+      } else {
+        doc.setFillColor(255, 255, 255)
+      }
+
+      const rowData = [
+        (idx + 1).toString(),
+        r.student_student_id.substring(0, 10),
+        r.student_name.substring(0, 15),
+        r.exam_title.substring(0, 20),
+        r.exam_subject_name.substring(0, 12),
+        `${r.total_marks_obtained}/${r.exam_total_marks}`,
+        r.student_gender.substring(0, 6),
+        r.student_stream.substring(0, 8),
       ]
+
+      colX = startX
+      doc.setTextColor(0, 0, 0)
+      rowData.forEach((cell, i) => {
+        const width = columnWidths[i]
+        doc.rect(colX, currentY, width, 5, "F")
+        doc.text(cell, colX + 1, currentY + 3)
+        colX += width
+      })
+
+      currentY += 5
     })
 
-    // Generate table
-    autoTable(doc, {
-      head: headers,
-      body: tableData,
-      startY: 35,
-      theme: 'grid',
-      styles: {
-        fontSize: 8,
-        cellPadding: 2,
-        lineColor: [0, 0, 0],
-        lineWidth: 0.1,
-      },
-      headStyles: {
-        fillColor: [255, 255, 255],
-        textColor: [0, 0, 0],
-        fontStyle: 'bold',
-        lineColor: [0, 0, 0],
-        lineWidth: 0.1,
-      },
-      bodyStyles: {
-        textColor: [0, 0, 0],
-        lineColor: [0, 0, 0],
-        lineWidth: 0.1,
-      },
-      columnStyles: {
-        0: { cellWidth: 10 }, // No
-        1: { cellWidth: 25 }, // Name
-        2: { cellWidth: 25 }, // F.Name
-        3: { cellWidth: 25 }, // G.F.Name
-        4: { cellWidth: 10 }, // Sex
-        5: { cellWidth: 10 }, // Age
-        6: { cellWidth: 10 }, // SEC
-        7: { cellWidth: 15 }, // 10%
-        8: { cellWidth: 15 }, // 20%
-        9: { cellWidth: 15 }, // 50%
-        10: { cellWidth: 20 }, // Final 50%
-        11: { cellWidth: 20 }, // Total 100%
-      },
-      margin: { left: 10, right: 10 },
-    })
-
-    doc.save(`student_mark_list_${format(new Date(), "yyyy-MM-dd")}.pdf`)
+    doc.save(`exam_results_${format(new Date(), "yyyy-MM-dd")}.pdf`)
     toast.success("Exported to PDF successfully")
   }
 
@@ -385,51 +406,72 @@ export default function IndividualExamResultsPage() {
       return
     }
 
-    const data = filteredResults.map((r, i) => ({
-      "No": i + 1,
-      "Name": r.student_name.split(' ')[0] || "",
-      "F.Name": r.student_name.split(' ')[1] || "",
-      "G.F.Name": r.student_name.split(' ')[2] || "",
-      "Sex": r.student_gender.substring(0, 1),
-      "Age": 18,
-      "SEC": r.student_section,
-      "10%": "",
-      "20%": "",
-      "50%": "",
-      "Final 50%": r.total_marks_obtained,
-      "Total 100%": r.total_marks_obtained
-    }))
+    const data = filteredResults.map((r, i) => {
+      return {
+        "#": i + 1,
+        "Student ID": r.student_student_id,
+        "Student Name": r.student_name,
+        "Exam Name": r.exam_title,
+        "Subject": r.exam_subject_name,
+        "Score Obtained": r.total_marks_obtained,
+        "Total Marks": r.exam_total_marks,
+        "Score": `${r.total_marks_obtained}/${r.exam_total_marks}`,
+        "Gender": r.student_gender,
+        "Stream": r.student_stream
+      }
+    })
 
+    // Add summary statistics
+    const summaryData = {
+      "#": "SUMMARY",
+      "Student ID": `Total Results: ${filteredResults.length}`,
+      "Student Name": `Average Score: ${stats.averageScore}%`,
+      "Exam Name": `Highest: ${stats.highestScore}%`,
+      "Subject": `Lowest: ${stats.lowestScore}%`,
+      "Score Obtained": `Total Marks: ${stats.totalMarks}`,
+      "Total Marks": `Generated: ${format(new Date(), "PPPP")}`
+    }
+
+    // Create workbook with multiple sheets
     const wb = XLSX.utils.book_new()
+
+    // Main results sheet
     const ws = XLSX.utils.json_to_sheet(data)
 
-    // Add title
-    XLSX.utils.sheet_add_aoa(ws, [
-      ["KUMSA MORODA SECONDARY SCHOOL"],
-      ["GRADE 12 SECTION B STUDENT MARK LIST"],
-      ["SUBJECT: __________________"],
-      ["2018 E.C"],
-      []
-    ], { origin: "A1" })
+    // Add summary row at the beginning
+    XLSX.utils.sheet_add_json(ws, [summaryData], { skipHeader: true, origin: "A1" })
 
+    // Style column widths
     const wscols = [
-      { wch: 5 },  // No
-      { wch: 15 }, // Name
-      { wch: 15 }, // F.Name
-      { wch: 15 }, // G.F.Name
-      { wch: 5 },  // Sex
-      { wch: 5 },  // Age
-      { wch: 5 },  // SEC
-      { wch: 8 },  // 10%
-      { wch: 8 },  // 20%
-      { wch: 8 },  // 50%
-      { wch: 10 }, // Final 50%
-      { wch: 10 }  // Total 100%
+      { wch: 5 },   // #
+      { wch: 15 },  // Student ID
+      { wch: 25 },  // Student Name
+      { wch: 40 },  // Exam Name
+      { wch: 20 },  // Subject
+      { wch: 15 },  // Score Obtained
+      { wch: 12 },  // Total Marks
+      { wch: 15 },  // Score
+      { wch: 12 },  // Gender
+      { wch: 12 }   // Stream
     ]
     ws['!cols'] = wscols
 
-    XLSX.utils.book_append_sheet(wb, ws, "Mark List")
-    XLSX.writeFile(wb, `student_mark_list_${format(new Date(), "yyyy-MM-dd")}.xlsx`)
+    XLSX.utils.book_append_sheet(wb, ws, "Exam Results")
+
+    // Add statistics sheet
+    const statsData = [
+      ["Exam Results Statistics", ""],
+      ["Total Results", filteredResults.length],
+      ["Average Score", `${stats.averageScore}%`],
+      ["Highest Score", `${stats.highestScore}%`],
+      ["Lowest Score", `${stats.lowestScore}%`],
+      ["Total Marks Obtained", stats.totalMarks],
+      ["Date Generated", format(new Date(), "PPPP")]
+    ]
+    const statsWs = XLSX.utils.aoa_to_sheet(statsData)
+    XLSX.utils.book_append_sheet(wb, statsWs, "Statistics")
+
+    XLSX.writeFile(wb, `exam_results_${format(new Date(), "yyyy-MM-dd")}.xlsx`)
     toast.success("Exported to Excel successfully")
   }
 
@@ -439,76 +481,152 @@ export default function IndividualExamResultsPage() {
       return
     }
 
-    const tableRows = filteredResults.map((r, i) => `
-      <tr>
-        <td style="border: 1px solid black; padding: 4px; text-align: center;">${i + 1}</td>
-        <td style="border: 1px solid black; padding: 4px;">${r.student_name.split(' ')[0] || ""}</td>
-        <td style="border: 1px solid black; padding: 4px;">${r.student_name.split(' ')[1] || ""}</td>
-        <td style="border: 1px solid black; padding: 4px;">${r.student_name.split(' ')[2] || ""}</td>
-        <td style="border: 1px solid black; padding: 4px; text-align: center;">${r.student_gender.substring(0, 1)}</td>
-        <td style="border: 1px solid black; padding: 4px; text-align: center;">18</td>
-        <td style="border: 1px solid black; padding: 4px; text-align: center;">${r.student_section}</td>
-        <td style="border: 1px solid black; padding: 4px; text-align: center;"></td>
-        <td style="border: 1px solid black; padding: 4px; text-align: center;"></td>
-        <td style="border: 1px solid black; padding: 4px; text-align: center;"></td>
-        <td style="border: 1px solid black; padding: 4px; text-align: center;">${r.total_marks_obtained}</td>
-        <td style="border: 1px solid black; padding: 4px; text-align: center;">${r.total_marks_obtained}</td>
-      </tr>
-    `).join("")
+    const tableHeader = `
+      <table border="1" style="border-collapse: collapse; width:100%; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+        <thead>
+          <tr style="background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%); color: white; font-weight: bold;">
+            <th style="padding: 12px; border: 1px solid #ddd; text-align: center;">#</th>
+            <th style="padding: 12px; border: 1px solid #ddd; text-align: center;">Student ID</th>
+            <th style="padding: 12px; border: 1px solid #ddd; text-align: left;">Student Name</th>
+            <th style="padding: 12px; border: 1px solid #ddd; text-align: left;">Exam Name</th>
+            <th style="padding: 12px; border: 1px solid #ddd; text-align: left;">Subject</th>
+            <th style="padding: 12px; border: 1px solid #ddd; text-align: center;">Score</th>
+            <th style="padding: 12px; border: 1px solid #ddd; text-align: center;">Gender</th>
+            <th style="padding: 12px; border: 1px solid #ddd; text-align: center;">Stream</th>
+          </tr>
+        </thead>
+        <tbody>`
+
+    const tableBody = filteredResults
+      .map((r, i) => {
+        const getGenderColor = (gender: string) => {
+          switch (gender.toLowerCase()) {
+            case 'male': return '#3B82F6'
+            case 'female': return '#EC4899'
+            default: return '#6B7280'
+          }
+        }
+
+        const getStreamColor = (stream: string) => {
+          switch (stream) {
+            case 'Natural': return '#10B981'
+            case 'Social': return '#8B5CF6'
+            case 'Common': return '#F59E0B'
+            default: return '#6B7280'
+          }
+        }
+
+        const genderColor = getGenderColor(r.student_gender)
+        const streamColor = getStreamColor(r.student_stream)
+
+        return `
+          <tr style="${i % 2 === 0 ? 'background-color: #F8FAFC;' : 'background-color: #FFFFFF;'}">
+            <td style="padding: 10px; border: 1px solid #E5E7EB; text-align: center; font-weight: 500;">${i + 1}</td>
+            <td style="padding: 10px; border: 1px solid #E5E7EB; text-align: center; font-family: 'Courier New', monospace;">${r.student_student_id}</td>
+            <td style="padding: 10px; border: 1px solid #E5E7EB; text-align: left;">${r.student_name}</td>
+            <td style="padding: 10px; border: 1px solid #E5E7EB; text-align: left; max-width: 200px;">${r.exam_title}</td>
+            <td style="padding: 10px; border: 1px solid #E5E7EB; text-align: left;">${r.exam_subject_name}</td>
+            <td style="padding: 10px; border: 1px solid #E5E7EB; text-align: center; font-weight: 600;">
+              ${r.total_marks_obtained}/${r.exam_total_marks}
+            </td>
+            <td style="padding: 10px; border: 1px solid #E5E7EB; text-align: center;">
+              <span style="color: ${genderColor}; font-weight: bold; padding: 4px 8px; border-radius: 4px; background-color: ${genderColor}15;">
+                ${r.student_gender}
+              </span>
+            </td>
+            <td style="padding: 10px; border: 1px solid #E5E7EB; text-align: center;">
+              <span style="color: ${streamColor}; font-weight: bold; padding: 4px 8px; border-radius: 4px; background-color: ${streamColor}15;">
+                ${r.student_stream || 'N/A'}
+              </span>
+            </td>
+          </tr>`
+      })
+      .join("")
 
     const content = `
+      <!DOCTYPE html>
       <html>
         <head>
           <meta charset="UTF-8">
-          <title>Student Mark List</title>
+          <title>Exam Results Report</title>
           <style>
-            body { font-family: 'Times New Roman', serif; margin: 30px; }
-            h1, h2, h3 { text-align: center; margin: 5px 0; }
-            h1 { font-size: 18px; }
-            h2 { font-size: 16px; }
-            h3 { font-size: 14px; }
-            .year { text-align: right; font-size: 12px; margin-bottom: 20px; }
-            table { border-collapse: collapse; width: 100%; margin-top: 20px; }
-            th, td { border: 1px solid black; padding: 4px; font-size: 10px; }
-            th { background-color: #f0f0f0; font-weight: bold; text-align: center; }
+            body { 
+              font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+              margin: 40px; 
+              color: #1F2937;
+              line-height: 1.6;
+            }
+            .header { 
+              background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%);
+              color: white; 
+              padding: 30px; 
+              border-radius: 12px;
+              margin-bottom: 30px;
+              box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            }
+            .stats { 
+              background-color: #F3F4F6; 
+              padding: 20px; 
+              border-radius: 8px; 
+              margin-bottom: 25px;
+              border-left: 4px solid #4F46E5;
+            }
+            .footer { 
+              margin-top: 40px; 
+              padding-top: 20px; 
+              border-top: 2px solid #E5E7EB; 
+              color: #6B7280; 
+              font-size: 12px;
+            }
           </style>
         </head>
         <body>
-          <h1>KUMSA MORODA SECONDARY SCHOOL</h1>
-          <h2>GRADE 12 SECTION B STUDENT MARK LIST</h2>
-          <h3>SUBJECT: __________________</h3>
-          <div class="year">2018 E.C</div>
+          <div class="header">
+            <h1 style="margin: 0; font-size: 28px;">Exam Results Report</h1>
+            <p style="margin: 8px 0 0 0; opacity: 0.9; font-size: 16px;">
+              Individual Student Performance Analysis
+            </p>
+          </div>
           
-          <table>
-            <thead>
-              <tr>
-                <th>No</th>
-                <th>Name</th>
-                <th>F.Name</th>
-                <th>G.F.Name</th>
-                <th>Sex</th>
-                <th>Age</th>
-                <th>SEC</th>
-                <th>10%</th>
-                <th>20%</th>
-                <th>50%</th>
-                <th>Final 50%</th>
-                <th>Total 100%</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${tableRows}
-            </tbody>
-          </table>
+          <div class="stats">
+            <h3 style="margin-top: 0; color: #4F46E5;">Report Summary</h3>
+            <div style="display: flex; flex-wrap: wrap; gap: 20px;">
+              <div style="min-width: 150px;">
+                <div style="font-size: 12px; color: #6B7280;">Total Results</div>
+                <div style="font-size: 24px; font-weight: bold; color: #1F2937;">${filteredResults.length}</div>
+              </div>
+              <div style="min-width: 150px;">
+                <div style="font-size: 12px; color: #6B7280;">Average Score</div>
+                <div style="font-size: 24px; font-weight: bold; color: #10B981;">${stats.averageScore}%</div>
+              </div>
+              <div style="min-width: 150px;">
+                <div style="font-size: 12px; color: #6B7280;">Highest Score</div>
+                <div style="font-size: 24px; font-weight: bold; color: #3B82F6;">${stats.highestScore}%</div>
+              </div>
+              <div style="min-width: 150px;">
+                <div style="font-size: 12px; color: #6B7280;">Lowest Score</div>
+                <div style="font-size: 24px; font-weight: bold; color: #EF4444;">${stats.lowestScore}%</div>
+              </div>
+            </div>
+          </div>
+          
+          <div>
+            <h3 style="color: #4F46E5; margin-bottom: 15px;">Student Results</h3>
+            ${tableHeader}${tableBody}</tbody></table>
+          </div>
+          
+          <div class="footer">
+            <p>Generated on: ${format(new Date(), "PPPP 'at' HH:mm")}</p>
+            <p>© ${new Date().getFullYear()} Exam Management System. All rights reserved.</p>
+          </div>
         </body>
-      </html>
-    `
+      </html>`
 
     const blob = new Blob([content], { type: "application/msword" })
     const url = URL.createObjectURL(blob)
     const a = document.createElement("a")
     a.href = url
-    a.download = `student_mark_list_${format(new Date(), "yyyy-MM-dd")}.doc`
+    a.download = `exam_results_${format(new Date(), "yyyy-MM-dd")}.doc`
     document.body.appendChild(a)
     a.click()
     document.body.removeChild(a)
@@ -704,6 +822,7 @@ export default function IndividualExamResultsPage() {
             </Button>
           )}
 
+          {/* Export Dropdown */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="default" className="gap-2 bg-indigo-600 hover:bg-indigo-700">
@@ -744,7 +863,7 @@ export default function IndividualExamResultsPage() {
         </div>
       </div>
 
-      {/* Table Section */}
+      {/* Table Section - Displaying only required columns */}
       {filteredResults.length === 0 ? (
         <Card className="border shadow-sm overflow-hidden">
           <div className="p-8 text-center">
