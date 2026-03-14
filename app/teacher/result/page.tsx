@@ -191,10 +191,10 @@ export default function IndividualExamResultsPage() {
 
       // Format results properly
       const formattedResults: Result[] = (examResults || []).map((result: any) => {
-        const percentage = result.exams?.total_marks 
-          ? Math.round((result.total_marks_obtained / result.exams.total_marks) * 100) 
+        const percentage = result.exams?.total_marks
+          ? Math.round((result.total_marks_obtained / result.exams.total_marks) * 100)
           : 0
-        
+
         return {
           id: result.id,
           exam_id: result.exam_id,
@@ -234,10 +234,10 @@ export default function IndividualExamResultsPage() {
           r.student_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
           r.student_student_id.toLowerCase().includes(searchQuery.toLowerCase()) ||
           r.exam_title.toLowerCase().includes(searchQuery.toLowerCase())
-        
+
         const matchesExam = examFilter === "all" || r.exam_id.toString() === examFilter
         const matchesSection = sectionFilter === "all" || r.student_section === sectionFilter
-        
+
         return matchesSearch && matchesExam && matchesSection
       })
       .sort((a, b) => {
@@ -434,13 +434,13 @@ export default function IndividualExamResultsPage() {
 
     // Create workbook with multiple sheets
     const wb = XLSX.utils.book_new()
-    
+
     // Main results sheet
     const ws = XLSX.utils.json_to_sheet(data)
-    
+
     // Add summary row at the beginning
     XLSX.utils.sheet_add_json(ws, [summaryData], { skipHeader: true, origin: "A1" })
-    
+
     // Style column widths
     const wscols = [
       { wch: 5 },   // #
@@ -457,7 +457,7 @@ export default function IndividualExamResultsPage() {
     ws['!cols'] = wscols
 
     XLSX.utils.book_append_sheet(wb, ws, "Exam Results")
-    
+
     // Add statistics sheet
     const statsData = [
       ["Exam Results Statistics", ""],
@@ -500,7 +500,7 @@ export default function IndividualExamResultsPage() {
     const tableBody = filteredResults
       .map((r, i) => {
         const getGenderColor = (gender: string) => {
-          switch(gender.toLowerCase()) {
+          switch (gender.toLowerCase()) {
             case 'male': return '#3B82F6'
             case 'female': return '#EC4899'
             default: return '#6B7280'
@@ -508,17 +508,17 @@ export default function IndividualExamResultsPage() {
         }
 
         const getStreamColor = (stream: string) => {
-          switch(stream) {
+          switch (stream) {
             case 'Natural': return '#10B981'
             case 'Social': return '#8B5CF6'
             case 'Common': return '#F59E0B'
             default: return '#6B7280'
           }
         }
-        
+
         const genderColor = getGenderColor(r.student_gender)
         const streamColor = getStreamColor(r.student_stream)
-        
+
         return `
           <tr style="${i % 2 === 0 ? 'background-color: #F8FAFC;' : 'background-color: #FFFFFF;'}">
             <td style="padding: 10px; border: 1px solid #E5E7EB; text-align: center; font-weight: 500;">${i + 1}</td>
@@ -631,7 +631,7 @@ export default function IndividualExamResultsPage() {
     a.click()
     document.body.removeChild(a)
     URL.revokeObjectURL(url)
-    
+
     toast.success("Exported to Word successfully")
   }
 
@@ -668,7 +668,7 @@ export default function IndividualExamResultsPage() {
             }
           }
         `}</style>
-        
+
         <svg
           className="h-10 w-10 text-zinc-800 dark:text-zinc-200 spinner-svg"
           viewBox="25 25 50 50"
@@ -921,7 +921,7 @@ export default function IndividualExamResultsPage() {
                 <tbody>
                   {paginatedResults.map((result, index) => {
                     const getGenderColor = (gender: string) => {
-                      switch(gender.toLowerCase()) {
+                      switch (gender.toLowerCase()) {
                         case 'male': return 'bg-blue-50 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-800'
                         case 'female': return 'bg-pink-50 dark:bg-pink-900/40 text-pink-700 dark:text-pink-400 border-pink-200 dark:border-pink-800'
                         default: return 'bg-zinc-50 dark:bg-zinc-900/40 text-zinc-700 dark:text-zinc-400 border-zinc-200 dark:border-zinc-800'
@@ -929,14 +929,14 @@ export default function IndividualExamResultsPage() {
                     }
 
                     const getStreamColor = (stream: string) => {
-                      switch(stream) {
+                      switch (stream) {
                         case 'Natural': return 'bg-emerald-50 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800'
                         case 'Social': return 'bg-violet-50 dark:bg-violet-900/40 text-violet-700 dark:text-violet-400 border-violet-200 dark:border-violet-800'
                         case 'Common': return 'bg-amber-50 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800'
                         default: return 'bg-zinc-50 dark:bg-zinc-900/40 text-zinc-700 dark:text-zinc-400 border-zinc-200 dark:border-zinc-800'
                       }
                     }
-                    
+
                     return (
                       <tr
                         key={result.id}
