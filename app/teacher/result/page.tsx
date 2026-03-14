@@ -291,10 +291,109 @@ export default function IndividualExamResultsPage() {
   }
 
   const exportToPDF = () => {
-    if (filteredResults.length === 0) {
-      toast.error("No results to export")
-      return
+    const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" })
+    const pageHeight = doc.internal.pageSize.height
+    const pageWidth = doc.internal.pageSize.width
+    let currentY = 12
+
+    // Helper function to add header on each page
+    const addHeader = () => {
+      doc.setFontSize(14)
+      doc.setFont("helvetica", "bold")
+      doc.text("Alpha School Exam Results Report", pageWidth / 2, currentY, { align: "center" })
+      currentY += 6
+
+      doc.setFontSize(10)
+      doc.setFont("helvetica", "normal")
+      doc.text(`Generated: ${format(new Date(), "PPP")} | Total Students: ${paginatedResults.length}`, 14, currentY)
+      currentY += 4
     }
+
+    addHeader()
+
+    // Build headers and data
+    const examTitles = allExams.slice(0, 8).map((e) => e.title.substring(0, 8)) // Limit exams shown
+    const headers = ["#", "Student ID", "Full Name", "Section", ...examTitles, "Total"]
+    const columnWidths = [6, 15, 25, 10, ...examTitles.map(() => 10), 10]
+    const startX = 14
+    let colX = startX
+
+    // Draw header row with smaller font
+    doc.setFillColor(79, 70, 229)
+    doc.setFont("helvetica", "bold")
+    doc.setFontSize(8)
+    doc.setTextColor(255, 255, 255)
+
+    headers.forEach((h, i) => {
+      const width = columnWidths[i]
+      doc.rect(colX, currentY, width, 6, "F")
+      const text = h.substring(0, 6)
+      doc.text(text, colX + width / 2, currentY + 3.5, { align: "center" })
+      colX += width
+    })
+
+    currentY += 6
+    doc.setFont("helvetica", "normal")
+    doc.setFontSize(7)
+
+    // Table data rows
+    paginatedResults.forEach((r, idx) => {
+      // Check if we need a new page
+      if (currentY > pageHeight - 15) {
+        doc.addPage()
+        currentY = 12
+        addHeader()
+
+        // Redraw header row
+        doc.setFillColor(79, 70, 229)
+        doc.setFont("helvetica", "bold")
+        doc.setFontSize(8)
+        doc.setTextColor(255, 255, 255)
+        colX = startX
+        headers.forEach((h, i) => {
+          const width = columnWidths[i]
+          doc.rect(colX, currentY, width, 6, "F")
+          const text = h.substring(0, 6)
+          doc.text(text, colX + width / 2, currentY + 3.5, { align: "center" })
+          colX += width
+        })
+        currentY += 6
+        doc.setFont("helvetica", "normal")
+        doc.setFontSize(7)
+      }
+
+      // Alternate row colors
+      if (idx % 2 === 0) {
+        doc.setFillColor(240, 245, 255)
+      } else {
+        doc.setFillColor(255, 255, 255)
+      }
+
+      const rowData = [
+        (idx + 1).toString(),
+        r.studentId.substring(0, 10),
+        r.fullName.substring(0, 15),
+        r.section,
+        ...allExams.slice(0, 8).map((e) => (r.examResults[e.id]?.score || 0).toString()),
+        r.totalScore.toString(),
+      ]
+
+      colX = startX
+      doc.setTextColor(0, 0, 0)
+      rowData.forEach((cell, i) => {
+        const width = columnWidths[i]
+        doc.rect(colX, currentY, width, 5, "F")
+        const isNumber = i > 3
+        doc.text(cell, colX + (isNumber ? width - 1 : 1), currentY + 3, { align: isNumber ? "right" : "left" })
+        colX += width
+      })
+
+      currentY += 5
+    })
+
+    doc.save(`exam_results_${format(new Date(), "yyyy-MM-dd")}.pdf`)
+    toast.success("Exported to PDF successfully")
+  }
 
     const doc = new jsPDF({
       orientation: 'portrait',

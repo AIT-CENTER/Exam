@@ -680,29 +680,19 @@ export default function ExamsPage() {
           };
 
           return (
-            <Card key={exam.id} className="flex flex-col hover:shadow-lg transition-all duration-200 shadow-sm pb-0">
+            <Card key={exam.id} className="flex flex-col hover:shadow-md transition-all duration-200 shadow-sm pb-0 border-muted/50">
               <CardHeader className="pb-3">
-                <div className="flex items-start justify-between">
-                  <div className="flex-1 space-y-2">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex-1 space-y-1.5">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <CardTitle className="text-xl text-foreground line-clamp-1">
+                      <CardTitle className="text-lg font-semibold text-foreground line-clamp-1">
                         {exam.title}
                       </CardTitle>
                       {getStatusBadge()}
                     </div>
-                    <CardDescription className="text-muted-foreground">
+                    <p className="text-sm text-muted-foreground">
                       {exam.department_name}
-                    </CardDescription>
-                    <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                      <div className="flex items-center gap-1">
-                        <Calendar className="h-3 w-3" />
-                        <span>{formatDate(exam.created_at)}</span>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <Target className="h-3 w-3" />
-                        <span>{exam.exam_code}</span>
-                      </div>
-                    </div>
+                    </p>
                   </div>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
@@ -729,43 +719,34 @@ export default function ExamsPage() {
                 </div>
               </CardHeader>
               
-              <CardContent className="flex-grow space-y-4">
-
-                <div className="grid grid-cols-2 gap-3 text-sm">
-                  <div className="flex items-center gap-2 text-muted-foreground">
-                    <Target className="h-5 w-5 text-muted-foreground opacity-70" />
-                    <span>{exam.calculated_total_marks || 0} Point</span>
+              <CardContent className="flex-grow space-y-3 pt-0">
+                <div className="grid grid-cols-3 gap-2 text-sm">
+                  <div className="flex items-center gap-1.5 text-muted-foreground">
+                    <Target className="h-4 w-4 text-muted-foreground opacity-70" />
+                    <span className="text-xs">{exam.calculated_total_marks || 0} Marks</span>
                   </div>
-                  <div className="flex items-center gap-2 text-muted-foreground">
+                  <div className="flex items-center gap-1.5 text-muted-foreground">
                     <FileQuestion className="h-4 w-4 text-muted-foreground opacity-70" />
-                    <span>Ques: {exam.questions_count || 0}</span>
+                    <span className="text-xs">{exam.questions_count || 0} Q</span>
                   </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3 text-sm">
-                  <div className="flex items-center gap-2 text-muted-foreground">
+                  <div className="flex items-center gap-1.5 text-muted-foreground">
                     <Clock className="h-4 w-4 text-muted-foreground opacity-70" />
-                    <span>{exam.duration || 0} min</span>
+                    <span className="text-xs">{exam.duration || 0}m</span>
                   </div>
-
                 </div>
 
-                <div className="bg-zinc-50 dark:bg-zinc-800/50 rounded-lg p-2 border border-zinc-200 dark:border-zinc-800">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">Created At:</span>
-                    <span className="font-medium text-foreground">
-                      {formatDate(exam.exam_date)}
-                    </span>
-                  </div>
+                <div className="flex items-center justify-between text-xs text-muted-foreground pt-1">
+                  <span className="flex items-center gap-1">
+                    <Calendar className="h-3 w-3" />
+                    {formatDate(exam.exam_date)}
+                  </span>
+                  <span>{exam.assigned_count} assigned</span>
                 </div>
               </CardContent>
               
-              <CardFooter className="flex items-center justify-between bg-zinc-50/50 dark:bg-zinc-800/20 border-t pb-3 pt-0 border-zinc-200 dark:border-zinc-800">
-                <div className="text-sm text-muted-foreground">
-                  {exam.assigned_count} students assigned
-                </div>
+              <CardFooter className="flex items-center justify-between bg-muted/30 pb-3 pt-2 border-t border-muted/30">
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-muted-foreground">Active</span>
+                  <span className="text-xs font-medium text-muted-foreground">Active:</span>
                   <Switch
                     checked={exam.exam_active}
                     onCheckedChange={(checked) =>
@@ -881,109 +862,130 @@ function AssignStudentDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className={`sm:max-w-[600px] max-h-[600px] flex flex-col`}>
-        <DialogHeader className="flex-shrink-0">
-          <DialogTitle>Assign Students to "{currentExam?.title}"</DialogTitle>
-          <DialogDescription>
+      <DialogContent className={`sm:max-w-[800px] max-h-[90vh] flex flex-col gap-0`}>
+        <DialogHeader className="flex-shrink-0 pb-4 border-b border-muted/30">
+          <DialogTitle className="text-xl">Assign Students to Exam</DialogTitle>
+          <DialogDescription className="text-sm mt-1">
+            {currentExam?.title && (
+              <span className="font-medium text-foreground">"{currentExam.title}"</span>
+            )}
             {hasClassAssignment ? (
-              `Select sections and students to assign in bulk.`
+              <span className="block mt-1">Select sections and students to assign in bulk</span>
             ) : (
-              <div className="flex items-center gap-2 text-amber-600 bg-amber-50 p-2 rounded">
-                <AlertCircle className="h-4 w-4" />
-                <span>You are not assigned to any classes.</span>
+              <div className="flex items-center gap-2 text-amber-600 bg-amber-50 dark:bg-amber-950/30 p-2 rounded mt-2">
+                <AlertCircle className="h-4 w-4 flex-shrink-0" />
+                <span>You are not assigned to any classes</span>
               </div>
             )}
           </DialogDescription>
         </DialogHeader>
-        <div className="flex-1 overflow-y-auto py-4 space-y-4">
-          <div className="grid gap-4">
-            <div className="grid gap-2">
-              <Label htmlFor="grade">Grade</Label>
-              <div className="p-2 border rounded-md bg-gray-50">
-                <p className="text-sm font-medium">
-                  {teacherGrade ? teacherGrade.grade_name : "Not assigned"}
-                </p>
-              </div>
-            </div>
 
-            {hasClassAssignment && (
-              <div className="grid gap-2">
-                <Label>Sections</Label>
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="select-all"
-                    checked={selectAllSections}
-                    onCheckedChange={handleSelectAllSections}
-                  />
-                  <label htmlFor="select-all" className="text-sm font-medium leading-none">
-                    Select All
-                  </label>
-                </div>
-                <div className="grid grid-cols-2 gap-2 mt-2">
-                  {sections.map((section) => (
-                    <div key={section} className="flex items-center space-x-2">
-                      <Checkbox
-                        id={`section-${section}`}
-                        checked={selectedSections.includes(section)}
-                        onCheckedChange={(checked) =>
-                          handleSectionChange(section, checked)
-                        }
-                      />
-                      <label htmlFor={`section-${section}`} className="text-sm font-medium leading-none">
-                        Section {section}
-                      </label>
-                    </div>
-                  ))}
+        {hasClassAssignment && (
+          <div className="flex-1 overflow-y-auto py-4 px-0">
+            <div className="space-y-5">
+              {/* Grade at top */}
+              <div className="px-6 space-y-2">
+                <Label className="text-sm font-semibold">Grade</Label>
+                <div className="p-3 border border-muted/50 rounded-md bg-muted/20">
+                  <p className="text-sm font-medium text-foreground">
+                    {teacherGrade ? teacherGrade.grade_name : "Not assigned"}
+                  </p>
                 </div>
               </div>
-            )}
 
-            {availableStudents.length > 0 && (
-              <div className="grid gap-2">
-                <Label>Available Students ({availableStudents.length})</Label>
-                <div className="border rounded-md max-h-48 overflow-y-auto">
-                  <div className="flex items-center space-x-2 p-3 border-b bg-gray-50">
+              {/* Sections dropdown with checkboxes */}
+              <div className="px-6 space-y-2">
+                <Label className="text-sm font-semibold">Sections</Label>
+                <div className="border border-muted/50 rounded-md bg-muted/30 p-3">
+                  <div className="flex items-center space-x-3 pb-3 border-b border-muted/40">
                     <Checkbox
-                      id="select-all-students"
-                      checked={selectAllStudents}
-                      onCheckedChange={handleSelectAllStudents}
+                      id="select-all-sections"
+                      checked={selectAllSections}
+                      onCheckedChange={handleSelectAllSections}
+                      className="h-4 w-4"
                     />
-                    <label htmlFor="select-all-students" className="text-sm font-medium leading-none">
-                      Select All
+                    <label htmlFor="select-all-sections" className="text-sm font-medium cursor-pointer flex-1">
+                      Select All Sections
                     </label>
                   </div>
-                  <div className="divide-y">
-                    {availableStudents.map((student) => (
-                      <div key={student.id} className="flex items-center space-x-2 p-3">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mt-3">
+                    {sections.map((section) => (
+                      <div key={section} className="flex items-center space-x-2">
                         <Checkbox
-                          id={`student-${student.id}`}
-                          checked={selectedStudents.includes(student.id)}
+                          id={`section-${section}`}
+                          checked={selectedSections.includes(section)}
                           onCheckedChange={(checked) =>
-                            handleStudentChange(student.id, checked)
+                            handleSectionChange(section, checked)
                           }
+                          className="h-4 w-4"
                         />
-                        <label htmlFor={`student-${student.id}`} className="text-sm flex-1">
-                          <div className="font-medium">{student.name}</div>
-                          <div className="text-muted-foreground text-xs">
-                            ID: {student.student_id} | Section: {student.section}
-                          </div>
+                        <label htmlFor={`section-${section}`} className="text-sm cursor-pointer">
+                          Section {section}
                         </label>
                       </div>
                     ))}
                   </div>
                 </div>
               </div>
-            )}
 
-            {selectedSections.length > 0 && availableStudents.length === 0 && (
-              <div className="text-center py-4 text-muted-foreground">
-                <Users className="mx-auto h-8 w-8 mb-2" />
-                <p>No available students found.</p>
-              </div>
-            )}
+              {/* Students list with expanded area */}
+              {availableStudents.length > 0 && (
+                <div className="px-6 space-y-2">
+                  <Label className="text-sm font-semibold">Available Students ({availableStudents.length})</Label>
+                  <div className="border border-muted/50 rounded-md bg-white dark:bg-muted/10 overflow-hidden">
+                    <div className="flex items-center space-x-3 p-3 border-b border-muted/30 bg-muted/20">
+                      <Checkbox
+                        id="select-all-students"
+                        checked={selectAllStudents}
+                        onCheckedChange={handleSelectAllStudents}
+                        className="h-4 w-4"
+                      />
+                      <label htmlFor="select-all-students" className="text-sm font-medium cursor-pointer flex-1">
+                        Select All ({availableStudents.length})
+                      </label>
+                    </div>
+                    <div className="max-h-64 overflow-y-auto divide-y">
+                      {availableStudents.map((student) => (
+                        <div key={student.id} className="flex items-center space-x-3 p-3 hover:bg-muted/30 transition-colors">
+                          <Checkbox
+                            id={`student-${student.id}`}
+                            checked={selectedStudents.includes(student.id)}
+                            onCheckedChange={(checked) =>
+                              handleStudentChange(student.id, checked)
+                            }
+                            className="h-4 w-4 flex-shrink-0"
+                          />
+                          <label htmlFor={`student-${student.id}`} className="text-sm flex-1 cursor-pointer">
+                            <div className="font-medium text-foreground">{student.name}</div>
+                            <div className="text-muted-foreground text-xs">
+                              ID: {student.student_id} • Section: {student.section}
+                            </div>
+                          </label>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {selectedSections.length > 0 && availableStudents.length === 0 && (
+                <div className="px-6 flex flex-col items-center justify-center py-8 text-center text-muted-foreground">
+                  <Users className="h-8 w-8 mb-2 opacity-50" />
+                  <p className="text-sm">No available students in selected sections</p>
+                </div>
+              )}
+
+              {selectedSections.length === 0 && (
+                <div className="px-6 flex flex-col items-center justify-center py-8 text-center text-muted-foreground">
+                  <Users className="h-8 w-8 mb-2 opacity-50" />
+                  <p className="text-sm">Select sections to view available students</p>
+                </div>
+              )}
+            </div>
           </div>
-        </div>
-        <DialogFooter className="flex-shrink-0">
+        )}
+
+        <DialogFooter className="flex-shrink-0 border-t border-muted/30 pt-4">
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>

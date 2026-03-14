@@ -173,58 +173,111 @@ export default function StudentsPage() {
     }
 
     try {
-      const doc = new jsPDF()
-      doc.setFontSize(16)
-      doc.text("Students List", 14, 20)
-      doc.setFontSize(12)
-      doc.text(`Generated: ${format(new Date(), "PPP")}`, 14, 30)
-      doc.text(`Total Records: ${filteredStudents.length}`, 14, 38)
-      doc.text(`Grade: ${teacherData?.gradeName || "N/A"}`, 14, 46)
-      doc.text(`Sections: ${teacherSections.join(", ")}`, 14, 54)
-      
-      const gradeLevel = getGradeLevel(teacherData?.gradeName)
-      if (gradeLevel >= 11 && teacherData?.department) {
-        doc.text(`Department: ${teacherData.department}`, 14, 62)
-      } else if (teacherData?.department) {
-        // For lower grades, show stream based on department
-        const stream = getDepartmentStream(teacherData.department)
-        doc.text(`Stream: ${stream}`, 14, 62)
+      const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" })
+      const pageHeight = doc.internal.pageSize.height
+      const pageWidth = doc.internal.pageSize.width
+      let currentY = 12
+
+      // Helper function to add header on each page
+      const addHeader = () => {
+        doc.setFontSize(14)
+        doc.setFont("helvetica", "bold")
+        doc.text("Alpha School Student Mark List", pageWidth / 2, currentY, { align: "center" })
+        currentY += 6
+
+        doc.setFontSize(11)
+        doc.setFont("helvetica", "bold")
+        const gradeName = teacherData?.gradeName || "N/A"
+        const sectionsText = teacherSections.join(", ")
+        doc.text(`Grade & Section: ${gradeName} ${sectionsText}`, 14, currentY)
+        currentY += 5
+
+        doc.setFontSize(10)
+        doc.setFont("helvetica", "normal")
+        doc.text(`Generated: ${format(new Date(), "PPP")}`, 14, currentY)
+        currentY += 4
       }
 
-      let y = (gradeLevel >= 11 && teacherData?.department) ? 70 : 62
-      const header = ["#", "Student ID", "Full Name", "Section", "Stream", "Gender"]
-      doc.setFillColor(79, 70, 229)
-      doc.rect(14, y, 190, 8, "F")
-      doc.setTextColor(255, 255, 255)
-      doc.setFontSize(10)
-      // Adjust column widths
-      const columnPositions = [14, 30, 60, 110, 140, 170]
-      header.forEach((h, i) => doc.text(h, columnPositions[i], y + 5))
-      y += 8
+      addHeader()
 
-      filteredStudents.forEach((s, i) => {
-        const fullName = `${s.name} ${s.father_name} ${s.grandfather_name}`
-        const row = [
-          (i + 1).toString(),
-          s.student_id,
-          fullName,
-          s.section,
-          s.stream || "N/A",
-          s.gender.charAt(0).toUpperCase() + s.gender.slice(1)
-        ]
-        if (i % 2 === 0) doc.setFillColor(248, 250, 252)
-        else doc.setFillColor(255, 255, 255)
-        doc.rect(14, y, 190, 6, "F")
+      // Table headers
+      const headers = ["No", "Name", "F.Name", "G.F.Name", "Sex", "Age", "SEC"]
+      const columnWidths = [10, 25, 25, 25, 12, 10, 10]
+      let startX = 14
+
+      // Draw header row
+      doc.setFillColor(200, 200, 200)
+      doc.setFont("helvetica", "bold")
+      doc.setFontSize(9)
+      let colX = startX
+
+      headers.forEach((h, i) => {
+        doc.rect(colX, currentY, columnWidths[i], 6, "F")
         doc.setTextColor(0, 0, 0)
-        row.forEach((cell, j) => doc.text(cell, columnPositions[j], y + 4))
-        y += 6
-        if (y > 280) {
-          doc.addPage()
-          y = 20
-        }
+        doc.text(h, colX + columnWidths[i] / 2, currentY + 4, { align: "center" })
+        colX += columnWidths[i]
       })
 
-      doc.save("students_list.pdf")
+      currentY += 6
+      doc.setFont("helvetica", "normal")
+      doc.setFontSize(8)
+
+      // Table data rows
+      filteredStudents.forEach((s, idx) => {
+        // Check if we need a new page
+        if (currentY > pageHeight - 20) {
+          doc.addPage()
+          currentY = 12
+          addHeader()
+          
+          // Redraw header row on new page
+          doc.setFillColor(200, 200, 200)
+          doc.setFont("helvetica", "bold")
+          doc.setFontSize(9)
+          let colX2 = startX
+          headers.forEach((h, i) => {
+            doc.rect(colX2, currentY, columnWidths[i], 6, "F")
+            doc.setTextColor(0, 0, 0)
+            doc.text(h, colX2 + columnWidths[i] / 2, currentY + 4, { align: "center" })
+            colX2 += columnWidths[i]
+          })
+          currentY += 6
+          doc.setFont("helvetica", "normal")
+          doc.setFontSize(8)
+        }
+
+        const age = "19" // Placeholder - would need to calculate from DOB if available
+        const sexChar = s.gender?.charAt(0).toUpperCase() || "M"
+        const rowData = [
+          (idx + 1).toString(),
+          s.name || "",
+          s.father_name || "",
+          s.grandfather_name || "",
+          sexChar,
+          age,
+          s.section || ""
+        ]
+
+        // Alternate row colors
+        if (idx % 2 === 0) {
+          doc.setFillColor(240, 240, 240)
+        } else {
+          doc.setFillColor(255, 255, 255)
+        }
+
+        colX = startX
+        rowData.forEach((cell, i) => {
+          doc.rect(colX, currentY, columnWidths[i], 5, "F")
+          doc.setTextColor(0, 0, 0)
+          const cellContent = cell.toString().substring(0, 10)
+          doc.text(cellContent, colX + 1, currentY + 3)
+          colX += columnWidths[i]
+        })
+
+        currentY += 5
+      })
+
+      doc.save(`students_${format(new Date(), "yyyy-MM-dd")}.pdf`)
       toast.success("Exported to PDF successfully")
     } catch (error) {
       console.error("PDF export error:", error)
