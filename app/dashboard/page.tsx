@@ -24,7 +24,7 @@ import { Suspense } from 'react';
 import { DashboardSpinner } from '@/components/ui/dashboard-spinner';
 
 async function DashboardContent() {
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
